@@ -1,0 +1,44 @@
+{#- Rendered by the Ansible "mail" role. Do not edit ~/.config/omt/config.yaml. -#}
+# Managed by MacbookSetup.
+# Provider endpoints come from mail_omt_providers (roles/mail/defaults/main.yml),
+# OAuth application credentials from mail_oauth_clients and accounts from
+# mail_accounts (both in identity_file).
+# Edit those, then re-run: ansible-playbook site.yml --tags mail
+#
+# The client_id/client_secret pairs are Thunderbird's published OAuth
+# application credentials, not personal secrets - every Thunderbird install
+# ships them. They identify the *application* to Google/Microsoft; the actual
+# per-account tokens live in the macOS keychain (storage: keyring).
+#
+# scope/client_id/client_secret are emitted JSON-quoted: valid YAML, and it
+# safely carries the [ ] ? : characters in the Microsoft secret as well as the
+# empty consumer secret.
+global:
+  debug: {{ mail_omt_debug | lower }}
+  daemon:
+    interval: {{ mail_omt_daemon_interval }}
+  storage: keyring
+  keyring-backend: system
+{% for name, p in mail_omt_providers.items() %}
+  {{ name }}:
+    authorize_endpoint: {{ p.authorize_endpoint }}
+    devicecode_endpoint: {{ p.devicecode_endpoint }}
+    token_endpoint: {{ p.token_endpoint }}
+    redirect_uri: {{ p.redirect_uri }}
+{% if p.tenant is defined %}
+    tenant: {{ p.tenant }}
+{% endif %}
+    imap_endpoint: {{ p.imap_endpoint }}
+    pop_endpoint: {{ p.pop_endpoint }}
+    smtp_endpoint: {{ p.smtp_endpoint }}
+    sasl_method: {{ p.sasl_method }}
+    scope: {{ p.scope | trim | to_json }}
+    client_id: {{ (mail_oauth_clients[name] | default({})).client_id | default('') | to_json }}
+    client_secret: {{ (mail_oauth_clients[name] | default({})).client_secret | default('') | to_json }}
+{% endfor %}
+accounts:
+{% for a in mail_effective_accounts %}
+  {{ a.login }}:
+    provider: {{ a.provider }}
+    authflow: {{ a.authflow | default(mail_omt_default_authflow) }}
+{% endfor %}

@@ -1,0 +1,46 @@
+---
+# Old_Setup.md -> "Git Setup"
+#
+# The old doc was a block of `git config --global ...` commands. Those are not
+# reproducible - re-running them on a fresh machine leaves you guessing which
+# ones you already ran. Instead ~/.gitconfig itself lives in the repo and is
+# symlinked into place. `git config --global` still works: git resolves the
+# symlink before writing, so edits land in Dotfiles/git/.gitconfig.
+
+# ~/.gitconfig itself carries the identity, so it comes from the private
+# overlay. This repo only ships the shared ignore file, and ~/.config/git is a
+# merge directory (see the dotfiles role) so the work overlay can drop its
+# includeIf target in alongside.
+- name: Git | link the shared git configuration
+  ansible.builtin.include_role:
+    name: link
+  vars:
+    link_items:
+      - { src: Dotfiles/git/config/ignore, dest: .config/git/ignore }
+
+- name: Git | check the signing key is present
+  ansible.builtin.stat:
+    path: "{{ git_signing_key }}"
+  register: git_key
+
+# Commit signing is enabled in .gitconfig. Without the key every commit fails,
+# so surface it here rather than at the first commit.
+- name: Git | warn when the signing key is missing
+  ansible.builtin.debug:
+    msg: >-
+      commit.gpgsign is on but {{ git_signing_key }} does not exist.
+      Generate it (Setup.md -> SSH) and register the public key with GitHub as
+      a *signing* key, or signing will fail on every commit.
+  when: not git_key.stat.exists
+
+- name: Git | confirm the resulting configuration
+  ansible.builtin.command: # noqa: command-instead-of-module - reading config, not managing a repo
+    cmd: git config --global --get-regexp ^(user|gpg|commit|tag)\.
+  register: git_effective
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Git | show effective identity
+  ansible.builtin.debug:
+    var: git_effective.stdout_lines

@@ -1,0 +1,5 @@
+# gcloud comes from the `gcloud-cli` cask (Brewfiles/41_clouds.brew), so it is
+# on PATH at $(brew --prefix)/bin/gcloud. It used to be a hand-unpacked SDK in
+# ~/bin/google-cloud-sdk; that path is gone.
+alias g="gcloud"
+alias gssh="gcloud compute ssh --internal-ip"

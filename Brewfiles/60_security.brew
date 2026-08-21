@@ -1,0 +1,41 @@
+## Mac Keychain
+brew "keychain"
+brew "pinentry-mac"
+
+## GPG
+brew "gpg"
+brew "gpg2"
+
+## CA
+brew "ca-certificates"
+
+## Network tools
+cask "zenmap"
+
+## Keys and Stuff
+cask "keystore-explorer"
+brew "certigo"
+
+## VPNs
+cask "tailscale-app"
+brew "openconnect"
+brew "vpn-slice"
+
+## Yubikey
+brew "ykman"
+brew "yubico-piv-tool"
+brew "yubikey-agent"
+cask "yubico-authenticator"
+
+brew "bitwarden-cli"
+
+# Proxy
+brew "samuong/alpaca/alpaca"
+
+# OpenBao
+brew "openbao"
+
+# Node CA
+brew "step"           # host root CA + per-cluster intermediates; much nicer than raw openssl
+brew "sops"           # encrypt CA keys, OpenBao unseal keys, ESO bootstrap secrets
+brew "age"            # sops backend

@@ -1,0 +1,13 @@
+{#- Rendered by the Ansible "mail" role from mail_accounts. Do not edit ~/.config/mutt/muttrc. -#}
+{%- set startup = mail_effective_accounts | selectattr('mutt_startup', 'defined') | selectattr('mutt_startup') | first -%}
+{%- set mutt = mail_home ~ '/.config/mutt' -%}
+# Managed by MacbookSetup - generated from mail_accounts (Ansible/local/identity.yml).
+# Edit that list, then re-run: ansible-playbook site.yml --tags mail
+#
+# Absolute paths rather than ~ so this file says exactly what it means
+# regardless of how neomutt is invoked.
+source {{ mutt }}/neo.muttrc
+source {{ mutt }}/accounts/{{ startup.mutt_file }}
+{% for a in mail_effective_accounts | selectattr('mutt_key', 'defined') | sort(attribute='mutt_key') %}
+macro index,pager {{ a.mutt_key }} '<sync-mailbox><enter-command>source {{ mutt }}/accounts/{{ a.mutt_file }}<enter><change-folder>!<enter>;<check-stats>' "{{ a.mutt_label }}"
+{% endfor %}

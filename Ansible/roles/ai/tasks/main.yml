@@ -1,0 +1,104 @@
+---
+# One set of skills, shared by every AI assistant.
+#
+# See defaults/main.yml for where each tool looks for skills and for the list
+# of state that is deliberately left unversioned.
+
+# --------------------------------------------------------------------------
+# Skills
+# --------------------------------------------------------------------------
+- name: AI | check the skills repository is present
+  ansible.builtin.stat:
+    path: "{{ ai_skills_dir }}"
+  register: ai_skills_stat
+
+- name: AI | warn when the skills repository is missing
+  ansible.builtin.debug:
+    msg: >-
+      {{ ai_skills_dir }} not found, so no skills were linked. It is a separate
+      git repository - clone it there first, then re-run --tags ai.
+  when: not (ai_skills_stat.stat.isdir | default(false))
+
+- name: AI | share skills with every assistant
+  when: ai_skills_stat.stat.isdir | default(false)
+  block:
+    - name: AI | create the parent directories
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/{{ item | dirname }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ ai_skills_link_targets }}"
+
+    # Whole-directory links: a skill added to the repo shows up immediately,
+    # without another Ansible run.
+    - name: AI | link the shared skills directory
+      ansible.builtin.file:
+        src: "{{ ai_skills_dir }}"
+        dest: "{{ ansible_facts.env.HOME }}/{{ item }}"
+        state: link
+        force: true
+      loop: "{{ ai_skills_link_targets }}"
+
+    - name: AI | enumerate the skills
+      ansible.builtin.find:
+        paths: "{{ ai_skills_dir }}"
+        file_type: directory
+        recurse: false
+      register: ai_skills_found
+
+    - name: AI | ensure ~/.claude/skills exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.claude/skills"
+        state: directory
+        mode: "0755"
+      when: ai_claude_per_skill_links | bool
+
+    # Claude gets one link per skill rather than a directory link: it keeps
+    # other files in there (settings.local.json), which a directory symlink
+    # would hide.
+    - name: AI | link each skill into ~/.claude/skills
+      ansible.builtin.file:
+        src: "{{ item.path }}"
+        dest: "{{ ansible_facts.env.HOME }}/.claude/skills/{{ item.path | basename }}"
+        state: link
+        force: true
+      loop: "{{ ai_skills_found.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      when: ai_claude_per_skill_links | bool
+
+    - name: AI | report
+      ansible.builtin.debug:
+        msg: >-
+          {{ ai_skills_found.files | length }} skills shared from
+          {{ ai_skills_dir }} to
+          {{ (ai_skills_link_targets | map('regex_replace', '^', '~/') | list)
+             + (['~/.claude/skills/ (per skill)'] if ai_claude_per_skill_links | bool else []) }}
+
+# --------------------------------------------------------------------------
+# Configuration
+# --------------------------------------------------------------------------
+# Only entries whose source actually exists are linked, so ai_optional_links
+# can name files that have not been created yet.
+- name: AI | which optional configs exist in the repo?
+  ansible.builtin.stat:
+    path: "{{ repo_root }}/{{ item.src }}"
+  loop: "{{ ai_optional_links }}"
+  loop_control:
+    label: "{{ item.src }}"
+  register: ai_optional_stat
+
+- name: AI | link the AI configuration that exists
+  ansible.builtin.include_role:
+    name: link
+  vars:
+    link_items: "{{ ai_optional_stat.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+
+- name: AI | note the configs not yet present
+  ansible.builtin.debug:
+    msg: >-
+      Not linked because they do not exist yet (create them in the repo and
+      re-run --tags ai):
+      {{ ai_optional_stat.results | rejectattr('stat.exists')
+         | map(attribute='item.src') | list | join(', ') }}
+  when: ai_optional_stat.results | rejectattr('stat.exists') | list | length > 0

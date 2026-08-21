@@ -1,0 +1,69 @@
+---
+# Work profile. Full documentation lives in the work overlay's Work_Setup.md.
+#
+# Almost everything on the work side is gated behind things Ansible cannot do:
+# a user certificate issued through a Windows CA over an office network, an
+# 802.1x intranet, and vendor .pkg downloads behind SSO. This role therefore
+# does the small automatable part and then tells you precisely what is missing.
+
+- name: Work | check work tooling is installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/{{ item }}"
+  loop:
+    - openconnect   # VPN client
+    - vpn-slice     # split-tunnel helper
+    - alpaca        # PAC-aware local proxy for the INTRANET wifi
+  register: work_bins
+
+- name: Work | report missing work tooling
+  ansible.builtin.debug:
+    msg: >-
+      Not installed: {{ work_bins.results | rejectattr('stat.exists')
+                        | map(attribute='item') | list | join(', ') }}.
+      They come from 60_security.brew.
+  when: work_bins.results | rejectattr('stat.exists') | list | length > 0
+
+- name: Work | ensure the work checkout directory exists
+  ansible.builtin.file:
+    path: "{{ work_workspace_dir }}"
+    state: directory
+    mode: "0755"
+
+# ~/.gitconfig has an includeIf for the work checkout dir, so anything cloned there
+# is committed with the work identity. The file itself is linked by the git role.
+- name: Work | verify the work git identity is wired up
+  ansible.builtin.command: # noqa: command-instead-of-module - reading config, not managing a repo
+    cmd: git config --get user.email
+  args:
+    chdir: "{{ work_workspace_dir }}"
+  register: work_git_identity
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Work | show the identity used under the work checkout
+  ansible.builtin.debug:
+    msg: >-
+      git identity under {{ work_workspace_dir }}:
+      {{ work_git_identity.stdout | default('(not resolvable - is the git role enabled?)', true) }}
+
+- name: Work | check for the user certificate in the login keychain
+  ansible.builtin.command:
+    cmd: >-
+      security find-certificate -a -c "{{ work_certificate_cn }}"
+      {{ ansible_facts.env.HOME }}/Library/Keychains/login.keychain-db
+  register: work_cert
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Work | remaining manual steps
+  ansible.builtin.debug:
+    msg: >-
+      {{ [
+        (work_cert.rc != 0)
+          | ternary("User certificate not found in the login keychain - follow the setup notes in the work overlay (needs an office network and Safari).", ""),
+        "VPN: the client is installed, but the profile and connect script come from the work overlay.",
+        "Vendor installers (docking station, endpoint security) are manual downloads - see the work overlay notes.",
+        "Intranet unbound zones are active because enable_work is true; they forward to internal resolvers that only answer on VPN or the intranet."
+      ] | reject('equalto', '') | list }}

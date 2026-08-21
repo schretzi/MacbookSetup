@@ -1,0 +1,50 @@
+{#
+  Rendered by the Ansible "kanata" role.
+
+  This is a template rather than a static plist because launchd performs no
+  variable expansion, and the daemon runs as root - so $HOME would resolve to
+  /var/root, not to the account whose keymap and cargo build we actually want.
+  The owning user's home is therefore baked in at render time.
+
+  Note: a root daemon executing a binary out of a user-writable ~/.cargo/bin
+  means anything able to write there gains root. That is inherited from the
+  original setup and left as-is; moving the binary to a root-owned
+  /usr/local/bin would close it, at the cost of a rebuild step on every
+  kanata upgrade.
+-#}
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.kanata.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ kanata_home }}/.cargo/bin/kanata</string>
+        <string>--cfg</string>
+        <string>{{ kanata_home }}/.config/kanata/kanata.kbd</string>
+    </array>
+    <!--
+      kanata runs as root, so launchd would give this job root's environment:
+      HOME unset, or /var/root. Anything kanata spawns through a `cmd` action
+      inherits that - which would send every $HOME in kanata.kbd, and every
+      script it calls, to the wrong home directory.
+
+      Setting HOME here is what lets kanata.kbd stay a static, portable file
+      that says $HOME instead of a baked-in path.
+    -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>{{ kanata_home }}</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/kanata.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/kanata.err.log</string>
+</dict>
+</plist>

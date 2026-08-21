@@ -1,0 +1,76 @@
+---
+# ============================================================================
+# AI tooling - shared skills across every assistant
+# ============================================================================
+# Skills are SKILL.md directories. They are NOT stored in any tool's state
+# database: Copilot's ~/.config/github-copilot/auth.db is purely OAuth tokens,
+# and Claude keeps its credentials in the macOS keychain. Skills are plain
+# files on disk, which is what makes one shared set possible.
+#
+# Discovery paths, per `copilot skill --help` and Claude's own layout:
+#   Claude    ~/.claude/skills/
+#   Copilot   ~/.copilot/skills/  or  ~/.agents/skills/   (personal)
+#             .github/skills/, .agents/skills/, .claude/skills/  (per project)
+#
+# One canonical directory is linked into all of them, so every assistant sees
+# the same skills and adding one is a single commit in the skills repo.
+
+# The single source of truth for skills - its own git repository.
+ai_skills_repo: "{{ ansible_facts.env.HOME }}/Workspace/Schretzi/schretzi-skills"
+ai_skills_dir: "{{ ai_skills_repo }}/skills"
+
+# Whole-directory links: every skill in the repo appears at once, and a new
+# skill needs no re-run to be picked up.
+ai_skills_link_targets:
+  - .copilot/skills    # GitHub Copilot CLI, personal scope
+  - .agents/skills     # tool-neutral path; Copilot reads it, others adopting
+                       # the AGENTS.md convention are expected to as well
+
+# Claude instead gets one symlink per skill. Its skills directory holds other
+# things too (settings.local.json), so it stays a real directory rather than
+# becoming a link to the repo.
+ai_claude_per_skill_links: true
+
+# ---------------------------------------------------------------------------
+# Configuration worth versioning
+# ---------------------------------------------------------------------------
+# Linked only when the source exists in this repo, so entries can be added
+# ahead of the files themselves - drop in Dotfiles/claude/CLAUDE.md later and
+# the next run links it, no change needed here.
+ai_optional_links:
+  # --- Claude ---
+  - { src: Dotfiles/claude/settings.json, dest: .claude/settings.json }
+  # referenced by settings.json -> statusLine.command, so it has to be linked
+  # too or a rebuild leaves the status line pointing at a missing script
+  - { src: Dotfiles/claude/statusline-command.sh, dest: .claude/statusline-command.sh }
+  - { src: Dotfiles/claude/CLAUDE.md, dest: .claude/CLAUDE.md }
+  - { src: Dotfiles/claude/agents, dest: .claude/agents }
+  - { src: Dotfiles/claude/commands, dest: .claude/commands }
+  - { src: Dotfiles/claude/hooks, dest: .claude/hooks }
+  # --- Copilot CLI ---
+  - { src: Dotfiles/copilot/mcp-config.json, dest: .copilot/mcp-config.json }
+  - { src: Dotfiles/copilot/config.json, dest: .copilot/config.json }
+  - { src: Dotfiles/copilot/AGENTS.md, dest: .copilot/AGENTS.md }
+  # --- Gemini CLI ---
+  - { src: Dotfiles/gemini/settings.json, dest: .gemini/settings.json }
+
+# ---------------------------------------------------------------------------
+# Deliberately NOT versioned
+# ---------------------------------------------------------------------------
+# Conversation content, caches and machine-specific state. Listed here so the
+# reasoning is recorded rather than rediscovered:
+#
+#   ~/.claude/projects/        22M of session transcripts - conversation content
+#   ~/.claude/history.jsonl    every prompt typed
+#   ~/.claude/backups/         8M, file-history/ 3.7M - undo state
+#   ~/.claude/sessions/, paste-cache/, shell-snapshots/, ide/, daemon/
+#   ~/.claude/plugins/cache|data|marketplaces/   6.4M of cloned plugin repos
+#   ~/.claude/plugins/installed_plugins.json     absolute installPaths,
+#                                                timestamps, commit SHAs
+#   ~/.gemini/google_accounts.json               account identity
+#   ~/.gemini/history/, tmp/
+#   ~/.copilot/logs/
+#   ~/.config/github-copilot/auth.db*            OAuth tokens
+#
+# Which plugins are enabled IS captured - declaratively, in
+# Dotfiles/claude/settings.json (enabledPlugins).

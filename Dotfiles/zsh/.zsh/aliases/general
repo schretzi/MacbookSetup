@@ -1,0 +1,20 @@
+alias "ll=eza -l"
+alias "lli=eza -lia"
+alias "vi=NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
+alias "vim=NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
+
+unbound_restart() {
+  sudo -n /bin/launchctl kickstart -k system/net.unbound
+}
+
+alias flush_dns="sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder"
+
+alias ws="cd ~/Workspace"
+alias wss="cd ~/Workspace/Schretzi"
+alias wsd="cd ~/Workspace/Schretzi/MacbookSetup/Dotfiles"
+alias wsb="cd ~/Workspace/Schretzi/MacbookSetup/Brewfiles"
+
+alias tf="terraform"
+alias tg="terragrunt"
+
+alias restart_kanata="sudo launchctl kickstart -k system/com.kanata.daemon"

@@ -1,0 +1,26 @@
+---
+# Old_Setup.md -> "Create User-directories"
+#
+# ~/bin      personal binaries - already on PATH via .zshrc; currently empty,
+#            everything that used to live here now comes from Homebrew
+# ~/tmp      scratch; also holds the unbound control socket
+# ~/Workspace  all git checkouts
+
+- name: Base dirs | create user directories
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - bin
+    - tmp
+    - Workspace
+    - Workspace/Schretzi
+    - .config
+
+- name: Base dirs | create work checkout directory
+  ansible.builtin.file:
+    path: "{{ work_workspace_dir }}"
+    state: directory
+    mode: "0755"
+  when: enable_work | bool

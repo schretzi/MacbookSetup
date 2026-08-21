@@ -1,0 +1,85 @@
+---
+# Old_Setup.md -> "SSH"
+#
+# Private keys are never generated or stored here. Each device and each usage
+# gets its own key with its own passphrase, created by hand (the passphrase
+# prompt is interactive by design) - see Setup.md -> SSH.
+#
+# What *is* automated: the client config and the allowed_signers file, both
+# held in the repo.
+
+- name: SSH | ensure ~/.ssh exists with correct permissions
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.ssh"
+    state: directory
+    mode: "0700"
+
+- name: SSH | link ssh configuration
+  ansible.builtin.include_role:
+    name: link
+  vars:
+    link_items:
+      - { src: Dotfiles/ssh/config, dest: .ssh/config }
+
+# ssh refuses a config that is group- or world-writable. The symlink target
+# lives in the repo, so it is the repo file's mode that matters.
+- name: SSH | tighten permissions on the repo-held config
+  ansible.builtin.file:
+    path: "{{ repo_root }}/Dotfiles/ssh/{{ item }}"
+    mode: "0644"
+  loop:
+    - config
+
+- name: SSH | list private keys that exist on this machine
+  ansible.builtin.find:
+    paths: "{{ ansible_facts.env.HOME }}/.ssh"
+    patterns: "id_*"
+    excludes: "*.pub"
+    file_type: file
+  register: ssh_keys
+
+- name: SSH | remind about missing keys
+  ansible.builtin.debug:
+    msg: >-
+      No private keys found in ~/.ssh. Create them with
+      `ssh-keygen -t ed25519 -f ~/.ssh/id_<device>_<usage>` and load them with
+      `ssh-add --apple-use-keychain <key>` - see Setup.md -> SSH.
+  when: ssh_keys.matched | int == 0
+
+- name: SSH | which keys does the agent already hold?
+  ansible.builtin.command:
+    cmd: ssh-add -l
+  register: ssh_agent_list
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+# Deliberately NOT calling `ssh-add` here. For a key whose passphrase is not in
+# the login keychain yet, ssh-add prompts on the terminal and would block the
+# playbook. Report instead and let the first `ssh-add --apple-use-keychain` be
+# a conscious, one-time manual step.
+# `ssh-add -l` lists keys by comment, not by path, so match on the fingerprint.
+- name: SSH | fingerprint the keys on disk
+  ansible.builtin.command:
+    cmd: "ssh-keygen -lf {{ item.path }}"
+  loop: "{{ ssh_keys.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  register: ssh_fingerprints
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: SSH | report keys that are not loaded in the agent
+  ansible.builtin.debug:
+    msg: >-
+      Not in ssh-agent yet: {{ item.item.path }} - run
+      `ssh-add --apple-use-keychain {{ item.item.path }}` once; afterwards the
+      passphrase comes from the login keychain automatically.
+  loop: "{{ ssh_fingerprints.results }}"
+  loop_control:
+    label: "{{ item.item.path | basename }}"
+  when:
+    - item.rc == 0
+    - (item.stdout.split() | select('match', '^SHA256:') | first | default('nomatch'))
+      not in (ssh_agent_list.stdout | default(''))

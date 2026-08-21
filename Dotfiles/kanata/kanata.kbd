@@ -1,0 +1,198 @@
+;; Kanata config for macOS with a German (QWERTZ) keyboard layout.
+;;
+;; Behaviour:
+;;   - Every key behaves exactly as on a normal German keyboard by default
+;;     (kanata only intercepts the keys listed in defsrc below; all other
+;;     keys are passed straight through thanks to process-unmapped-keys).
+;;   - Tapping the ö key types "ö" as usual; holding it types "\" (backslash).
+;;   - Tapping the ä key types "ä" as usual; holding it types "|" (pipe).
+;;   - Tapping the ü key types "ü" as usual; holding it types "~" (tilde).
+;;   - Caps Lock is remapped to a "Hyper" key: holding it holds Ctrl+Shift+
+;;     Alt+Cmd all at once (for custom app/window-manager shortcuts). It no
+;;     longer toggles caps lock. Tapping it alone does nothing by itself,
+;;     same as tapping a lone modifier key normally does nothing.
+;;
+;; Notes on how this works:
+;;   - Kanata's key names refer to physical key positions (based on the
+;;     standard US/ANSI naming), not to the character your OS layout
+;;     produces. On a German keyboard, the physical key in the ";" position
+;;     (right of L) is the ö key, the physical key in the "'" position
+;;     (right of ö) is the ä key, and the physical key in the "[" position
+;;     (right of P) is the ü key - that's why they're named ";", "'", and
+;;     "[" in defsrc below.
+;;   - Tapping ö/ä/ü just forwards that physical key, so macOS's German
+;;     layout still turns it into "ö"/"ä"/"ü" as normal.
+;;   - Holding ö/ä/ü outputs "\"/"|"/"~" via kanata's unicode action, which
+;;     sends the character directly and does not depend on any key combo
+;;     existing for backslash/pipe/tilde in the German layout.
+;;   - Hyper is built with kanata's "multi" action, which holds all listed
+;;     modifiers together for as long as the physical key is held.
+;;   - Holding the "^" key (kanata name: nubs - it reports as KEY_102ND, the
+;;     ISO "extra" key, NOT KEY_GRAVE/"grv" despite sitting where a US
+;;     grave/backtick key would be - confirmed via `kanata --debug`, don't
+;;     assume "grv" without checking) activates the "apps" layer:
+;;     the physical key printed "Z" on your German keyboard, plus k/b/c/t,
+;;     launch or switch to Zen/kitty/Bitwarden/Claude/Teams via `open -a`,
+;;     using kanata's "cmd" action. The same layer also has s/d/o/m, which
+;;     go to (or launch) dedicated kitty instances (see below), and the
+;;     F1-F12 row, which sends the literal function keys (see the F-row
+;;     block below for why that matters). Releasing "^" returns to the
+;;     default layer.
+;;     "^" was chosen over an earlier fn-based version of this config
+;;     because fn sits far from the home row on a full-size external
+;;     keyboard, and over an even earlier "a"-based version because "a" is
+;;     typed constantly and the tap/hold ambiguity made normal typing feel
+;;     laggy. "^" is a German dead key that's rarely pressed in practice, so
+;;     it makes a good dual-purpose key: tapping it still composes accents
+;;     as normal (e.g. "^" then "a" -> "â"), holding it activates the apps
+;;     layer. Because it's a genuine tap/hold key (not a plain hold-modifier
+;;     like fn or Hyper), there IS a tap-timeout window before a lone tap
+;;     resolves to "^" - but the alias below uses `tap-hold-press` (not
+;;     plain `tap-hold`), which resolves to "hold" the instant another key
+;;     is pressed while "^" is still down, regardless of timing, so the
+;;     apps-layer shortcuts below have no
+;;     perceptible delay; only typing a literal "^" alone waits out the
+;;     timeout.
+;;   - "^" + s/d/o/m go to (or launch) the setup/daily-note/obsidian/mail
+;;     dedicated kitty instances (kitty/sessions/*.kitty-session), via
+;;     kitty-focus-or-launch.sh (open-daily-note.sh for d,
+;;     which wraps it - see those scripts for why plain `open -a kitty
+;;     --args --session <file>` doesn't work here).
+;;   - F1-F12 are listed in defsrc explicitly and given real media-key
+;;     outputs in the default layer (brightness/mission control/spotlight/
+;;     dictation/do-not-disturb/media-transport/volume - see the row itself
+;;     below), because kanata takes over the entire keyboard: any key NOT
+;;     listed in defsrc is passed through as raw literal input, which is
+;;     why the F-row stopped acting as media keys once kanata started
+;;     managing this keyboard. Explicitly mapping F1-F12 restores stock
+;;     macOS behaviour: bare F-key = media action, "^" + F-key = literal
+;;     F1-F12 (mapped in the apps layer). Note fn itself is no longer in
+;;     defsrc at all, so it's passed straight through unmodified - it may
+;;     or may not regain its native macOS behaviour (emoji picker/
+;;     dictation/etc.) depending on how kanata's virtual keyboard reports
+;;     it; not verified.
+;;   - Gotcha: German QWERTZ swaps Y and Z compared to US QWERTY, but
+;;     kanata's key names always follow the US/ANSI physical-position
+;;     naming. So the physical key printed "Z" on your keyboard is named
+;;     "y" in kanata, and the physical key printed "Y" is named "z" - that's
+;;     why the Zen shortcut below is bound to "y", not "z".
+;;
+;; IMPORTANT - this config requires a kanata build with the "cmd" feature,
+;; which the plain Homebrew build does NOT have. Build it yourself instead:
+;;   brew install rust
+;;   cargo install kanata --features cmd
+;; This installs to ~/.cargo/bin/kanata. Point your LaunchDaemon's
+;; ProgramArguments at that path instead of /opt/homebrew/bin/kanata.
+;; The `danger-enable-cmd yes` line below is required for `cmd` actions to
+;; run at all - it means this config file can execute arbitrary shell
+;; commands, so keep it readable/writable only by yourself (it already is,
+;; under your user's home directory).
+;;
+;; The app names below ("Zen", "kitty", "Bitwarden", "Claude") must exactly
+;; match what's in /Applications - check with `ls /Applications` and adjust
+;; the (cmd open -a "...") lines below if any differ.
+;;
+;; Also requires the Karabiner-DriverKit-VirtualHIDDevice driver on macOS,
+;; and kanata must be granted Input Monitoring (and ideally Accessibility)
+;; permissions in System Settings > Privacy & Security.
+;;
+;; Run manually to test (also validates syntax without doing anything if you
+;; add --check):
+;;   sudo kanata --cfg /path/to/kanata.kbd
+;;
+;; If kanata does not pick up your MacBook's built-in keyboard automatically,
+;; check its startup log for the exact device name and uncomment
+;; "macos-dev-names-include" below with that name.
+
+(defcfg
+  process-unmapped-keys yes
+  concurrent-tap-hold yes
+  danger-enable-cmd yes
+  ;; macos-dev-names-include (
+  ;;   "Apple Internal Keyboard / Trackpad"
+  ;; )
+)
+
+(defvar
+  tap-timeout 200
+  hold-timeout 200
+)
+
+(defsrc
+  ;    '    [    caps  nubs y    k    b    c    t    s    d    o    r    m
+  f1   f2   f3   f4    f5   f6   f7   f8   f9   f10  f11  f12
+)
+
+(defalias
+  ;; tap: ö (pass the key through unchanged)
+  ;; hold: \ (backslash, sent as a literal unicode character)
+  oe (tap-hold $tap-timeout $hold-timeout ; (unicode \))
+
+  ;; tap: ä (pass the key through unchanged)
+  ;; hold: | (pipe, sent as a literal unicode character)
+  ae (tap-hold $tap-timeout $hold-timeout ' (unicode |))
+
+  ;; tap: ü (pass the key through unchanged)
+  ;; hold: ~ (tilde, sent as a literal unicode character)
+  ue (tap-hold $tap-timeout $hold-timeout [ (unicode ~))
+
+  ;; Hyper: hold Ctrl+Shift+Alt+Cmd together for as long as caps is held
+  hyper (multi lctl lsft lalt lmet)
+
+  ;; Activate the "apps" layer below for as long as the apps-layer trigger is held
+  apps_layer (layer-while-held apps)
+
+  ;; tap: ^ (pass the key through unchanged, e.g. for accent composition)
+  ;; hold: activate the "apps" layer above
+  ;; Physical key: on this keyboard the "^" dead key reports as KEY_102ND
+  ;; (kanata name "nubs" - the ISO "extra" key), NOT KEY_GRAVE/"grv" as its
+  ;; position might suggest - confirmed via `kanata --debug`. Don't assume
+  ;; "grv" for this key on other keyboards without checking the debug log.
+  ;; Uses tap-hold-press (not plain tap-hold): plain tap-hold only resolves
+  ;; on a timer, so pressing e.g. k while nubs is still down within
+  ;; tap-timeout would NOT engage the layer if nubs+k are pressed at normal
+  ;; typing speed. tap-hold-press activates the hold-action as soon as
+  ;; another key is pressed while nubs is held, regardless of timing - so
+  ;; nubs+k is instant, and the timeout only applies to tapping nubs alone
+  ;; to type a literal "^".
+  caret_apps (tap-hold-press $tap-timeout $hold-timeout nubs @apps_layer)
+
+  ;; App launch/switch shortcuts, active only while the apps layer is held
+
+  hyper-z    (cmd open -a "Zen")
+  hyper-k    (cmd open -a "kitty")
+  hyper-b    (cmd open -a "Bitwarden")
+  hyper-c    (cmd open -a "Claude")
+  hyper-t    (cmd open -a "Microsoft Teams")
+
+  ;; Kitty session shortcuts, active only while the apps layer is held.
+  ;; These call kitty-focus-or-launch.sh (see that script for why) rather
+  ;; than a bare `open -a kitty --args --session ...`: kitty is a singleton
+  ;; app on macOS, and plain `open -a` does NOT forward new --args to an
+  ;; already-running instance (it just refocuses whatever was already
+  ;; showing - confirmed empirically).
+  ;;
+  ;; kanata does not expand ~ or $HOME in `cmd` paths, so these go through
+  ;; /bin/sh, which does. That keeps this file free of a hardcoded home
+  ;; directory - and therefore portable and publishable - without turning it
+  ;; into a generated file. `exec` avoids leaving an extra shell around.
+  hyper-s    (cmd /bin/sh -c "exec $HOME/.config/kitty/scripts/kitty-focus-or-launch.sh $HOME/.config/kitty/sessions/setup.kitty-session")
+  hyper-d    (cmd /bin/sh -c "exec $HOME/.config/kitty/scripts/open-daily-note.sh")
+  hyper-o    (cmd /bin/sh -c "exec $HOME/.config/kitty/scripts/kitty-focus-or-launch.sh $HOME/.config/kitty/sessions/obsidian.kitty-session")
+  ;; Optional work session. kanata rejects a duplicate alias, so an overlay
+  ;; cannot redefine this one - instead the binding lives here permanently and
+  ;; simply does nothing until an overlay provides the session file it points
+  ;; at. Every alias a layer references has to exist, hence no conditional.
+  work-session (cmd /bin/sh -c "s=$HOME/.config/kitty/sessions/work-network.kitty-session; [ -f $s ] && exec $HOME/.config/kitty/scripts/kitty-focus-or-launch.sh $s")
+  hyper-m    (cmd /bin/sh -c "exec $HOME/.config/kitty/scripts/kitty-focus-or-launch.sh $HOME/.config/kitty/sessions/mail.kitty-session")
+)
+
+(deflayer default
+  @oe  @ae  @ue  @hyper  @caret_apps  _  _  _  _  _  _  _  _  _  _
+  brdn brup mctl sls  dtn  dnd  prev  pp  next mute vold volu
+)
+
+(deflayer apps
+  _    _    _    _       _            @hyper-z  @hyper-k  @hyper-b  @hyper-c  @hyper-t  @hyper-s  @hyper-d  @hyper-o  @work-session  @hyper-m
+  f1   f2   f3   f4   f5   f6   f7   f8   f9   f10  f11  f12
+)

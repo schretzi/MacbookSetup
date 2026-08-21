@@ -1,0 +1,6 @@
+export NNN_OPTS="e"
+export NNN_FCOLORS="030301020705050801060301"
+export NNN_COLORS="#01020301;1231"
+export NNN_PLUG='f:finder;o:fzopen;p:preview-tui;d:diffs;t:nmount;i:imgview'
+export NNN_FIFO=~/tmp/nnn.fifo
+

@@ -1,0 +1,5 @@
+layout stack
+cd ~/Workspace/Schretzi/MacbookSetup
+launch --title "Setup" /bin/zsh -c "NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
+focus
+focus_os_window

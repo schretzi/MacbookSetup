@@ -1,0 +1,11 @@
+# API
+cask "bruno"
+brew "httpie"
+
+# Git 
+cask "github"
+brew "gh"
+brew "glab"
+
+# Security
+brew "gitleaks"

@@ -1,0 +1,5 @@
+brew "openjdk@17"
+brew "openjdk@21"
+brew "maven"
+brew "maven-completion"
+

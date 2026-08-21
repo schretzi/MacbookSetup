@@ -1,0 +1,2 @@
+# Keeps this directory in git. kitty.conf does `globinclude local.d/*.conf`,
+# so overlays drop their own .conf files here; the base ships none.

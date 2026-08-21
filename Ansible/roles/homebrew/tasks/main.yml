@@ -1,0 +1,67 @@
+---
+# Old_Setup.md -> "Brew" / "Brewfile"
+#
+# Homebrew itself is NOT installed here. Its installer wants an interactive
+# sudo prompt and it is what provides the Xcode CLT (and therefore git, and
+# therefore this repo), so it has to run before Ansible exists at all.
+# See Setup.md -> Bootstrap.
+
+- name: Homebrew | locate brew
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/brew"
+  register: homebrew_brew_bin
+
+- name: Homebrew | fail if brew is missing
+  ansible.builtin.fail:
+    msg: >-
+      {{ homebrew_prefix }}/bin/brew not found. Install Homebrew first
+      (see Setup.md -> Bootstrap), then re-run this play.
+  when: not homebrew_brew_bin.stat.exists
+
+- name: Homebrew | install Brewfiles
+  ansible.builtin.command:
+    cmd: "{{ homebrew_prefix }}/bin/brew bundle install --no-upgrade --file={{ item.root | default(repo_root) }}/Brewfiles/{{ item.file }}"
+  loop: "{{ (homebrew_brewfiles + homebrew_brewfiles_overlay) | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: homebrew_bundle
+  # `brew bundle` prints "Installing <pkg>" only when it actually does work.
+  changed_when: "'Installing' in homebrew_bundle.stdout"
+  failed_when:
+    - homebrew_bundle.rc != 0
+    - not (homebrew_continue_on_error | bool)
+
+- name: Homebrew | report Brewfiles that did not install cleanly
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.file }} exited with rc={{ item.rc }}.
+      Last line: {{ (item.stderr_lines | default([]) | last)
+                    | default('see brew output above', true) }}
+  loop: "{{ homebrew_bundle.results | rejectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    label: "{{ item.item.file }}"
+  when: homebrew_bundle.results is defined
+
+# `brew bundle` answers "does Homebrew have a receipt", which is not the same
+# question as "is the software installed". A pkg cask whose installer step was
+# skipped, and an app cask whose .app was deleted, both keep their receipt and
+# are reported as "Using" forever. Check the artifacts instead.
+- name: Homebrew | verify declared casks are actually on disk
+  ansible.builtin.command:
+    cmd: "{{ repo_root }}/Scripts/verify-casks.sh"
+  register: homebrew_cask_check
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Homebrew | report casks that are missing despite a receipt
+  ansible.builtin.debug:
+    msg: "{{ homebrew_cask_check.stdout_lines }}"
+
+- name: Homebrew | warn when a cask is installed only on paper
+  ansible.builtin.debug:
+    msg: >-
+      One or more casks have a Homebrew receipt but are not installed on the
+      system - see the list above. `brew bundle` will keep reporting them as
+      present, so this will not resolve itself. Reinstall the named casks.
+  when: homebrew_cask_check.rc != 0

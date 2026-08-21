@@ -1,0 +1,43 @@
+# Local Kubernetes
+cask "saiyam1814/tap/kiac" #https://saiyam1814.github.io/kiac/docs/index.html
+brew "container"      # Apple's runtime, kiac's hard dependency (needs >=1.2.1)
+brew "cilium-cli"     # kiac shells out to this for --cni cilium
+brew "cmctl"          # cert-manager CLI, checks issuer/cert state
+brew "hubble"         # Cilium flow visibility; worth having when gateway routing misbehaves
+brew "kubeconform"
+
+# Local CI
+brew "go-task"
+
+# IaC
+brew "pulumi"
+brew "hashicorp/tap/terraform"
+brew "terragrunt"
+
+
+# DB Tools
+cask "dbeaver-community"
+
+# Kubernetes
+brew "k3d"
+brew "kubernetes-cli"
+brew "k9s"
+brew "kubectx"
+brew "kube-ps1"
+cask "openlens"
+brew "helm"
+brew "helm-ls"
+brew "istioctl"
+brew "kustomize"
+brew "kubelogin"
+brew "krew"
+
+## Lang Servers
+brew "bash-language-server"
+brew "dockerfile-language-server"
+brew "lua-language-server"
+brew "yaml-language-server"
+
+# CNCF-Tools
+brew "argocd"
+brew "hashicorp/tap/vault"

@@ -1,0 +1,54 @@
+#compdef omt
+# zsh completion for omt - source <(omt completion zsh)
+
+_omt() {
+    local -a commands
+    commands=(
+        'authorize:re-run the interactive authorization flow for an account'
+        'refresh:force a refresh-token exchange (all accounts if none given)'
+        'list-accounts:print the configured account names'
+        'status:show authorization status for all (or one) account'
+        'token:print the stored access token for one account'
+        'completion:print a shell completion script (bash or zsh)'
+    )
+
+    local -a accounts
+    accounts=(${(f)"$(omt list-accounts 2>/dev/null)"})
+
+    if (( CURRENT == 2 )); then
+        _describe -t commands 'omt command' commands
+        _describe -t accounts 'account' accounts
+        return
+    fi
+
+    case ${words[2]} in
+        list-accounts)
+            ;;
+        completion)
+            if (( CURRENT == 3 )); then
+                compadd bash zsh
+            fi
+            ;;
+        authorize|refresh|status|token)
+            if (( CURRENT == 3 )); then
+                _describe -t accounts 'account' accounts
+            fi
+            ;;
+        *)
+            # default "get" invocation: the first word is an account (or a flag).
+            _describe -t accounts 'account' accounts
+            ;;
+    esac
+
+    if [[ ${words[CURRENT]} == -* ]]; then
+        _values 'flag' \
+            '-h[show help]' \
+            '-v[increase verbosity]' \
+            '-d[enable debug output]' \
+            '-a[force re-authorization]' \
+            '--authflow[oauth2 flow]:flow:(authcode localhostauthcode devicecode)' \
+            '-t[test endpoints]'
+    fi
+}
+
+compdef _omt omt

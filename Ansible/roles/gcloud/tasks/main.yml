@@ -1,0 +1,73 @@
+---
+# Old_Setup.md -> "Gcloud Setup"
+#
+# `gcloud init` is interactive (browser OAuth + project picking) and stays a
+# manual step - see Setup.md -> Google Cloud. Component installation is not.
+
+- name: GCloud | locate the SDK
+  ansible.builtin.command:
+    cmd: which gcloud
+  register: gcloud_which
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: GCloud | skip when the SDK is not installed
+  ansible.builtin.debug:
+    msg: "gcloud not on PATH - enable 41_clouds.brew first."
+  when: gcloud_which.rc != 0
+
+- name: GCloud | install components
+  when: gcloud_which.rc == 0
+  block:
+    - name: GCloud | which components are already installed?
+      ansible.builtin.command:
+        cmd: gcloud components list --only-local-state --format=value(id)
+      register: gcloud_installed
+      changed_when: false
+      check_mode: false
+
+    # The Homebrew-managed SDK ships a reduced component set. Asking for one it
+    # does not know about is not an error: `gcloud components install` exits 0
+    # with "All components are up to date" and installs nothing - which made
+    # this role report a change on every single run.
+    - name: GCloud | which components does this SDK offer at all?
+      ansible.builtin.command:
+        cmd: gcloud components list --format=value(id)
+      register: gcloud_available
+      changed_when: false
+      check_mode: false
+
+    - name: GCloud | work out what is missing and actually installable
+      ansible.builtin.set_fact:
+        gcloud_installable: >-
+          {{ gcloud_components
+             | reject('in', gcloud_installed.stdout_lines | map('trim') | list)
+             | select('in', gcloud_available.stdout_lines | map('trim') | list)
+             | list }}
+        gcloud_unavailable: >-
+          {{ gcloud_components
+             | reject('in', gcloud_available.stdout_lines | map('trim') | list)
+             | list }}
+
+    - name: GCloud | report components this SDK cannot provide
+      ansible.builtin.debug:
+        msg: >-
+          Not offered by this Google Cloud SDK install, so skipped:
+          {{ gcloud_unavailable | join(', ') }}. The Homebrew cask carries a
+          reduced component set - install these another way if you need them.
+      when: gcloud_unavailable | length > 0
+
+    - name: GCloud | add missing components
+      ansible.builtin.command:
+        cmd: "gcloud components install --quiet {{ gcloud_installable | join(' ') }}"
+      when: gcloud_installable | length > 0
+      register: gcloud_install
+      changed_when: "'All components are up to date' not in gcloud_install.stdout"
+
+- name: GCloud | note the manual step
+  ansible.builtin.debug:
+    msg: >-
+      Run `gcloud init` once to authenticate and pick a default project;
+      it needs a browser and cannot be automated.
+  when: gcloud_which.rc == 0

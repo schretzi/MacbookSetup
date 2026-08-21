@@ -1,0 +1,5 @@
+alias glmw="glab mr view --web"
+alias glmm="glab mr merge"
+alias glr="glab repo view --web"
+alias glc="glab ci view"
+alias glcw="glab ci view --web"

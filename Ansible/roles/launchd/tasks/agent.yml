@@ -1,0 +1,71 @@
+---
+# Install a per-user LaunchAgent.
+#
+# LaunchAgents are *copied*, not symlinked: launchd refuses plists that are not
+# owned by the loading user and root, and it does not follow links into a repo
+# checkout. The file in plists/LaunchAgents/ stays the source of truth - re-run
+# the play after editing it.
+#
+# Caller must set:
+#   launchd_plist: org.schretzi.omt-daemon.plist
+
+- name: "Launchd | ensure ~/Library/LaunchAgents exists"
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/Library/LaunchAgents"
+    state: directory
+    mode: "0755"
+
+- name: "Launchd | copy agent {{ launchd_plist }}"
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/plists/LaunchAgents/{{ launchd_plist }}"
+    dest: "{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_plist }}"
+    mode: "0644"
+  register: launchd_agent_copy
+
+- name: "Launchd | check whether the job is loaded: {{ launchd_label }}"
+  ansible.builtin.command: "launchctl print gui/{{ ansible_facts.user_uid }}/{{ launchd_label }}"
+  register: launchd_agent_state
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: "Launchd | (re)load agent {{ launchd_label }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      domain="gui/{{ ansible_facts.user_uid }}"
+      label="$domain/{{ launchd_label }}"
+      plist="{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_plist }}"
+
+      # See daemon.yml for the full reasoning: bootout is asynchronous, so
+      # bootstrapping straight afterwards can fail with
+      # "Bootstrap failed: 5: Input/output error" while the label is still
+      # registered. Wait for it to actually go.
+      if launchctl print "$label" >/dev/null 2>&1; then
+        launchctl bootout "$label" 2>/dev/null || true
+
+        gone=false
+        for _ in $(seq 1 100); do          # up to ~10s
+          if ! launchctl print "$label" >/dev/null 2>&1; then
+            gone=true
+            break
+          fi
+          sleep 0.1
+        done
+
+        if [ "$gone" != true ]; then
+          echo "launchd still has $label registered 10s after bootout;" >&2
+          echo "not bootstrapping over it. Inspect with:" >&2
+          echo "  launchctl print $label" >&2
+          exit 1
+        fi
+      fi
+
+      launchctl bootstrap "$domain" "$plist"
+  when: launchd_agent_copy.changed or launchd_agent_state.rc != 0
+  changed_when: true
+
+- name: "Launchd | forget agent variables"
+  ansible.builtin.set_fact:
+    launchd_agent_copy: null
+    launchd_agent_state: null

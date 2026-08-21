@@ -1,0 +1,6 @@
+---
+# This playbook only ever configures the machine it runs on.
+all:
+  hosts:
+    localhost:
+      ansible_connection: local

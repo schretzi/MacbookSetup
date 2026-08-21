@@ -1,0 +1,123 @@
+---
+# Point the live config locations at this repository.
+#
+# Rule of the repo: the real file always lives under MacbookSetup/. Anything
+# that can be a symlink is a symlink (this role); anything launchd or a root
+# daemon insists on owning is copied by the role that owns it.
+#
+# ORDER MATTERS. Directories are made real *before* anything is linked. While a
+# directory is still a symlink into this repo, creating a file "inside" it
+# writes into the source tree instead - so an overlay linking
+# ~/.zsh/aliases/work would silently deposit that link in Dotfiles/zsh/.
+# Doing the conversion first is what keeps overlay content out of the base.
+
+# --------------------------------------------------------------------------
+# 1. Directories that must not be links
+# --------------------------------------------------------------------------
+- name: Dotfiles | merge overlay directory contributions
+  ansible.builtin.set_fact:
+    dotfiles_merge_dirs_all: "{{ dotfiles_merge_dirs + (dotfiles_merge_dirs_overlay | default([])) }}"
+
+- name: Dotfiles | inspect the directories that must be real
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.env.HOME }}/{{ item }}"
+    follow: false
+  loop: "{{ dotfiles_real_dirs }}"
+  register: dotfiles_real_state
+
+- name: Dotfiles | drop symlinks standing in for real directories
+  # Removes only the link; the repo directory it pointed at is untouched.
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/{{ item.item }}"
+    state: absent
+  loop: "{{ dotfiles_real_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.islnk | default(false)
+
+- name: Dotfiles | create them as real directories
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ dotfiles_real_dirs }}"
+
+# --------------------------------------------------------------------------
+# 2. Merge directories - several repos contribute files to each
+# --------------------------------------------------------------------------
+- name: Dotfiles | inspect the merge directories
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.env.HOME }}/{{ item.dest }}"
+    follow: false
+  loop: "{{ dotfiles_merge_dirs_all }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: dotfiles_merge_state
+
+- name: Dotfiles | replace whole-directory symlinks with real directories
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/{{ item.item.dest }}"
+    state: absent
+  loop: "{{ dotfiles_merge_state.results }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+  when: item.stat.islnk | default(false)
+
+- name: Dotfiles | create the merge directories
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/{{ item.dest }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ dotfiles_merge_dirs_all }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Dotfiles | enumerate what this repo contributes to them
+  ansible.builtin.find:
+    paths: "{{ repo_root }}/{{ item.src }}"
+    file_type: any
+    recurse: false
+    hidden: true
+  loop: "{{ dotfiles_merge_dirs_all }}"
+  loop_control:
+    label: "{{ item.src }}"
+  register: dotfiles_merge_found
+
+# Skip any entry that is itself a merge directory. Linking it would replace the
+# real directory the previous tasks just created - and, while it was briefly a
+# link back into this repo, writing its contents through that link turned the
+# repo's own files into self-referential symlinks.
+- name: Dotfiles | link this repo's entries into the merge directories
+  ansible.builtin.file:
+    src: "{{ item.1.path }}"
+    dest: "{{ ansible_facts.env.HOME }}/{{ item.0.item.dest }}/{{ item.1.path | basename }}"
+    state: link
+    force: true
+  loop: "{{ dotfiles_merge_found.results | subelements('files') }}"
+  loop_control:
+    label: "{{ item.0.item.dest }}/{{ item.1.path | basename }}"
+  when: >-
+    (item.0.item.dest ~ '/' ~ (item.1.path | basename))
+    not in (dotfiles_merge_dirs_all | map(attribute='dest') | list)
+
+# --------------------------------------------------------------------------
+# 3. Everything else, including whatever the overlays contribute
+# --------------------------------------------------------------------------
+- name: Dotfiles | link configs back into the repo
+  ansible.builtin.include_role:
+    name: link
+  vars:
+    # dotfiles_links_overlay is contributed by the private and work overlays
+    # through their overlay.yml, with `root` pointing at their own checkout.
+    link_items: >-
+      {{ dotfiles_links
+         + (dotfiles_links_mail if (enable_mail | bool) else [])
+         + dotfiles_links_overlay }}
+
+- name: Dotfiles | keep the legacy ~/.config/neovim alias
+  ansible.builtin.file:
+    src: neobean
+    dest: "{{ ansible_facts.env.HOME }}/.config/neovim"
+    state: link
+    force: true
+  when: dotfiles_neovim_alias | bool

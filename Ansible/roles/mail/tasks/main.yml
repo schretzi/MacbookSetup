@@ -1,0 +1,334 @@
+---
+# The shell mail stack:
+#   omt          OAuth token manager (private repo - built by hand, see Setup.md)
+#   offlineimap  IMAP <-> ~/Maildir sync
+#   notmuch      indexes ~/Maildir
+#   neomutt      the TUI
+#   msmtp        sending
+#
+# Five configs - msmtp, notmuch, offlineimap, omt and muttrc - are *rendered*
+# from a single mail_accounts list rather than symlinked, because each of them
+# enumerates every account in one line of one file and so cannot be split
+# between a personal and a work repository any other way.
+#
+# This role also owns the maildir, the notmuch database and the two
+# LaunchAgents that keep everything ticking.
+
+- name: Mail | check the tools are installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/{{ item }}"
+  loop:
+    - offlineimap
+    - notmuch
+    - neomutt
+    - msmtp
+  register: mail_bins
+
+- name: Mail | fail when a mail tool is missing
+  ansible.builtin.fail:
+    msg: >-
+      Missing: {{ mail_bins.results | rejectattr('stat.exists')
+                  | map(attribute='item') | list | join(', ') }}.
+      Install 11_mail.brew first.
+  when: mail_bins.results | rejectattr('stat.exists') | list | length > 0
+
+# Work accounts follow enable_work, so a machine with the work profile off
+# renders a mail stack that simply does not know the work account exists.
+# They can arrive either as mail_work_accounts (from the work overlay) or
+# tagged `work: true` inside mail_accounts - both work, so this behaves the
+# same before and after the repo split. sync_order gives a stable sequence
+# regardless of which file an account came from.
+- name: Mail | select the accounts this machine should know about
+  ansible.builtin.set_fact:
+    mail_effective_accounts: >-
+      {{ ((mail_accounts | rejectattr('work', 'equalto', true) | list)
+          + ((mail_accounts | selectattr('work', 'equalto', true) | list) + mail_work_accounts
+             if (enable_work | bool) else []))
+         | sort(attribute='sync_order') }}
+
+# No accounts is a legitimate state: a clone of the public repo with no
+# identity supplied. Say so and stop rather than failing.
+- name: Mail | report when no accounts are configured
+  ansible.builtin.debug:
+    msg: >-
+      No mail accounts configured, so the mail stack was skipped. Supply
+      mail_accounts via a private overlay's identity.yml, or copy
+      Ansible/local/identity.example.yml to Ansible/local/identity.yml.
+  when: mail_effective_accounts | length == 0
+
+- name: Mail | require exactly one default account
+  when: mail_effective_accounts | length > 0
+  ansible.builtin.assert:
+    that:
+      - (mail_effective_accounts | selectattr('default', 'defined') | selectattr('default') | list | length) == 1
+    fail_msg: >-
+      mail_accounts must contain exactly one account with `default: true`
+      (it becomes msmtp's default and notmuch's primary_email). Found
+      {{ mail_effective_accounts | selectattr('default', 'defined') | selectattr('default') | list | length }}
+      among {{ mail_effective_accounts | length }} enabled accounts.
+
+# OAuth application credentials come from the macOS keychain rather than any
+# file. They are Thunderbird's published values, not personal secrets, but
+# GitHub's push protection rejects "Google OAuth Client ID"/"Client Secret"
+# patterns outright - so a repository carrying them literally cannot be pushed.
+# An overlay may still set mail_oauth_clients explicitly; that wins.
+- name: Mail | read OAuth client credentials from the keychain
+  ansible.builtin.command:
+    cmd: >-
+      security find-generic-password -w
+      -s "{{ mail_oauth_keychain_service }}" -a "{{ item }}"
+  loop: "{{ mail_omt_providers.keys() | list }}"
+  register: mail_oauth_keychain
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  no_log: true
+  when: mail_oauth_clients | length == 0
+
+- name: Mail | assemble mail_oauth_clients from the keychain
+  ansible.builtin.set_fact:
+    mail_oauth_clients: >-
+      {{ dict(mail_oauth_keychain.results
+              | selectattr('rc', 'equalto', 0)
+              | map(attribute='item') | list
+              | zip(mail_oauth_keychain.results
+                    | selectattr('rc', 'equalto', 0)
+                    | map(attribute='stdout') | map('from_json') | list)) }}
+  no_log: true
+  when:
+    - mail_oauth_clients | length == 0
+    - mail_oauth_keychain.results is defined
+
+# Without a client_id omt cannot start an OAuth flow at all, and the failure
+# surfaces much later as an opaque auth error during a sync. Catch it here.
+- name: Mail | require OAuth client credentials for every provider in use
+  ansible.builtin.assert:
+    that: mail_missing_oauth_clients | length == 0
+    fail_msg: >-
+      No OAuth client credentials for: {{ mail_missing_oauth_clients | join(', ') }}.
+      Store them in the keychain with
+      `Scripts/omt-oauth-keychain.sh store <provider> <client_id> <client_secret>`
+      (check with `Scripts/omt-oauth-keychain.sh list`), or set mail_oauth_clients
+      in an overlay. Values are Thunderbird's published application credentials.
+  vars:
+    mail_configured_oauth_clients: >-
+      {{ mail_oauth_clients | dict2items
+         | selectattr('value.client_id', 'defined')
+         | rejectattr('value.client_id', 'equalto', '')
+         | map(attribute='key') | list }}
+    mail_missing_oauth_clients: >-
+      {{ mail_effective_accounts | map(attribute='provider') | unique
+         | reject('in', mail_configured_oauth_clients) | list }}
+
+- name: Mail | configure the stack
+  when: mail_effective_accounts | length > 0
+  block:
+    - name: Mail | create the maildir
+      ansible.builtin.file:
+        path: "{{ mail_maildir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Mail | create the per-account maildirs
+      ansible.builtin.file:
+        path: "{{ mail_maildir }}/{{ item.id }}"
+        state: directory
+        mode: "0700"
+      loop: "{{ mail_effective_accounts }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Mail | create the log directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/Library/Logs"
+        state: directory
+        mode: "0755"
+
+    # omt is installed by the `schretzi/tap/omt` cask in Brewfiles/00_base.brew.
+    # Without it offlineimap cannot get an OAuth token and the sync agent will
+    # loop on failures.
+    - name: Mail | check omt is present
+      ansible.builtin.stat:
+        path: "{{ homebrew_prefix }}/bin/omt"
+      register: mail_omt
+
+    - name: Mail | warn when omt is missing
+      ansible.builtin.debug:
+        msg: >-
+          {{ homebrew_prefix }}/bin/omt not found. Install it with
+          `brew install --cask schretzi/tap/omt` before enabling the sync
+          agents - see Setup.md -> Mail.
+      when: not mail_omt.stat.exists
+
+    # --------------------------------------------------------------------------
+    # Rendered configuration - one account list, seven consumers
+    # --------------------------------------------------------------------------
+    - name: Mail | render msmtp configuration
+      ansible.builtin.template:
+        src: msmtprc.j2
+        dest: "{{ ansible_facts.env.HOME }}/.msmtprc"
+        mode: "0600"
+      register: mail_msmtp
+
+    - name: Mail | render notmuch configuration
+      ansible.builtin.template:
+        src: notmuch-config.j2
+        dest: "{{ ansible_facts.env.HOME }}/.notmuch-config"
+        mode: "0644"
+
+    # ~/.config/offlineimap used to be a symlink to the repo directory. It cannot
+    # stay one: `config` is rendered, and writing it through the link would drop
+    # generated output into the source tree. So the directory becomes real, the
+    # static helper is linked in, and only `config` is generated.
+    - name: Mail | is ~/.config/offlineimap still a symlink?
+      ansible.builtin.stat:
+        path: "{{ ansible_facts.env.HOME }}/.config/offlineimap"
+        follow: false
+      register: mail_oi_dir
+
+    - name: Mail | drop the offlineimap directory symlink
+      # Removes only the link; the repo directory it pointed at is untouched.
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/offlineimap"
+        state: absent
+      when: mail_oi_dir.stat.islnk | default(false)
+
+    - name: Mail | create the offlineimap directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/offlineimap"
+        state: directory
+        mode: "0755"
+
+    - name: Mail | link the offlineimap token helper
+      ansible.builtin.file:
+        src: "{{ repo_root }}/Dotfiles/offlineimap/.config/offlineimap/offlineimap.py"
+        dest: "{{ ansible_facts.env.HOME }}/.config/offlineimap/offlineimap.py"
+        state: link
+        force: true
+
+    - name: Mail | render offlineimap configuration
+      ansible.builtin.template:
+        src: offlineimap.config.j2
+        dest: "{{ ansible_facts.env.HOME }}/.config/offlineimap/config"
+        mode: "0644"
+
+    - name: Mail | create the offlineimap metadata directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.local/state/offlineimap/metadata"
+        state: directory
+        mode: "0755"
+
+    # Same reasoning as offlineimap: config.yaml is generated, so the directory
+    # cannot be a link into the repo.
+    - name: Mail | is ~/.config/omt still a symlink?
+      ansible.builtin.stat:
+        path: "{{ ansible_facts.env.HOME }}/.config/omt"
+        follow: false
+      register: mail_omt_dir
+
+    - name: Mail | drop the omt directory symlink
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/omt"
+        state: absent
+      when: mail_omt_dir.stat.islnk | default(false)
+
+    - name: Mail | create the omt directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/omt"
+        state: directory
+        mode: "0755"
+
+    - name: Mail | render omt configuration
+      ansible.builtin.template:
+        src: omt-config.yaml.j2
+        dest: "{{ ansible_facts.env.HOME }}/.config/omt/config.yaml"
+        mode: "0600"
+
+    # ~/.config/mutt: muttrc is generated, and offlineimap's mbnames writes
+    # muttrc.mailboxes in here at every sync. While this was a symlink to the repo,
+    # that generated file was landing in the source tree on every run.
+    - name: Mail | is ~/.config/mutt still a symlink?
+      ansible.builtin.stat:
+        path: "{{ ansible_facts.env.HOME }}/.config/mutt"
+        follow: false
+      register: mail_mutt_dir
+
+    - name: Mail | drop the mutt directory symlink
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/mutt"
+        state: absent
+      when: mail_mutt_dir.stat.islnk | default(false)
+
+    - name: Mail | create the mutt directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/mutt"
+        state: directory
+        mode: "0755"
+
+    - name: Mail | is the mutt accounts directory a symlink?
+      ansible.builtin.stat:
+        path: "{{ ansible_facts.env.HOME }}/.config/mutt/accounts"
+        follow: false
+      register: mail_mutt_accounts_stat
+
+    - name: Mail | link the static mutt configuration
+      ansible.builtin.file:
+        src: "{{ repo_root }}/Dotfiles/mutt/.config/mutt/{{ item }}"
+        dest: "{{ ansible_facts.env.HOME }}/.config/mutt/{{ item }}"
+        state: link
+        force: true
+      loop: "{{ mail_mutt_static_files }}"
+
+      # Every per-account config comes from an overlay, so this has to be a real
+    # directory - a link to this repo would send overlay files into the source tree.
+    - name: Mail | drop a symlinked accounts directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/mutt/accounts"
+        state: absent
+      when: mail_mutt_accounts_stat.stat.islnk | default(false)
+
+    - name: Mail | create the mutt accounts directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/mutt/accounts"
+        state: directory
+        mode: "0755"
+
+    - name: Mail | render muttrc
+      ansible.builtin.template:
+        src: muttrc.j2
+        dest: "{{ ansible_facts.env.HOME }}/.config/mutt/muttrc"
+        mode: "0644"
+
+    # Written by offlineimap's mbnames on every sync. Create it empty if absent so
+    # neomutt does not fail to source it before the first sync has ever run.
+    - name: Mail | ensure the generated mailboxes file exists
+      ansible.builtin.copy:
+        content: "mailboxes\n"
+        dest: "{{ ansible_facts.env.HOME }}/.config/mutt/muttrc.mailboxes"
+        mode: "0644"
+        force: false
+
+    - name: Mail | initialise the notmuch database
+      ansible.builtin.command:
+        cmd: notmuch new
+      register: mail_notmuch_new
+      changed_when: "'Added' in mail_notmuch_new.stdout and 'Added 0 ' not in mail_notmuch_new.stdout"
+      failed_when: false
+
+    - name: Mail | install the omt token daemon
+      ansible.builtin.include_role:
+        name: launchd
+        tasks_from: agent
+      vars:
+        launchd_plist: org.schretzi.omt-daemon.plist
+        launchd_label: org.schretzi.omt-daemon
+      when: mail_omt.stat.exists
+
+    - name: Mail | install the offlineimap sync agent
+      ansible.builtin.include_role:
+        name: launchd
+        tasks_from: agent
+      vars:
+        launchd_plist: org.schretzi.offlineimap-sync.plist
+        launchd_label: org.schretzi.offlineimap-sync
+      when: mail_omt.stat.exists

@@ -1,0 +1,24 @@
+---
+# macswitcher owns everything under ~/.config/macswitcher at runtime: it
+# rewrites config.yaml, the context files and state.json on every switch. So
+# none of them may be a symlink back into a repository - Ansible seeds them
+# once as real files and never touches them again.
+
+macswitcher_config_dir: "{{ ansible_facts.env.HOME }}/.config/macswitcher"
+
+# The global config is generic and belongs to this repository.
+macswitcher_config_src: Dotfiles/macswitcher/config.yaml
+
+# Neutral shell proxy defaults, seeded to ~/.zsh/rcs/proxy. Deliberately NOT
+# in Dotfiles/zsh/.zsh/rcs/: that directory is a dotfiles merge dir, every
+# file in it is force-symlinked into $HOME, and macswitcher would then write
+# its runtime values through the link into this repo.
+macswitcher_proxy_rc_src: Dotfiles/macswitcher/proxy.zsh
+macswitcher_proxy_rc_dest: .zsh/rcs/proxy
+
+# Contexts are environment-specific, so they come from the overlays:
+# home + remote from the private overlay, work from the work overlay. Each
+# entry is { src: <path within the overlay>, name: <context name>,
+# root: <overlay checkout> }. When this ends up empty, the role falls back to
+# `macswitcher config init` to render starter templates instead.
+macswitcher_contexts_overlay: []

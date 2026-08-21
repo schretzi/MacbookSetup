@@ -1,0 +1,42 @@
+---
+# Old_Setup.md -> "After brew install we need to link Java to be found by the system"
+#
+# Homebrew installs the JDK under its own prefix, where /usr/libexec/java_home
+# and anything using it (maven, IDEs, gradle) will not find it. The symlink
+# into /Library/Java/JavaVirtualMachines is what makes it a "system" JDK.
+
+- name: Java | which openjdk versions did brew install?
+  ansible.builtin.find:
+    paths: "{{ homebrew_prefix }}/opt"
+    patterns: "openjdk*"
+    file_type: any
+  register: java_installed
+
+- name: Java | skip when no JDK is installed
+  ansible.builtin.debug:
+    msg: "No openjdk found under {{ homebrew_prefix }}/opt - enable 36_java.brew first."
+  when: java_installed.matched | int == 0
+
+- name: Java | link Homebrew JDKs into the system location
+  ansible.builtin.file:
+    src: "{{ item.path }}/libexec/openjdk.jdk"
+    dest: "/Library/Java/JavaVirtualMachines/{{ item.path | basename }}.jdk"
+    state: link
+    force: true
+  become: true
+  loop: "{{ java_installed.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: java_installed.matched | int > 0
+
+- name: Java | list the JDKs macOS now knows about
+  ansible.builtin.command:
+    cmd: /usr/libexec/java_home -V
+  register: java_home_list
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Java | show detected JDKs
+  ansible.builtin.debug:
+    var: java_home_list.stderr_lines

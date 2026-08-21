@@ -1,0 +1,75 @@
+---
+# ============================================================================
+# Identity - EXAMPLE. Copy, do not edit in place.
+# ============================================================================
+# Everything personal lives in one file, kept out of the rest of the tree so
+# this repository can be public. Nothing here is real.
+#
+# Two ways to supply the real thing:
+#
+#   1. Private overlay (recommended) - put identity.yml at the root of the
+#      repository named by private_repo_root. It takes precedence over
+#      anything in this directory.
+#
+#   2. Local file - copy this to Ansible/local/identity.yml. That path is
+#      gitignored, so it will not be committed by accident.
+#
+# With neither present the playbook still runs; the mail stack simply
+# configures no accounts and says so.
+# ============================================================================
+
+mail_real_name: "Your Name"
+
+# Fields per account:
+#   id          offlineimap account name, Maildir subdirectory, neomutt cache dir
+#   sync_order  global ordering key - decides offlineimap's sync sequence and
+#               keeps it stable no matter which overlay an account comes from
+#   address     the From address
+#   login       IMAP/SMTP username - differs from address for Workspace aliases
+#   provider    omt provider key: google | o365 | o365-consumers
+#   backend     offlineimap remote repository type: Gmail | IMAP
+#   imap_host   only needed when backend is IMAP (Gmail implies imap.gmail.com)
+#   smtp_host   SMTP server for msmtp
+#   mutt_file   per-account neomutt config, supplied by an overlay
+#   mutt_key    digit that switches to this account in neomutt
+#   mutt_label  description shown in neomutt's macro help
+#   mutt_startup true = the account neomutt opens on launch (exactly one)
+#   default     msmtp default account and notmuch primary_email (exactly one)
+#   work        true = supplied by the work overlay, gated on enable_work
+#
+# Leave the list empty and the mail role skips itself entirely.
+mail_accounts: []
+
+# Example of one entry, for reference:
+#
+# mail_accounts:
+#   - id: personal
+#     sync_order: 10
+#     address: you@example.com
+#     login: you@example.com
+#     provider: google
+#     backend: Gmail
+#     smtp_host: smtp.gmail.com
+#     mutt_file: personal.muttrc
+#     mutt_key: "1"
+#     mutt_label: "switch to personal"
+#     mutt_startup: true
+#     default: true
+#     work: false
+
+# ---------------------------------------------------------------------------
+# git identity - used by the git role
+# ---------------------------------------------------------------------------
+git_user_name: "Your Name"
+git_user_email: "you@example.com"
+git_signing_key: "{{ ansible_facts.env.HOME }}/.ssh/id_ed25519.pub"
+
+# ---------------------------------------------------------------------------
+# OAuth application credentials
+# ---------------------------------------------------------------------------
+# Not stored in any file - the mail role reads them from the macOS keychain.
+# GitHub push protection rejects Google OAuth client id/secret patterns, so a
+# file-based copy makes a repository unpushable even when it is private.
+#
+#   Scripts/omt-oauth-keychain.sh list
+#   Scripts/omt-oauth-keychain.sh store google <client_id> <client_secret>

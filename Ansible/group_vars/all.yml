@@ -1,0 +1,102 @@
+---
+# ============================================================================
+# MacbookSetup - central switchboard
+# ============================================================================
+# Every topic below can be turned off independently. A role only runs when its
+# `enable_*` flag is true.
+#
+#   Run everything that is enabled here:
+#       ansible-playbook site.yml --ask-become-pass
+#   Run one topic ad-hoc (still honours the flag):
+#       ansible-playbook site.yml --tags unbound
+#   Force a topic that is disabled here:
+#       ansible-playbook site.yml --tags unbound -e enable_unbound=true
+#   Run everything except one topic:
+#       ansible-playbook site.yml --skip-tags mail
+# ============================================================================
+
+# Root of this repository - the single source of truth for every config file.
+repo_root: "{{ playbook_dir | dirname }}"
+
+# ---------------------------------------------------------------------------
+# Overlay repositories
+# ---------------------------------------------------------------------------
+# This repository is the publishable base - all machinery, no identity. Two
+# optional private repositories layer on top:
+#
+#   private   personal identity: mail accounts, signing keys, home DNS zones
+#   work      employer-specific: work mail account, intranet DNS, work aliases
+#
+# Set a path to enable an overlay; leave it empty and the overlay is simply
+# absent. An overlay may provide:
+#   <root>/identity.yml   personal identity (private overlay only)
+#   <root>/overlay.yml    extra dotfile links, Brewfiles, unbound profiles,
+#                         mail accounts
+# Anything it ships lives under <root>/Dotfiles, <root>/Brewfiles and so on,
+# mirroring this repository's layout.
+private_repo_root: "{{ ansible_facts.env.HOME }}/Workspace/Schretzi/MacbookSetup-Private"
+work_repo_root: "{{ ansible_facts.env.HOME }}/Workspace/Schretzi/MacbookSetup-Work"
+
+# Fallback identity when no private overlay is cloned. This is the staging
+# copy that the private overlay will eventually take over from.
+identity_file: "{{ playbook_dir }}/local/identity.yml"
+
+# Homebrew prefix (Apple Silicon). Intel Macs would use /usr/local.
+homebrew_prefix: /opt/homebrew
+
+# ---------------------------------------------------------------------------
+# Topic switches
+# ---------------------------------------------------------------------------
+
+# ~/bin, ~/tmp, ~/Workspace ...
+enable_base_dirs: true
+
+# brew bundle for the Brewfiles selected in roles/homebrew/defaults/main.yml
+enable_homebrew: true
+
+# Symlink ~/.config/* and the home dotfiles back into Dotfiles/
+enable_dotfiles: true
+
+# ~/.gitconfig, ~/.config/git/* + signing setup
+enable_git: true
+
+# ~/.ssh/config, ~/.ssh/allowed_signers, directory permissions
+enable_ssh: true
+
+# Link the Homebrew JDK into /Library/Java/JavaVirtualMachines  (needs sudo)
+enable_java: true
+
+# kanata build with `cmd` feature, LaunchDaemon, log rotation  (needs sudo)
+enable_kanata: true
+
+# yabai + skhd LaunchAgents
+enable_windowmanager: true
+
+# offlineimap/notmuch/neomutt/msmtp/omt config + sync LaunchAgents
+enable_mail: true
+
+# unbound resolver: loopback aliases, _unbound user, configs, LaunchDaemon
+# (needs sudo)
+enable_unbound: true
+
+# macswitcher network contexts: ~/.config/macswitcher, the shell proxy
+# variables in ~/.zsh/rcs/proxy - all seeded once, then owned by the runtime
+enable_macswitcher: true
+
+# gcloud components
+enable_gcloud: true
+
+# Shared AI skills (Claude / Copilot / anything reading ~/.agents/skills) plus
+# the assistant configs worth versioning
+enable_ai: true
+
+# Employer-specific configuration, supplied by the work overlay.
+# This also gates the work mail account: with it off, msmtp/notmuch/offlineimap
+# are rendered without it entirely.
+enable_work: true
+
+# ---------------------------------------------------------------------------
+# Identity
+# ---------------------------------------------------------------------------
+# Names, addresses, mail accounts and signing keys live in `identity_file`
+# above, not here - that is what keeps this file publishable.

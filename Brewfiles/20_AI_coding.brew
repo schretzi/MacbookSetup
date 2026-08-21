@@ -1,0 +1,14 @@
+cask "antigravity"
+cask "antigravity-cli"
+
+cask "claude"
+cask "claude-code"
+
+cask "copilot-cli"
+cask "visual-studio-code"
+
+cask "deepl"
+
+brew "ollama"
+cask "lm-studio"
+

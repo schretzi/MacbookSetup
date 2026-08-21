@@ -1,0 +1,49 @@
+---
+# yabai (tiling) + skhd (hotkeys).
+#
+# Not automated: yabai needs Accessibility permission and skhd needs Input
+# Monitoring, both granted by hand in System Settings -> Privacy & Security the
+# first time each binary runs. The scriptingaddition is deliberately not
+# installed - it requires disabling SIP.
+#
+# The configs (~/.config/yabai, ~/.config/skhd) are symlinked by the dotfiles
+# role; this role only owns the LaunchAgents.
+
+- name: Window manager | check binaries are installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/{{ item }}"
+  loop:
+    - yabai
+    - skhd
+  register: windowmanager_bins
+
+- name: Window manager | fail when yabai or skhd is missing
+  ansible.builtin.fail:
+    msg: >-
+      Missing: {{ windowmanager_bins.results | rejectattr('stat.exists')
+                  | map(attribute='item') | list | join(', ') }}.
+      Install 00_base.brew first.
+  when: windowmanager_bins.results | rejectattr('stat.exists') | list | length > 0
+
+- name: Window manager | install the yabai agent
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: agent
+  vars:
+    launchd_plist: com.asmvik.yabai.plist
+    launchd_label: com.asmvik.yabai
+
+- name: Window manager | install the skhd agent
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: agent
+  vars:
+    launchd_plist: com.koekeishiya.skhd.plist
+    launchd_label: com.koekeishiya.skhd
+
+- name: Window manager | remind about the permission prompts
+  ansible.builtin.debug:
+    msg: >-
+      If windows do not tile, grant Accessibility to yabai and Input Monitoring
+      to skhd in System Settings -> Privacy & Security, then re-run
+      `ansible-playbook site.yml --tags windowmanager`.

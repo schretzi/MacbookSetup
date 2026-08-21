@@ -1,0 +1,20 @@
+{#- Rendered by the Ansible "mail" role from mail_accounts. Do not edit ~/.msmtprc. -#}
+# Managed by MacbookSetup - generated from mail_accounts (Ansible/local/identity.yml).
+# Edit that list, then re-run: ansible-playbook site.yml --tags mail
+
+defaults
+port 587
+tls on
+{% for a in mail_effective_accounts %}
+
+account {{ a.address }}
+host {{ a.smtp_host }}
+port {{ a.smtp_port | default(587) }}
+from {{ a.address }}
+user {{ a.login }}
+auth xoauth2
+passwordeval "omt token {{ a.login }}"
+{% endfor %}
+
+# Set a default account
+account default : {{ (mail_effective_accounts | selectattr('default', 'defined') | selectattr('default') | first).address }}

@@ -1,0 +1,163 @@
+---
+- name: MacbookSetup
+  hosts: localhost
+  gather_facts: true
+
+  pre_tasks:
+    - name: Refuse to run as root
+      # Everything here is user-scoped; the few root steps use become.
+      ansible.builtin.assert:
+        that: ansible_facts.user_id != 'root'
+        fail_msg: >-
+          Run this playbook as your normal user, not with sudo.
+          Roles that need root escalate on their own (--ask-become-pass).
+      tags: always
+
+    - name: Confirm the repository is where we think it is
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/Dotfiles"
+      register: repo_check
+      changed_when: false
+      check_mode: false
+      tags: always
+
+    - name: Fail when repo_root is wrong
+      ansible.builtin.assert:
+        that: repo_check.stat.isdir | default(false)
+        fail_msg: "repo_root={{ repo_root }} does not contain a Dotfiles/ directory."
+      tags: always
+
+    # ---------------------------------------------------------------------
+    # Overlays
+    # ---------------------------------------------------------------------
+    # This repository is the public base: machinery, no identity. Two optional
+    # private repositories layer on top of it - one personal, one for work.
+    # Neither has to exist; a machine with neither cloned still converges, it
+    # just has nothing personal configured.
+    - name: Detect the overlay repositories
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      register: overlay_stat
+      loop:
+        - { name: private, path: "{{ private_repo_root }}" }
+        - { name: work, path: "{{ work_repo_root }}" }
+      loop_control:
+        label: "{{ item.name }} -> {{ item.path | default('(unset)') }}"
+      when: item.path | length > 0
+      changed_when: false
+      check_mode: false
+      tags: always
+
+    - name: Record which overlays are present
+      ansible.builtin.set_fact:
+        private_overlay: >-
+          {{ (private_repo_root | length > 0)
+             and ((overlay_stat.results[0].stat.isdir) | default(false)) }}
+        work_overlay: >-
+          {{ (work_repo_root | length > 0) and (enable_work | bool)
+             and ((overlay_stat.results[1].stat.isdir) | default(false)) }}
+      tags: always
+
+    # Personal identity: the private overlay wins, otherwise the in-repo
+    # staging copy under Ansible/local/ is used.
+    - name: Load identity
+      ansible.builtin.include_vars:
+        file: "{{ lookup('ansible.builtin.first_found', identity_candidates) }}"
+      vars:
+        identity_candidates:
+          files: >-
+            {{ ([private_repo_root ~ '/identity.yml'] if private_overlay else [])
+               + [identity_file, playbook_dir ~ '/local/identity.example.yml'] }}
+      tags: always
+
+    # Each overlay may contribute extra dotfile links, Brewfiles, unbound zone
+    # profiles and mail accounts through an overlay.yml at its root.
+    #
+    # They are loaded into separate namespaces and merged, NOT applied directly:
+    # include_vars *replaces* a variable rather than extending it, so two
+    # overlays both defining dotfiles_links_overlay would leave only the one
+    # loaded last - silently dropping the other's links.
+    - name: Load the private overlay's contributions
+      ansible.builtin.include_vars:
+        file: "{{ private_repo_root }}/overlay.yml"
+        name: overlay_vars_private
+      when: private_overlay and (private_repo_root ~ '/overlay.yml') is file
+      tags: always
+
+    - name: Load the work overlay's contributions
+      ansible.builtin.include_vars:
+        file: "{{ work_repo_root }}/overlay.yml"
+        name: overlay_vars_work
+      when: work_overlay and (work_repo_root ~ '/overlay.yml') is file
+      tags: always
+
+    # combine(list_merge='append') concatenates same-named lists instead of
+    # letting one overlay's win; scalars still take the work overlay's value.
+    - name: Merge the overlay contributions
+      ansible.builtin.set_fact:
+        "{{ item.key }}": "{{ item.value }}"
+      loop: >-
+        {{ (overlay_vars_private | default({}))
+           | combine(overlay_vars_work | default({}), recursive=true, list_merge='append')
+           | dict2items }}
+      loop_control:
+        label: "{{ item.key }}"
+      tags: always
+
+  roles:
+    - role: base_dirs
+      when: enable_base_dirs | bool
+      tags: [base_dirs]
+
+    - role: homebrew
+      when: enable_homebrew | bool
+      tags: [homebrew, brew]
+
+    - role: dotfiles
+      when: enable_dotfiles | bool
+      tags: [dotfiles]
+
+    - role: git
+      when: enable_git | bool
+      tags: [git]
+
+    - role: ssh
+      when: enable_ssh | bool
+      tags: [ssh]
+
+    - role: java
+      when: enable_java | bool
+      tags: [java]
+
+    - role: kanata
+      when: enable_kanata | bool
+      tags: [kanata]
+
+    - role: windowmanager
+      when: enable_windowmanager | bool
+      tags: [windowmanager, yabai, skhd]
+
+    - role: mail
+      when: enable_mail | bool
+      tags: [mail]
+
+    - role: unbound
+      when: enable_unbound | bool
+      tags: [unbound, dns]
+
+    # after unbound: it seeds contexts that reload the resolver
+    - role: macswitcher
+      when: enable_macswitcher | bool
+      tags: [macswitcher, proxy]
+
+    - role: gcloud
+      when: enable_gcloud | bool
+      tags: [gcloud]
+
+    - role: ai
+      when: enable_ai | bool
+      tags: [ai, skills]
+
+    - role: work
+      when: enable_work | bool
+      tags: [work]

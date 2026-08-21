@@ -1,0 +1,52 @@
+# Terminal
+cask "kitty"
+
+# Windowmanager
+brew "koekeishiya/formulae/yabai"
+
+# Keymappers
+brew "koekeishiya/formulae/skhd" # for yabai
+brew "kanata"
+
+# Neovim
+brew "neovim"
+
+# Better Spotlight
+cask "raycast"
+
+# Shell Tools
+brew "fzf"
+brew "zoxide"
+brew "bat"
+brew "btop"
+brew "eza"
+brew "nnn"
+brew "direnv"
+brew "starship"
+brew "gnu-sed"
+brew "grep"
+brew "tree"
+brew "ipcalc"
+brew "watch"
+brew "ripgrep"
+
+# Parsers
+brew "jq"
+brew "yq"
+
+# Fonts
+cask "font-meslo-lg-nerd-font"
+cask "font-jetbrains-mono-nerd-font"
+cask "font-source-code-pro"
+cask "font-hack-nerd-font"
+cask "font-fira-code-nerd-font"
+
+# Network
+brew "telnet"
+brew "unbound"
+brew "wget"
+
+# My own tools
+cask "schretzi/tap/macswitcher"
+cask "schretzi/tap/omt"
+

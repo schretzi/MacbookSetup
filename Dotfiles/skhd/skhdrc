@@ -1,0 +1,8 @@
+# "hyper" here is Ctrl+Shift+Alt+Cmd, held via Caps Lock (see Dotfiles/kanata/kanata.kbd).
+# App switching lives on fn (kanata's "apps" layer, see kanata.kbd) - hyper is
+# reserved for actions like this one, not app switching.
+
+# Toggle mute/unmute in Microsoft Teams (brings Teams to front, then sends its
+# in-app mute shortcut Cmd+Shift+M; adjust the keystroke below if your Teams
+# version uses a different mute shortcut)
+hyper - m : osascript -e 'tell application "Microsoft Teams" to activate' -e 'delay 0.2' -e 'tell application "System Events" to keystroke "m" using {command down, shift down}'

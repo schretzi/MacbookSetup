@@ -1,0 +1,101 @@
+---
+# Install a system-wide LaunchDaemon (runs as root).
+#
+# Same reasoning as agent.yml: launchd wants a root-owned regular file in
+# /Library/LaunchDaemons, so the plist is copied out of plists/LaunchDaemon/
+# rather than symlinked. The repo copy remains the truth.
+#
+# A source ending in .j2 is rendered instead of copied, and the .j2 is dropped
+# from the installed filename. Templating is only for plists that cannot avoid
+# a machine-specific path - launchd expands nothing, and a root daemon's $HOME
+# is /var/root rather than the owning user's home.
+#
+# Caller must set:
+#   launchd_plist: net.unbound.plist   (or com.kanata.daemon.plist.j2)
+
+- name: "Launchd | resolve installed name for {{ launchd_plist }}"
+  ansible.builtin.set_fact:
+    launchd_daemon_dest: "{{ launchd_plist | regex_replace('\\.j2$', '') }}"
+
+- name: "Launchd | copy daemon {{ launchd_daemon_dest }}"
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/plists/LaunchDaemon/{{ launchd_plist }}"
+    dest: "/Library/LaunchDaemons/{{ launchd_daemon_dest }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  when: not launchd_plist.endswith('.j2')
+  register: launchd_daemon_copy
+
+- name: "Launchd | render daemon {{ launchd_daemon_dest }}"
+  ansible.builtin.template:
+    src: "{{ repo_root }}/plists/LaunchDaemon/{{ launchd_plist }}"
+    dest: "/Library/LaunchDaemons/{{ launchd_daemon_dest }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  when: launchd_plist.endswith('.j2')
+  register: launchd_daemon_render
+
+- name: "Launchd | check whether the job is loaded: {{ launchd_label }}"
+  ansible.builtin.command: "launchctl print system/{{ launchd_label }}"
+  become: true
+  register: launchd_daemon_state
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: "Launchd | (re)load daemon {{ launchd_label }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      label="system/{{ launchd_label }}"
+      plist="/Library/LaunchDaemons/{{ launchd_daemon_dest }}"
+
+      # `launchctl bootout` is asynchronous: it returns once the unload has
+      # been *requested*, not once launchd has finished tearing the job down.
+      # Bootstrapping while the label is still registered fails with the
+      # famously unhelpful "Bootstrap failed: 5: Input/output error".
+      #
+      # KeepAlive jobs make the window wider - launchd keeps respawning the
+      # job while we are removing it - so a plain bootout/bootstrap pair
+      # fails intermittently, and mostly on the runs that changed the plist
+      # (which are exactly the runs that need the reload to work).
+      #
+      # So: only bootout if it is actually loaded, then wait for the label to
+      # disappear before bootstrapping.
+      if launchctl print "$label" >/dev/null 2>&1; then
+        launchctl bootout "$label" 2>/dev/null || true
+
+        gone=false
+        for _ in $(seq 1 100); do          # up to ~10s
+          if ! launchctl print "$label" >/dev/null 2>&1; then
+            gone=true
+            break
+          fi
+          sleep 0.1
+        done
+
+        if [ "$gone" != true ]; then
+          echo "launchd still has $label registered 10s after bootout;" >&2
+          echo "not bootstrapping over it. Inspect with:" >&2
+          echo "  sudo launchctl print $label" >&2
+          exit 1
+        fi
+      fi
+
+      launchctl bootstrap system "$plist"
+  become: true
+  when: >-
+    launchd_daemon_copy.changed | default(false)
+    or launchd_daemon_render.changed | default(false)
+    or launchd_daemon_state.rc != 0
+  changed_when: true
+
+- name: "Launchd | forget daemon variables"
+  ansible.builtin.set_fact:
+    launchd_daemon_copy: null
+    launchd_daemon_render: null
+    launchd_daemon_state: null

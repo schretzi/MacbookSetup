@@ -1,0 +1,59 @@
+#compdef macswitcher
+
+_macswitcher_contexts() {
+	local -a contexts
+	contexts=(${(f)"$(${words[1]} show-contexts --names-only 2>/dev/null)"})
+	_describe 'contexts' contexts
+}
+
+_macswitcher() {
+	local -a commands
+	commands=(
+		'init:Create a starter config file'
+		'switch:Switch full context'
+		'switch-context:Alias for switch'
+		'show-contexts:Show configured contexts'
+		'contexts:Alias for show-contexts'
+		'completion:Print shell completion script'
+		'set-local-proxy:Set local proxy wiring'
+		'unset-local-proxy:Unset local proxy wiring'
+		'status:Show current status'
+		'config-validate:Validate config'
+		'detect-auth:Probe upstream proxy auth methods'
+		'run-proxy:Run active proxy profile'
+		'run-cntlm:Alias for run-proxy'
+		'keychain-password-set:Save active forwarder proxy password in Keychain'
+		'service-install:Install launchd user service'
+		'service-uninstall:Uninstall launchd user service'
+		'service-start:Start launchd user service'
+		'service-stop:Stop launchd user service'
+		'service-restart:Restart launchd user service'
+		'service-status:Show launchd user service status'
+	)
+
+	local curcontext="$curcontext" state line
+	_arguments -C \
+		'1:command:->command' \
+		'*::arg:->args'
+
+	case $state in
+		command)
+			_describe 'command' commands
+			;;
+		args)
+			case $line[1] in
+				switch|switch-context)
+					_macswitcher_contexts
+					;;
+				completion)
+					_values 'shell' zsh
+					;;
+				show-contexts|contexts)
+					_values 'option' --names-only
+					;;
+			esac
+			;;
+	esac
+}
+
+_macswitcher "$@"

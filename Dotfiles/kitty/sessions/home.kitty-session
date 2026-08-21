@@ -1,0 +1,5 @@
+layout tall
+cd ~
+launch --title "home"
+focus
+focus_os_window

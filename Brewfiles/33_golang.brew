@@ -1,0 +1,14 @@
+brew "go"
+
+## Go itself
+brew "go"
+
+## Mocks and Generators
+brew "go-swagger/go-swagger/go-swagger"
+brew "mockery"
+
+## Operator SDK for developing Kubernetes Operators
+brew "operator-sdk"
+
+cask "goreleaser/tap/goreleaser"
+

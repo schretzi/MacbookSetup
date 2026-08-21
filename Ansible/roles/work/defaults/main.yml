@@ -1,0 +1,10 @@
+---
+# Common Name of the personal certificate issued by the work CA. Used only to
+# check whether the certificate is already in the login keychain. The real
+# value is set in identity_file; this default keeps the role runnable without it.
+work_certificate_cn: "{{ git_user_name | default('') }}"
+
+# Where work repositories are cloned. ~/.gitconfig carries an includeIf for
+# this path so commits there use the work identity. The overlay overrides it
+# with the employer-specific directory name.
+work_workspace_dir: "{{ ansible_facts.env.HOME }}/Workspace/Work"

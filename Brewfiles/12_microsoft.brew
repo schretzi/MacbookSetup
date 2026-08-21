@@ -1,0 +1,5 @@
+cask "microsoft-auto-update"
+cask "microsoft-office"
+cask "microsoft-teams"
+cask "microsoft-remote-desktop"
+

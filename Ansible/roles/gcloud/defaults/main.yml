@@ -1,0 +1,11 @@
+---
+# Components from Old_Setup.md -> "Gcloud Setup".
+#
+# terraform-tools was in the original list but the Homebrew-managed SDK does
+# not offer it - `gcloud components install terraform-tools` exits 0 with
+# "All components are up to date" and installs nothing. Removed rather than
+# left in to fail silently; install it from HashiCorp directly if needed
+# (40_kubernetes_ci.brew already provides terraform and terragrunt).
+gcloud_components:
+  - alpha
+  - beta

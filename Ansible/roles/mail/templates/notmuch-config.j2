@@ -1,0 +1,21 @@
+{#- Rendered by the Ansible "mail" role from mail_accounts. Do not edit ~/.notmuch-config. -#}
+# Managed by MacbookSetup - generated from mail_accounts (Ansible/local/identity.yml).
+# Edit that list, then re-run: ansible-playbook site.yml --tags mail
+#
+# [new], [search] and [maildir] are deliberately left empty: notmuch's own
+# defaults apply, and user.name is intentionally unset so notmuch takes the
+# full name from the OS account rather than pinning it here.
+
+[database]
+path={{ mail_maildir }}
+
+[user]
+primary_email={{ (mail_effective_accounts | selectattr('default', 'defined') | selectattr('default') | first).address }}
+other_email={% for a in mail_effective_accounts if not (a.default | default(false)) %}{{ a.address }};{% endfor %}
+
+
+[new]
+
+[search]
+
+[maildir]

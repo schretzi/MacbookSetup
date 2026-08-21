@@ -1,0 +1,119 @@
+---
+# kanata - the keymapper that sits under the whole keyboard workflow.
+#
+# Two parts cannot be automated and are documented in Setup.md -> Kanata:
+#   1. the Karabiner DriverKit VirtualHIDDevice .pkg (must be exactly 6.2.0 -
+#      the version bundled with full Karabiner-Elements is wrong)
+#   2. approving the system extension and granting Input Monitoring in
+#      System Settings -> Privacy & Security
+# This role verifies both and then owns everything else.
+
+- name: Kanata | check the Karabiner virtual HID driver
+  ansible.builtin.command:
+    cmd: systemextensionsctl list
+  register: kanata_sysext
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Kanata | require the DriverKit extension to be active
+  ansible.builtin.fail:
+    msg: >-
+      The Karabiner-DriverKit-VirtualHIDDevice system extension is not active.
+      Install version 6.2.0 from
+      https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice, run
+      /Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager activate
+      and approve it in System Settings -> Privacy & Security.
+      See Setup.md -> Kanata.
+  when: "'org.pqrs.Karabiner-DriverKit-VirtualHIDDevice' not in (kanata_sysext.stdout | default(''))"
+
+# Two different version numbers are in play, and confusing them produces a
+# permanent false alarm: the pqrs *package* is 6.2.0, but the driver extension
+# it installs reports 1.8.0. `systemextensionsctl list` shows the extension
+# version, so the package version will never appear there. Check each against
+# the thing that actually reports it.
+- name: Kanata | read the installed driver package version
+  ansible.builtin.command:
+    cmd: >-
+      defaults read
+      /Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/Info.plist
+      CFBundleVersion
+  register: kanata_driver_pkg
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Kanata | warn if the driver package is not the expected version
+  ansible.builtin.debug:
+    msg: >-
+      Karabiner-DriverKit-VirtualHIDDevice reports package version
+      {{ kanata_driver_pkg.stdout | default('unknown') | trim }}, expected
+      {{ kanata_driver_version }}. kanata is known to misbehave with other
+      versions - see Setup.md -> Kanata.
+  when: (kanata_driver_pkg.stdout | default('') | trim) != kanata_driver_version
+
+- name: Kanata | warn if the driver extension is not the expected version
+  ansible.builtin.debug:
+    msg: >-
+      The active driver extension is not {{ kanata_driver_extension_version }};
+      `systemextensionsctl list` reports:
+      {{ kanata_sysext.stdout_lines | default([]) | select('search', 'Karabiner') | list | join(' / ') }}
+  when:
+    - "'org.pqrs.Karabiner-DriverKit-VirtualHIDDevice' in (kanata_sysext.stdout | default(''))"
+    - kanata_driver_extension_version not in (kanata_sysext.stdout | default(''))
+
+# The Homebrew kanata is built without the `cmd` feature, so it cannot launch
+# or switch applications. Build it from source instead - this is why
+# 31_rust.brew has to be installed before this role runs.
+- name: Kanata | is the cmd-enabled build present?
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.env.HOME }}/.cargo/bin/kanata"
+  register: kanata_bin
+
+- name: Kanata | build kanata with the cmd feature
+  ansible.builtin.command:
+    cmd: "cargo install kanata --features cmd{{ ' --version ' ~ kanata_version if kanata_version else '' }}"
+  environment:
+    PATH: "{{ ansible_facts.env.HOME }}/.cargo/bin:{{ homebrew_prefix }}/bin:{{ ansible_facts.env.PATH }}"
+  when: not kanata_bin.stat.exists or (kanata_force_rebuild | bool)
+  changed_when: true
+
+- name: Kanata | verify the cmd feature is actually compiled in
+  ansible.builtin.command:
+    cmd: "{{ ansible_facts.env.HOME }}/.cargo/bin/kanata --version"
+  register: kanata_version_out
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Kanata | show the installed version
+  ansible.builtin.debug:
+    var: kanata_version_out.stdout
+
+# Log rotation: kanata is chatty and writes to /tmp/kanata.*.log forever.
+- name: Kanata | install newsyslog rotation rule
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/etc/newsyslog.d/kanata.conf"
+    dest: /etc/newsyslog.d/kanata.conf
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+
+- name: Kanata | install the Karabiner daemon
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: daemon
+  vars:
+    launchd_plist: org.pqrs.karabiner-daemon.plist
+    launchd_label: org.pqrs.karabiner-daemon
+
+# Rendered, not copied: launchd expands nothing and this daemon runs as root,
+# so the owning user's home has to be baked in. kanata_home is that user.
+- name: Kanata | install the kanata daemon
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: daemon
+  vars:
+    launchd_plist: com.kanata.daemon.plist.j2
+    launchd_label: com.kanata.daemon

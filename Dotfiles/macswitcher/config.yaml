@@ -1,0 +1,56 @@
+local_proxy:
+  host: 127.0.0.1
+  port: 3128
+  no_proxy:
+    - localhost
+    - 127.0.0.1
+    - "::1"
+    - kubernetes
+alpaca:
+  enabled: true
+  command:
+    - alpaca
+    - -l
+    - "{{local_host}}"
+    - -p
+    - "{{local_port}}"
+    - -C
+    - "{{pac_file}}"
+network_services: []
+dns:
+  local_resolver: 127.0.0.2
+unbound:
+  forwarders_file: /opt/homebrew/etc/unbound/conf.d/forwarders.conf
+applications:
+  unbound:
+    reload:
+      - unbound-control
+      - reload
+    restart:
+      - sudo
+      - launchctl
+      - kickstart
+      - -k
+      - system/net.unbound
+  docker:
+    start:
+      - open
+      - -a
+      - Docker
+    stop:
+      - osascript
+      - -e
+      - tell application "Docker" to quit
+    restart:
+      - sh
+      - -c
+      - osascript -e 'tell application "Docker" to quit' && open -a Docker
+  streamdeck:
+    start:
+      - open
+      - -a
+      - Elgato Stream Deck
+    stop:
+      - osascript
+      - -e
+      - tell application "Elgato Stream Deck" to quit

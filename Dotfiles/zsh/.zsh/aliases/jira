@@ -1,0 +1,2 @@
+alias jisd="jira issue list -q 'project = ISD AND resolution = Unresolved AND filter = \"ISD - All tickets of my team\" AND assignee IN (currentUser(), empty)'"
+alias jip="jira issue list -q 'project = IP AND resolution = Unresolved AND status != Backlog AND assignee IN (currentUser(), empty)'"

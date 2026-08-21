@@ -1,0 +1,41 @@
+---
+# Each Brewfile can be switched off on its own. Order matters - the list is
+# processed top to bottom, and 35_python.brew is what installs ansible itself.
+homebrew_brewfiles:
+  - { file: 00_base.brew, enabled: true }   # kitty, yabai, skhd, kanata, nvim, raycast, shell tools, fonts, unbound
+  - { file: 10_apps.brew, enabled: true }   # zen, bitwarden, obsidian, pandoc, gimp
+  - { file: 11_mail.brew, enabled: true }   # neomutt, msmtp, offlineimap, notmuch
+  - { file: 12_microsoft.brew, enabled: false }  # office/teams - work machines only
+  - { file: 13_sketchybar.brew, enabled: true }
+  - { file: 20_AI_coding.brew, enabled: true }
+  - { file: 30_dev.brew, enabled: true }
+  - { file: 31_rust.brew, enabled: true }   # required to build kanata --features cmd
+  - { file: 32_js.brew, enabled: true }
+  - { file: 33_golang.brew, enabled: true }
+  - { file: 34_lua.brew, enabled: true }
+  - { file: 35_python.brew, enabled: true } # ansible, ansible-lint, uv
+  - { file: 36_java.brew, enabled: true }
+  - { file: 40_kubernetes_ci.brew, enabled: true }
+  - { file: 41_clouds.brew, enabled: true }
+  - { file: 50_kafka.brew, enabled: true }
+  - { file: 51_mqtt.brew, enabled: false }
+  - { file: 60_security.brew, enabled: true }
+  - { file: 70_studio.brew, enabled: false }  # stream deck, obs, reaper
+
+# A single unavailable formula makes `brew bundle` exit non-zero for the whole
+# file. With this on, the play keeps going and prints a summary of the Brewfiles
+# that failed, so one dead cask does not block the rest of the setup.
+homebrew_continue_on_error: true
+
+# Third-party taps used by the Brewfiles. Review these before the first run -
+# they execute arbitrary code at install time:
+#   koekeishiya/formulae      yabai, skhd
+#   FelixKratz/formulae       sketchybar
+#   hashicorp/tap             terraform, vault
+#   saiyam1814/tap            kiac
+#   goreleaser/tap            goreleaser
+#   samuong/alpaca            alpaca proxy
+#   go-swagger/go-swagger     go-swagger
+
+# Brewfiles contributed by the overlays: { file:, enabled:, root: }.
+homebrew_brewfiles_overlay: []

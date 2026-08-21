@@ -1,0 +1,37 @@
+# Set proxy variables in the current shell.
+proxy_set() {
+  local proxy_url="${1:-${PROXY_URL}}"
+  local no_proxy_value="${2:-${PROXY_NO_PROXY}}"
+
+  if [[ -z "${proxy_url}" ]]; then
+    echo "proxy_set: PROXY_URL is empty" >&2
+    return 1
+  fi
+
+  export http_proxy="${proxy_url}"
+  export https_proxy="${proxy_url}"
+  export HTTP_PROXY="${proxy_url}"
+  export HTTPS_PROXY="${proxy_url}"
+
+  if [[ -n "${no_proxy_value}" ]]; then
+    export no_proxy="${no_proxy_value}"
+    export NO_PROXY="${no_proxy_value}"
+  else
+    unset no_proxy NO_PROXY
+  fi
+
+  echo "Proxy enabled: ${proxy_url}"
+}
+
+# Unset proxy variables in the current shell.
+proxy_unset() {
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY
+  echo "Proxy disabled"
+}
+
+# Show current proxy variables in the current shell.
+proxy_status() {
+  echo "http_proxy=${http_proxy}"
+  echo "https_proxy=${https_proxy}"
+  echo "no_proxy=${no_proxy}"
+}

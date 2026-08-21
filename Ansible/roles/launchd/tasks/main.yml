@@ -1,0 +1,8 @@
+---
+# Helper role - never used on its own.
+# Other roles pull in its task files:
+#   - include_role: { name: launchd, tasks_from: agent }
+#   - include_role: { name: launchd, tasks_from: daemon }
+- name: Launchd | helper role, nothing to do directly
+  ansible.builtin.debug:
+    msg: "The launchd role is a helper; include agent.yml or daemon.yml instead."

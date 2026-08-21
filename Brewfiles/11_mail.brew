@@ -1,0 +1,5 @@
+brew "neomutt"
+brew "msmtp"
+brew "offlineimap"
+brew "notmuch"
+brew "lynx"

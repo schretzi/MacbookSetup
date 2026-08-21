@@ -1,0 +1,23 @@
+# Browser
+cask "zen"
+cask "arc"
+cask "google-chrome"
+
+# Password manager
+cask "bitwarden"
+
+# Obsidian
+cask "obsidian"
+
+# Document management
+brew "pandoc"
+cask "sejda-pdf"
+
+# Presentations
+# Terminal slide deck renderer for markdown, images render inline via kitty
+brew "presenterm"
+# Required by `presenterm --export-pdf`
+brew "weasyprint"
+
+# Multimedia
+cask "gimp"

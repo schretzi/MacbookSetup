@@ -1,0 +1,109 @@
+---
+# Helper role: point a list of live paths at files inside this repo.
+#
+# Caller sets:
+#   link_items: [{ src: <root-relative>, dest: <$HOME-relative>, root: <opt> }, ...]
+#
+# `root` defaults to repo_root. An overlay repository sets it to its own root,
+# which is how private and work configuration gets linked in without this
+# repository knowing anything about its contents.
+#
+# Guarantees:
+#   * the repo source must exist, otherwise the run fails loudly
+#   * a real file/directory already at dest is moved to dest.bak-<timestamp>,
+#     never deleted
+#   * the result is always a symlink pointing into the repo
+
+- name: "Link | verify repo sources exist"
+  ansible.builtin.stat:
+    path: "{{ item.root | default(repo_root) }}/{{ item.src }}"
+  loop: "{{ link_items }}"
+  loop_control:
+    label: "{{ item.src }}"
+  register: link_src_state
+
+- name: "Link | fail on missing repo sources"
+  ansible.builtin.fail:
+    msg: >-
+      Missing in the repo: {{ link_src_state.results
+                              | rejectattr('stat.exists')
+                              | map(attribute='item.src') | list | join(', ') }}
+  when: link_src_state.results | rejectattr('stat.exists') | list | length > 0
+
+- name: "Link | inspect current destinations"
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.env.HOME }}/{{ item.dest }}"
+    follow: false
+  loop: "{{ link_items }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: link_dest_state
+
+# `state: link` silently replaces a regular file and hard-fails on a non-empty
+# directory. Move anything real out of the way first so nothing is lost.
+- name: "Link | back up real files/directories blocking a link"
+  ansible.builtin.command:
+    cmd: >-
+      mv "{{ ansible_facts.env.HOME }}/{{ item.item.dest }}"
+         "{{ ansible_facts.env.HOME }}/{{ item.item.dest }}.bak-{{ ansible_facts.date_time.iso8601_basic_short }}"
+    removes: "{{ ansible_facts.env.HOME }}/{{ item.item.dest }}"
+  loop: "{{ link_dest_state.results }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+  when:
+    - item.stat.exists
+    - not item.stat.islnk
+
+# No `mode` here on purpose. Setting one would rewrite the permissions of
+# directories that already exist - it reset ~/.ssh from 0700 to 0755 on every
+# run, which the ssh role then had to undo.
+# A destination whose parent is itself a symlink into a source repository is a
+# trap: creating the link "inside" it actually writes into that repo's working
+# tree. It is silent, and it is how overlay files ended up committed to the
+# base repository the first time this split was attempted. Fail loudly instead.
+- name: "Link | check for parent directories that are links into a repo"
+  ansible.builtin.stat:
+    path: "{{ (ansible_facts.env.HOME ~ '/' ~ item.dest) | dirname }}"
+    follow: false
+  loop: "{{ link_items }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: link_parent_state
+
+- name: "Link | refuse to write through a symlinked parent"
+  ansible.builtin.assert:
+    that: link_trapped_parents | length == 0
+    fail_msg: >-
+      These destinations have a parent directory that is a symlink into a
+      source repository, so linking into them would write into that repo:
+      {{ link_trapped_parents | join(', ') }}.
+      Add the parent to dotfiles_merge_dirs (or dotfiles_real_dirs) so it
+      becomes a real directory before anything is linked into it.
+  vars:
+    link_trapped_parents: >-
+      {{ link_parent_state.results
+         | selectattr('stat.islnk', 'defined') | selectattr('stat.islnk')
+         | selectattr('stat.lnk_target', 'search', '/MacbookSetup')
+         | map(attribute='item.dest') | list }}
+
+- name: "Link | ensure parent directories exist"
+  ansible.builtin.file:
+    path: "{{ (ansible_facts.env.HOME ~ '/' ~ item.dest) | dirname }}"
+    state: directory
+  loop: "{{ link_items }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: "Link | create symlinks into the repo"
+  ansible.builtin.file:
+    src: "{{ item.root | default(repo_root) }}/{{ item.src }}"
+    dest: "{{ ansible_facts.env.HOME }}/{{ item.dest }}"
+    state: link
+    force: true
+  loop: "{{ link_items }}"
+  loop_control:
+    label: "{{ item.dest }} -> {{ item.src }}"
+  # --check never performs the backup above, so a real directory is still
+  # sitting at dest and this task reports "refusing to convert it" - a failure
+  # that cannot happen in a real run. Check mode changes nothing, so downgrade.
+  ignore_errors: "{{ ansible_check_mode }}"

@@ -1,0 +1,5 @@
+function kexec() {
+  local POD=$(kubectl get pod -l app=$1 -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  [ -z "$POD" ] && echo "No pod found for app=$1" || kubectl exec -it $POD -- bash
+}
+

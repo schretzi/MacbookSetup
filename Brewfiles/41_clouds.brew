@@ -1,0 +1,3 @@
+# Renamed upstream: the google-cloud-sdk cask is now gcloud-cli. The old token
+# still resolves, so `brew bundle` reported "Using" and nothing looked wrong.
+cask "gcloud-cli"

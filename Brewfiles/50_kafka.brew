@@ -1,0 +1,6 @@
+## Kafka
+brew "kafka"
+brew "aiven-client"
+
+brew "kafkactl"
+

@@ -1,0 +1,73 @@
+---
+# The symlink map. `src` is relative to the repository root, `dest` is relative
+# to $HOME. Every entry points from the live location back into this repo, so
+# editing a config in ~/.config edits the repo file directly.
+#
+# Anything you add here is picked up on the next run; a real file or directory
+# already sitting at `dest` is moved aside to <dest>.bak-<timestamp> first.
+
+dotfiles_links:
+  # --- shell ---------------------------------------------------------------
+  - { src: Dotfiles/zsh/.zshrc, dest: .zshrc }
+
+  # --- terminal & editor ---------------------------------------------------
+  - { src: Dotfiles/neobean, dest: .config/neobean }
+
+  # --- window management & keyboard ---------------------------------------
+  - { src: Dotfiles/yabai, dest: .config/yabai }
+  - { src: Dotfiles/skhd, dest: .config/skhd }
+
+  # --- launcher & AI -------------------------------------------------------
+  - { src: Dotfiles/raycast, dest: .config/raycast }
+
+# Directories that must be REAL directories rather than a single link to this
+# repo, because more than one repository contributes files to them: the base
+# ships the shared config and an overlay adds its own alongside. Every entry
+# found in the source directory is linked individually.
+#
+# This is also what makes the include mechanisms work. kanata resolves
+# `(include "work.kbd")` against the directory of the config file *as opened* -
+# verified: it follows the symlink's own directory, not the link target - so an
+# overlay's file has to sit next to the base one in ~/.config/kanata. kitty's
+# `globinclude local.d/*.conf` behaves the same way.
+# Paths that must be REAL directories before anything is linked. If one of
+# these is left as a symlink into this repo, an overlay writing a file "into"
+# it silently creates that file inside the source tree instead - which is
+# exactly what happened the first time this split was attempted.
+dotfiles_real_dirs:
+  - .zsh
+  - .config
+
+dotfiles_merge_dirs:
+  - { src: Dotfiles/zsh/.zsh/aliases, dest: .zsh/aliases }
+  - { src: Dotfiles/zsh/.zsh/functions, dest: .zsh/functions }
+  - { src: Dotfiles/zsh/.zsh/rcs, dest: .zsh/rcs }
+  - { src: Dotfiles/zsh/.zsh/completions, dest: .zsh/completions }
+  - { src: Dotfiles/kitty, dest: .config/kitty }
+  # kitty's own subdirectories, because overlays add sessions and conf snippets
+  - { src: Dotfiles/kitty/sessions, dest: .config/kitty/sessions }
+  - { src: Dotfiles/kitty/local.d, dest: .config/kitty/local.d }
+  - { src: Dotfiles/git/config, dest: .config/git }
+  - { src: Dotfiles/kanata, dest: .config/kanata }
+dotfiles_merge_dirs_overlay: []
+
+# Linked only when enable_mail is true - see the mail role.
+#
+# Note what is NOT here: ~/.msmtprc, ~/.notmuch-config, ~/.config/offlineimap/config,
+# ~/.config/omt/config.yaml and ~/.config/mutt/muttrc are *rendered* by the mail
+# role from mail_accounts, not symlinked. A generated file cannot be a link back
+# into the repo - that would write the render output into the source tree.
+#
+# Per-account neomutt configs carry mail addresses, so they come from the
+# overlays rather than from here.
+dotfiles_links_mail: []
+
+# neovim is launched as `NVIM_APPNAME=neobean nvim` (see .zsh/aliases/general),
+# so ~/.config/neobean is the real config directory. This extra alias exists
+# for tools that look for a "neovim" directory; it is a relative link inside
+# ~/.config and deliberately not a repo link.
+dotfiles_neovim_alias: true
+
+# Contributed by the private and work overlays via their overlay.yml. Each
+# entry carries `root: <overlay checkout>` so the link points into that repo.
+dotfiles_links_overlay: []

@@ -1,0 +1,5 @@
+alias "t=tmuxinator"
+
+alias mac="tmuxinator start mac"
+alias internal="tmuxinator start internal"
+

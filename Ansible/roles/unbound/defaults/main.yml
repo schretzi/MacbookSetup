@@ -1,0 +1,36 @@
+---
+# Where brew's unbound expects its configuration.
+unbound_etc: "{{ homebrew_prefix }}/etc/unbound"
+
+# unbound.conf pulls in every *.conf from this directory. Which files land here
+# is decided by unbound_profiles below, so a zone set can be switched off
+# without editing unbound.conf.
+unbound_confd: "{{ homebrew_prefix }}/etc/unbound/conf.d"
+
+# Holds the remote-control unix socket named in unbound.conf.
+unbound_run_dir: "{{ homebrew_prefix }}/var/run"
+
+# Zone/forwarder profiles from Dotfiles/unbound/. Overlays contribute their own
+# through unbound_profiles_overlay - employer intranet zones in particular live
+# there, not here.
+unbound_profiles:
+  - file: forwarders.conf
+    enabled: true             # upstream resolvers - edit this when the network changes
+  - file: kiac.conf
+    enabled: true             # local kubernetes (kiac) hosts on the vmnet
+
+# mDNSResponder already owns 127.0.0.1:53, so unbound listens on 127.0.0.2.
+# .3 to .12 and .100 are used as target addresses by the k3d/cluster zones.
+unbound_loopback_aliases:
+  - "2-12"
+  - "100"
+
+# System account unbound drops privileges to. 444 is inside the macOS system
+# account range; check /etc/passwd if it turns out to be taken.
+unbound_user: _unbound
+unbound_uid: 444
+unbound_gid: 444
+
+# Zone profiles contributed by the overlays. Same shape as unbound_profiles,
+# plus `root:` pointing at the overlay checkout.
+unbound_profiles_overlay: []

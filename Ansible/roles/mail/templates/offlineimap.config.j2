@@ -1,0 +1,75 @@
+{#- Rendered by the Ansible "mail" role from mail_accounts. Do not edit ~/.config/offlineimap/config. -#}
+# Managed by MacbookSetup - generated from mail_accounts (Ansible/local/identity.yml).
+# Edit that list, then re-run: ansible-playbook site.yml --tags mail
+
+[general]
+metadata = ~/.local/state/offlineimap/metadata
+accounts = {{ mail_effective_accounts | map(attribute='id') | join(', ') }}
+maxsyncaccounts = {{ mail_offlineimap_maxsyncaccounts }}
+ui = {{ mail_offlineimap_ui }}
+pythonfile = ~/.config/offlineimap/offlineimap.py
+
+# Regenerates the `mailboxes` line neomutt sources, so a new remote folder
+# shows up in mutt without editing anything by hand.
+[mbnames]
+enabled = yes
+filename = ~/.config/mutt/muttrc.mailboxes
+header = "mailboxes "
+peritem = "+%(accountname)s/%(foldername)s"
+sep = " "
+footer = "\n"
+incremental = no
+{% for a in mail_effective_accounts %}
+
+# --------------------------------------------------------------------------------
+# {{ a.address }}{% if a.comment %} - {{ a.comment | trim | replace('\n', '\n# ') }}{% endif %}
+
+# --------------------------------------------------------------------------------
+
+[Account {{ a.id }}]
+localrepository = Local{{ a.id }}
+remoterepository = Remote{{ a.id }}
+postsynchook = {{ homebrew_prefix }}/bin/notmuch new
+
+[Repository Local{{ a.id }}]
+type = Maildir
+localfolders = ~/Maildir/{{ a.id }}
+sep = /
+sync_deletes = yes
+utime_from_header = yes
+filename_use_mail_timestamp = yes
+{% if a.local_nametrans is defined %}
+nametrans = {{ a.local_nametrans | trim }}
+{% endif %}
+
+[Repository Remote{{ a.id }}]
+type = {{ a.backend }}
+{% if a.backend != 'Gmail' %}
+remotehost = {{ a.imap_host }}
+{% endif %}
+starttls = yes
+ssl = yes
+sslcacertfile = {{ mail_offlineimap_cacertfile }}
+remoteuser = {{ a.login }}
+auth_mechanisms = XOAUTH2
+{% if loop.first %}
+# No oauth2_client_id/oauth2_client_secret anywhere below on purpose: XOAUTH2's
+# SASL handshake only needs a username + bearer token, not the OAuth client
+# credentials - those only matter if offlineimap itself were driving the token
+# refresh (oauth2_refresh_token/oauth2_request_url), which it isn't. `omt` does
+# the entire OAuth dance (including refresh) out of band; this eval just asks it
+# for whatever's currently valid. If offlineimap ever actually errors demanding
+# these fields even so, that's the first thing to add back.
+{% endif %}
+oauth2_access_token_eval = get_token("{{ a.login }}")
+{% if a.remote_nametrans is defined %}
+nametrans = {{ a.remote_nametrans | trim }}
+{% endif %}
+{% if a.folderfilter is defined %}
+folderfilter = {{ a.folderfilter | trim }}
+{% endif %}
+{% if a.idlefolders is defined %}
+
+idlefolders = {{ a.idlefolders }}
+{% endif %}
+{% endfor %}

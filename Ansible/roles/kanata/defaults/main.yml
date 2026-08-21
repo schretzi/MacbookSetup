@@ -1,0 +1,22 @@
+---
+# The DriverKit version kanata is known to work with. The version bundled with
+# full Karabiner-Elements is newer and breaks kanata, which is why it is pinned
+# and installed as a standalone .pkg.
+#
+# These are two different numbering schemes for the same install, and mixing
+# them up is easy: the pqrs release/package is 6.2.0, while the driver
+# extension it registers reports 1.8.0. `systemextensionsctl list` only ever
+# shows the latter, so checking for "6.2.0" there warns forever.
+kanata_driver_version: "6.2.0"            # package - from the Manager app's Info.plist
+kanata_driver_extension_version: "1.8.0"  # extension - from systemextensionsctl
+
+# Pin a kanata release, or leave empty for the latest on crates.io.
+kanata_version: ""
+
+# Force `cargo install` even when the binary already exists (upgrades).
+kanata_force_rebuild: false
+
+# Home directory baked into the LaunchDaemon plist. The daemon runs as root,
+# whose own $HOME is /var/root - this is the account whose ~/.cargo/bin holds
+# the kanata build and whose ~/.config/kanata holds the keymap.
+kanata_home: "{{ ansible_facts.env.HOME }}"

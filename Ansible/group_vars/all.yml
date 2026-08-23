@@ -63,6 +63,11 @@ enable_git: true
 # ~/.ssh/config, ~/.ssh/allowed_signers, directory permissions
 enable_ssh: true
 
+# Renders ~/.config/gitlab/instances.yaml for the `gl` shell function, which
+# switches glab's active host/token in the current shell. Hostnames come from
+# gitlab_instances, contributed by the private and work overlays - empty here.
+enable_gitlab: true
+
 # Passwordless (NOPASSWD) sudo rules - see roles/sudoers/defaults/main.yml
 # for the actual rule list. Set sudoers_passwordless_enabled: false below to
 # refuse passwordless sudo altogether without disabling this role (existing

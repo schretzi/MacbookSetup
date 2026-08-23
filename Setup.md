@@ -117,6 +117,7 @@ locations: `unbound`, `java`, `kanata`.
 | `dotfiles`      | `enable_dotfiles`      | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`    |
 | `git`           | `enable_git`           | links the shared git ignore file, checks the signing key         |
 | `ssh`           | `enable_ssh`           | links `~/.ssh/config`, fixes permissions                         |
+| `gitlab`        | `enable_gitlab`        | renders instance list for `gl`, checks tokens are in the keychain |
 | `java`          | `enable_java`          | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines` |
 | `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation   |
 | `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                        |
@@ -139,8 +140,8 @@ top:
 | Repo     | Setting             | Holds                                                          |
 | -------- | ------------------- | -------------------------------------------------------------- |
 | this one | —                   | roles, Brewfiles, scripts, plists, shared dotfiles             |
-| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config                   |
-| work     | `work_repo_root`    | employer mail account, intranet DNS, work aliases and sessions |
+| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config, gitlab.com instance |
+| work     | `work_repo_root`    | employer mail account, intranet DNS, work aliases and sessions, work gitlab instances |
 
 Both paths may be empty. **A machine with neither cloned still converges** — it
 simply has nothing personal configured, and the mail role reports that it found
@@ -413,6 +414,44 @@ ssh-add --apple-use-keychain ~/.ssh/<key>
 ```
 
 _Role: `ssh`_
+
+## GitLab
+
+Three GitLab instances, none of them named in this repo: gitlab.com (personal),
+a private-hosted instance and a SaaS instance, both work's. The role itself
+carries no hostnames — it only renders `~/.config/gitlab/instances.yaml` from
+`gitlab_instances` and checks that a token is in the keychain for each one.
+The private overlay contributes the gitlab.com entry, the work overlay the
+other two, each through `gitlab_instances` in its `overlay.yml`:
+
+```yaml
+gitlab_instances:
+  - name: com                       # short name used with `gl`
+    hostname: gitlab.com
+    keychain_service: "glab gitlab.com"
+  # api_host: only needed when the API endpoint differs from hostname
+```
+
+Store the matching personal access token (`api` scope) once per instance:
+
+```bash
+security add-generic-password -s "glab gitlab.com" -a "$USER" -w
+```
+
+`glab` itself is repetitive across three hosts — every command otherwise needs
+its own `--hostname`. The `gl` shell function (`Dotfiles/zsh/.zsh/functions/
+gitlab`) switches the active host for the current shell instead:
+
+```bash
+gl -l          # list configured instances
+gl com         # glab now targets gitlab.com in this shell
+gl             # show which instance is active
+```
+
+It reads the token from the keychain at switch time and exports
+`GITLAB_HOST`/`GITLAB_API_HOST`/`GITLAB_TOKEN`; nothing is written to disk.
+
+_Role: `gitlab`_
 
 ## Java
 

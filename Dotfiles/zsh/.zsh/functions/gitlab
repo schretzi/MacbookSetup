@@ -1,0 +1,69 @@
+# Switch glab's active GitLab host in the current shell, instead of passing
+# --hostname (or exporting GITLAB_HOST/GITLAB_TOKEN by hand) on every command.
+#
+# Reads ~/.config/gitlab/instances.yaml, rendered by the `gitlab` Ansible role
+# from gitlab_instances (contributed by the private/work overlays - this repo
+# ships no hostnames of its own). The token itself is never in that file: it
+# is read from the macOS keychain at switch time and kept only in this
+# shell's environment.
+#
+# Usage:
+#   gl            show the active instance (or "none")
+#   gl -l         list the configured instances
+#   gl <name>     switch to <name> for this shell
+gl() {
+  local instances_file="${HOME}/.config/gitlab/instances.yaml"
+
+  if [[ ! -f "${instances_file}" ]]; then
+    echo "gl: ${instances_file} not found - run the gitlab Ansible role first" >&2
+    return 1
+  fi
+
+  if [[ $# -eq 0 ]]; then
+    if [[ -n "${GITLAB_HOST}" ]]; then
+      echo "${GITLAB_HOST}"
+    else
+      echo "gl: no instance active in this shell"
+    fi
+    return 0
+  fi
+
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    yq eval '.instances[] | .name + "\t" + .hostname' "${instances_file}"
+    return 0
+  fi
+
+  local name="$1"
+  local hostname api_host keychain_service
+  hostname=$(yq eval ".instances[] | select(.name == \"${name}\") | .hostname" "${instances_file}")
+  if [[ -z "${hostname}" ]]; then
+    echo "gl: no instance named '${name}' - see \`gl -l\`" >&2
+    return 1
+  fi
+  api_host=$(yq eval ".instances[] | select(.name == \"${name}\") | .api_host" "${instances_file}")
+  keychain_service=$(yq eval ".instances[] | select(.name == \"${name}\") | .keychain_service" "${instances_file}")
+
+  local token
+  token=$(security find-generic-password -s "${keychain_service}" -w 2>/dev/null)
+  if [[ -z "${token}" ]]; then
+    echo "gl: no token in the keychain for '${name}' (service \"${keychain_service}\")" >&2
+    return 1
+  fi
+
+  export GITLAB_HOST="${hostname}"
+  export GITLAB_API_HOST="${api_host}"
+  export GITLAB_TOKEN="${token}"
+  unset token
+
+  echo "glab now targets ${hostname}"
+}
+
+# Completion: `gl <TAB>` offers the configured short names.
+_gl() {
+  local instances_file="${HOME}/.config/gitlab/instances.yaml"
+  [[ -f "${instances_file}" ]] || return 0
+  local -a names
+  names=("${(@f)$(yq eval '.instances[].name' "${instances_file}" 2>/dev/null)}")
+  compadd -- "${names[@]}"
+}
+(( $+functions[compdef] )) && compdef _gl gl

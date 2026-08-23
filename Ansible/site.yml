@@ -125,6 +125,10 @@
       when: enable_ssh | bool
       tags: [ssh]
 
+    - role: gitlab
+      when: enable_gitlab | bool
+      tags: [gitlab, glab]
+
     # central switchboard for passwordless (NOPASSWD) sudo rules; runs before
     # any role that relies on one (unbound's flush_dns/restart aliases)
     - role: sudoers

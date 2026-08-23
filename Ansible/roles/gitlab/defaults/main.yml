@@ -1,0 +1,23 @@
+---
+# Where the rendered instance list lives. Read by the `gl` shell function
+# (Dotfiles/zsh/.zsh/functions/gitlab) via yq; contains no secrets.
+gitlab_config_dir: "{{ ansible_facts.env.HOME }}/.config/gitlab"
+
+# GitLab instances, contributed by the overlays via their overlay.yml - this
+# base repo has no GitLab hostnames of its own, only the machinery to render
+# and switch between whatever the overlays supply.
+#
+# Each entry:
+#   name:             short name used with the `gl` shell function, e.g. com
+#   hostname:         the host glab/git should talk to, e.g. gitlab.com
+#   api_host:         optional, only when the API endpoint differs from
+#                     hostname (some self-managed setups front git/web with a
+#                     different host than the API) - defaults to hostname
+#   keychain_service: macOS keychain service name holding the personal access
+#                     token (`security add-generic-password -s "<service>"
+#                     -a "$USER" -w "<token>"`) - the token itself never lives
+#                     in a file, repo or overlay
+#
+# Expect one entry from the private overlay (gitlab.com) and two from the
+# work overlay (the private-hosted instance and the work SaaS instance).
+gitlab_instances: []

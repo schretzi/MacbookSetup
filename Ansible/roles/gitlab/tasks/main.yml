@@ -1,0 +1,70 @@
+---
+# Renders the instance list that the `gl` shell function (Dotfiles/zsh/.zsh/
+# functions/gitlab) reads to switch glab's active GitLab host in the current
+# shell - see Setup.md -> GitLab. No token ever lands in this file: only
+# hostnames and the name of the keychain entry to read at switch time.
+
+- name: GitLab | check glab is installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/glab"
+  register: gitlab_glab_bin
+
+- name: GitLab | warn when glab is missing
+  ansible.builtin.debug:
+    msg: >-
+      {{ homebrew_prefix }}/bin/glab not found. Install it with
+      `brew bundle` (30_dev.brew) - the `gl` shell function has nothing to
+      switch without it.
+  when: not gitlab_glab_bin.stat.exists
+
+- name: GitLab | report when no instances are configured
+  ansible.builtin.debug:
+    msg: >-
+      No GitLab instances configured, so there is nothing for `gl` to switch
+      between. Supply gitlab_instances via a private or work overlay's
+      overlay.yml.
+  when: gitlab_instances | length == 0
+
+- name: GitLab | ensure the config directory exists
+  ansible.builtin.file:
+    path: "{{ gitlab_config_dir }}"
+    state: directory
+    mode: "0755"
+  when: gitlab_instances | length > 0
+
+# Rendered fresh every run from gitlab_instances - it is a plain projection of
+# that variable, not runtime state, so unlike macswitcher's contexts there is
+# nothing here for a later run to clobber.
+- name: GitLab | render the instance list
+  ansible.builtin.template:
+    src: instances.yaml.j2
+    dest: "{{ gitlab_config_dir }}/instances.yaml"
+    mode: "0644"
+  when: gitlab_instances | length > 0
+
+# Confirms the keychain entry exists without ever reading or logging the
+# token itself.
+- name: GitLab | check each instance's token is in the keychain
+  ansible.builtin.command:
+    cmd: security find-generic-password -s "{{ item.keychain_service }}"
+  loop: "{{ gitlab_instances }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: gitlab_keychain_check
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  no_log: true
+
+- name: GitLab | remind about tokens missing from the keychain
+  ansible.builtin.debug:
+    msg: >-
+      No token in the keychain for '{{ item.item.name }}' ({{ item.item.hostname }}).
+      Create one on the instance (User Settings -> Access Tokens, `api` scope)
+      and store it with:
+      `security add-generic-password -s "{{ item.item.keychain_service }}"
+      -a "$USER" -w`
+  loop: "{{ gitlab_keychain_check.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.rc != 0

@@ -1,0 +1,10 @@
+---
+# Managed by MacbookSetup - Ansible role "gitlab". Read by the `gl` shell
+# function (Dotfiles/zsh/.zsh/functions/gitlab), not by glab itself.
+instances:
+{% for inst in gitlab_instances %}
+  - name: {{ inst.name }}
+    hostname: {{ inst.hostname }}
+    api_host: {{ inst.api_host | default(inst.hostname) }}
+    keychain_service: {{ inst.keychain_service }}
+{% endfor %}

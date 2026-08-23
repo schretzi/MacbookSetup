@@ -19,17 +19,17 @@ hyper - m : osascript -e 'tell application "Microsoft Teams" to activate' -e 'de
 #   desk5-7  Left external screen (5 Zen, 6-7 free)
 #   desk8-10 Right external screen (8 kitty, 9 kitty session clones, 10 free)
 
-# --- Focus a window within the current space, in a direction -----------------
-hyper - h : yabai -m window --focus west
-hyper - j : yabai -m window --focus south
-hyper - k : yabai -m window --focus north
-hyper - l : yabai -m window --focus east
-
-# --- Move (warp) the focused window in a direction, staying on the space -----
-hyper + shift - h : yabai -m window --warp west
-hyper + shift - j : yabai -m window --warp south
-hyper + shift - k : yabai -m window --warp north
-hyper + shift - l : yabai -m window --warp east
+# --- Cycle windows within the current app/space --------------------------
+# NOTE: yabai's directional/stack focus (`window --focus west/south/...` or
+# `stack.next`/`stack.prev`) requires its Scripting Addition, which in turn
+# requires partially disabling SIP (System Integrity Protection). We're
+# keeping SIP fully enabled, so those don't work and aren't used here.
+# Instead h/l cycle through open windows of the frontmost app via macOS's
+# own Cmd+`/Cmd+Shift+` window-cycling shortcut - this needs no SA/SIP
+# change and works today. j/k are unused for now (no SA-free yabai
+# equivalent for "focus other space's windows" exists).
+hyper - h : osascript -e 'tell application "System Events" to keystroke "`" using {command down, shift down}'
+hyper - l : osascript -e 'tell application "System Events" to keystroke "`" using {command down}'
 
 # --- Switch directly to a space (desk1..desk10; "0" = desk10) ----------------
 hyper - 1 : yabai -m space --focus desk1

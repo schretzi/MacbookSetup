@@ -39,3 +39,16 @@
     label: "{{ item.name }}"
   become: true
   when: sudoers_passwordless_enabled | bool
+
+# Independent of sudoers_passwordless_enabled: this only makes sudo preserve
+# TERM/TERMINFO (needed for kitty), it grants no extra privileges, so it
+# stays installed even when passwordless sudo is switched off.
+- name: Sudoers | install the env_keep rule for kitty's TERMINFO
+  ansible.builtin.template:
+    src: env_keep.j2
+    dest: /etc/sudoers.d/00-env-keep
+    owner: root
+    group: wheel
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+  become: true

@@ -1,0 +1,4 @@
+# Managed by Ansible (roles/sudoers) - do not edit by hand.
+# Let sudo (and anything that shells out through it, like Ansible's become)
+# preserve these environment variables instead of stripping/rejecting them.
+Defaults env_keep += "{{ sudoers_env_keep | join(' ') }}"

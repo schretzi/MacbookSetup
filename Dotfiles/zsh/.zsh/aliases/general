@@ -7,6 +7,12 @@ unbound_restart() {
   sudo -n /bin/launchctl kickstart -k system/net.unbound
 }
 
+# Re-grabs the keyboard after it reconnects on a different transport (e.g.
+# cable -> Bluetooth), which kanata otherwise doesn't notice - see Setup.md.
+kanata_restart() {
+  sudo -n /bin/launchctl kickstart -k system/com.kanata.daemon
+}
+
 alias flush_dns="sudo -n /usr/bin/dscacheutil -flushcache; sudo -n /usr/bin/killall -HUP mDNSResponder"
 
 alias ws="cd ~/Workspace"

@@ -17,6 +17,11 @@ sudoers_rules:
     commands:
       - /bin/launchctl kickstart -k system/net.unbound
 
+  - name: kanata-restart
+    comment: restart the kanata daemon (kanata_restart alias, re-grabs keyboard after cable/Bluetooth switch)
+    commands:
+      - /bin/launchctl kickstart -k system/com.kanata.daemon
+
   - name: dns-flush
     comment: flush macOS's system DNS resolver cache (flush_dns alias)
     commands:
@@ -33,3 +38,14 @@ sudoers_rules:
 # (re)created; every command in sudoers_rules then falls back to a normal
 # password prompt through `sudo`.
 sudoers_passwordless_enabled: true
+
+# kitty sets TERMINFO to its own bundled terminfo directory so it works
+# without the kitty-terminfo package being installed system-wide. sudo's
+# default env_reset strips (and, if explicitly re-set, refuses) TERM and
+# TERMINFO, which breaks any `sudo`/Ansible-become command run from a kitty
+# window ("sudo: sorry, you are not allowed to set the following
+# environment variables: TERMINFO"). Keeping both fixes it - see
+# https://sw.kovidgoyal.net/kitty/faq/#i-get-errors-about-the-terminal-being-unknown-or-opening-the-terminal-failing-or-functional-keys-like-arrow-keys-don-t-work
+sudoers_env_keep:
+  - TERM
+  - TERMINFO

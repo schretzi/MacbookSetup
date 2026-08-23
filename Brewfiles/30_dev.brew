@@ -6,6 +6,7 @@ brew "httpie"
 cask "github"
 brew "gh"
 brew "glab"
+brew "lazygit"
 
 # Security
 brew "gitleaks"

@@ -49,4 +49,5 @@ brew "wget"
 # My own tools
 cask "schretzi/tap/macswitcher"
 cask "schretzi/tap/omt"
+cask "schretzi/tap/gittree"
 

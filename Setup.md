@@ -326,6 +326,17 @@ two requirements:
 1. **karabiner drinver** installed already in the manual section
 2. **Input Monitoring** for kanata in System Settings.
 
+A third permission is needed for one specific feature: kanata's `cmd` action
+(e.g. `^`+d opening today's daily note) runs as **root** via the
+`com.kanata.daemon` LaunchDaemon. Without **Full Disk Access** for
+`~/.cargo/bin/kanata` in System Settings → Privacy & Security, root can read
+its *own* files fine but macOS's TCC silently denies reads of the
+iCloud-backed Obsidian vault - the daily note still gets created with the
+right filename, just without its template content (the fallback in
+`open-daily-note.sh` swallows the failure instead of erroring). Grant Full
+Disk Access to `kanata`, then `kanata_restart` (see `~/.zsh/aliases/general`)
+to pick it up.
+
 Ansible then does the rest: it verifies the driver is active and the right
 version, builds kanata **from source with the `cmd` feature** (`cargo install
 kanata --features cmd` — the Homebrew build lacks it, so it cannot start or

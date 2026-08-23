@@ -1,0 +1,60 @@
+---
+# Every other engine on macOS (WebKit/Safari, Chromium/Chrome) trusts the
+# System keychain automatically. Firefox does not: it ships its own NSS cert
+# store (cert9.db, per-profile) and ignores the OS trust settings entirely
+# unless told otherwise - so a locally-generated root CA trusted via
+#   security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain <root_ca.crt>
+# (see e.g. the LocalKubernetes project's roles/host_ca) is invisible to
+# Firefox/Zen/LibreWolf/Waterfox/Floorp until this policy is in place.
+#
+# ImportEnterpriseRoots, set via a distribution/policies.json dropped into
+# the browser's own .app bundle, fixes that for good: once enabled, every
+# Firefox-based browser reads the System keychain's trusted roots on
+# startup - no separate certutil/NSS import needed per profile, and it keeps
+# working across ordinary browser updates (a cask reinstall that replaces the
+# whole .app, rather than updating it in place, will need this role re-run).
+
+- name: Firefox enterprise roots | check for installed browsers
+  ansible.builtin.stat:
+    path: "/Applications/{{ item }}"
+  register: firefox_enterprise_roots_stat
+  loop: "{{ firefox_enterprise_roots_apps }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  check_mode: false
+
+- name: Firefox enterprise roots | narrow down to installed browsers
+  ansible.builtin.set_fact:
+    firefox_enterprise_roots_installed: >-
+      {{ firefox_enterprise_roots_stat.results
+         | selectattr('stat.exists', 'true')
+         | map(attribute='item')
+         | list }}
+
+- name: Firefox enterprise roots | report which browsers were found
+  ansible.builtin.debug:
+    msg: >-
+      {{ firefox_enterprise_roots_installed
+         if firefox_enterprise_roots_installed
+         else 'none of firefox_enterprise_roots_apps are installed - nothing to do' }}
+
+- name: Firefox enterprise roots | ensure the distribution directory exists
+  ansible.builtin.file:
+    path: "/Applications/{{ item }}/Contents/Resources/distribution"
+    state: directory
+    mode: "0755"
+  loop: "{{ firefox_enterprise_roots_installed }}"
+  loop_control:
+    label: "{{ item }}"
+  become: true
+
+- name: Firefox enterprise roots | install policies.json
+  ansible.builtin.copy:
+    content: "{{ firefox_enterprise_roots_policy | to_nice_json }}\n"
+    dest: "/Applications/{{ item }}/Contents/Resources/distribution/policies.json"
+    mode: "0644"
+  loop: "{{ firefox_enterprise_roots_installed }}"
+  loop_control:
+    label: "{{ item }}"
+  become: true

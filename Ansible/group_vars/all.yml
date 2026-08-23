@@ -63,6 +63,14 @@ enable_git: true
 # ~/.ssh/config, ~/.ssh/allowed_signers, directory permissions
 enable_ssh: true
 
+# Passwordless (NOPASSWD) sudo rules - see roles/sudoers/defaults/main.yml
+# for the actual rule list. Set sudoers_passwordless_enabled: false below to
+# refuse passwordless sudo altogether without disabling this role (existing
+# rule files are then removed and every affected command prompts for a
+# password through plain `sudo` instead).
+enable_sudoers: true
+sudoers_passwordless_enabled: true
+
 # Link the Homebrew JDK into /Library/Java/JavaVirtualMachines  (needs sudo)
 enable_java: true
 
@@ -78,6 +86,12 @@ enable_mail: true
 # unbound resolver: loopback aliases, _unbound user, configs, LaunchDaemon
 # (needs sudo)
 enable_unbound: true
+
+# Trusts locally-generated root CAs (added via `security add-trusted-cert`
+# into /Library/Keychains/System.keychain) in Firefox-based browsers too -
+# Firefox/NSS ignores the System keychain by default, unlike Safari/Chrome.
+# (needs sudo)
+enable_firefox_enterprise_roots: true
 
 # macswitcher network contexts: ~/.config/macswitcher, the shell proxy
 # variables in ~/.zsh/rcs/proxy - all seeded once, then owned by the runtime

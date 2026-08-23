@@ -1,0 +1,22 @@
+---
+# Candidate Firefox-based (Gecko/NSS) browser .app bundles to look for under
+# /Applications. This is the installed bundle name, not the Homebrew cask
+# name - the two differ (e.g. the "zen" cask installs Zen.app). Only bundles
+# that are actually present get the policy written; nothing fails if none of
+# these are installed. Add an entry here if a new Firefox-based browser shows
+# up in a Brewfile (search Brewfiles for firefox/zen/librewolf/waterfox).
+firefox_enterprise_roots_apps:
+  - Zen.app
+  - Firefox.app
+  - Firefox Developer Edition.app
+  - Firefox Nightly.app
+  - LibreWolf.app
+  - Waterfox.app
+  - Floorp.app
+
+# ImportEnterpriseRoots: true tells Firefox/NSS to trust whatever is already
+# in the macOS System keychain - see roles/firefox_enterprise_roots/tasks for
+# why this is needed at all.
+firefox_enterprise_roots_policy:
+  policies:
+    ImportEnterpriseRoots: true

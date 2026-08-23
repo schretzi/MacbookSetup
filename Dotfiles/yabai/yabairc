@@ -42,9 +42,28 @@ yabai -m config \
 # "float" - default mode, windows are not managed
 yabai -m config layout stack
 
-# I want to have all the apps in desktop 1, and just a few in other desktops
 # If apps are organized incorrectly, just restart yabai
 # https://github.com/koekeishiya/yabai/issues/1685
+#
+# ---------------------------------------------------------------------------
+# Layout: 10 spaces, 4/3/3 split across the 3-display setup (MacBook internal
+# screen + two externals on a mount). yabai itself cannot assign a space to a
+# specific display without partially disabling SIP (--create/--display need
+# it), so which display owns desk1-4 vs desk5-7 vs desk8-10 is controlled by
+# dragging desktop thumbnails to the right monitor in Mission Control - a
+# one-time manual step. This file only labels whatever spaces already exist
+# in whatever order Mission Control put them in, and assigns apps to labels.
+#
+#   MacBook screen : desk1 Teams (default/home) · desk2 passwords
+#                     (Bitwarden + Keychain Access) · desk3 Little Snitch ·
+#                     desk4 free/temporary
+#   Left screen     : desk5 Zen · desk6-7 free/temporary
+#   Right screen    : desk8 kitty (main) · desk9 kitty session clones (Obsidian,
+#                     Neomutt, Setup, Daily Note, ...) · desk10 free/temporary
+#
+# hyper+1..9/0 (skhd) focuses desk1..desk9/desk10 directly, so the space
+# labels below double as the skhd/skhdrc targets - keep them in sync.
+# ---------------------------------------------------------------------------
 
 yabai -m space 1 --label desk1
 yabai -m space 2 --label desk2
@@ -57,13 +76,18 @@ yabai -m space 8 --label desk8
 yabai -m space 9 --label desk9
 yabai -m space 10 --label desk10
 
-yabai -m rule --add app="^.*$" space=desk8
-yabai -m rule --add app="^Claude$" space=desk8
-yabai -m rule --add app="^Claude$" space=desk8
-yabai -m rule --add app="^Zen$" space=desk1
-yabai -m rule --add app="^Keychain Access$" space=desk9
-yabai -m rule --add app="^Bitwarden$" space=desk9
-yabai -m rule --add app="^Microsoft" space=desk3
-yabai -m rule --add app="^kitty$" space=desk2
+yabai -m rule --add app="^Microsoft" space=desk1
+yabai -m rule --add app="^Bitwarden$" space=desk2
+yabai -m rule --add app="^Keychain Access$" space=desk2
+yabai -m rule --add app="^Little Snitch" space=desk3
+yabai -m rule --add app="^kitty$" space=desk8
+yabai -m rule --add app="^Zen$" space=desk5
+# Kitty session clones each get their own macOS app wrapper (see
+# kitty/session-apps.conf) so Cmd-Tab and this rule can tell them apart from
+# the main "kitty" window above. NOTE: if the real Obsidian.app note-taking
+# app is ever installed, it shares the exact same CFBundleName ("Obsidian")
+# as the kitty-session wrapper and would also land on desk9 - adjust this
+# regex (e.g. match on title instead) if that becomes a problem.
+yabai -m rule --add app="^(Setup|Obsidian|Neomutt|Daily Note.*|Work Network)$" space=desk9
 
 

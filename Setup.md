@@ -1,21 +1,83 @@
+
 # Schretzi Macbook Setup
 
 Everything needed to take a Mac out of the box and end up with my working
 environment.
 
 > Employer-specific steps are not in this repository. They live in a private
-> **work overlay** together with the intranet DNS zones, work mail account and
+> **work overlay** together with the DNS zones, work mail account and
 > shell helpers; see [Overlays](#identity-and-the-overlay-repositories).
+
+## Software outside Automation
+
+Three things cannot come from `brew bundle` and Ansible: one has to filter the
+network before anything else is installed, one needs a driver the vendor ships
+no cask for, and one is a system extension that must be approved by hand.
+Install them first, in this order.
+
+### Little Snitch
+
+The outbound firewall goes on before anything else starts talking to the
+internet — which is also why it is deliberately **not** in a Brewfile: by the
+time the `homebrew` role runs, it should already be filtering.
+
+```bash
+brew install --cask little-snitch
+```
+
+It installs a network system extension; approve it in **System Settings →
+Privacy & Security** and reboot when asked:
+
+```bash
+systemextensionsctl list | grep littlesnitch   # [activated enabled]
+```
+
+### DisplayLink (docks)
+
+Docks that drive external displays over USB need Synaptics' driver. There is no
+cask, so it is a manual download:
+<https://www.synaptics.com/products/displaylink-graphics/downloads/macos>
+
+DisplayLink Manager needs **Screen Recording** permission — it captures the
+desktop to push it over USB — granted in System Settings → Privacy & Security.
+Without it the external screens stay black.
+
+### Karabiner DriverKit VirtualHIDDevice
+
+kanata, installed by Ansible later, drives the keyboard through this virtual HID
+driver. It needs **package version 6.2.0**; the driver bundled with full
+Karabiner-Elements is newer and breaks kanata.
+
+Download the `.pkg` from
+<https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice>, install it,
+then activate the driver and approve the extension in **System Settings →
+Privacy & Security**:
+
+```bash
+/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager activate
+```
+
+Two version numbers are in play and they never match: the pqrs _package_ is
+6.2.0 (readable from the Manager app's `Info.plist`), while the extension it
+registers reports **1.8.0** — which is the only one `systemextensionsctl` ever
+shows:
+
+```bash
+systemextensionsctl list | grep Karabiner
+# ...VirtualHIDDevice (1.8.0/1.8.0) ... [activated enabled]
+```
+
+The `kanata` role checks both and stops if the extension is not active.
 
 ## How this repo works
 
 **The real file always lives here.** Nothing is copy-pasted into `~` and then
 forgotten. Two mechanisms keep it that way:
 
-| Mechanism | Used for | Why |
-| --- | --- | --- |
-| **Symlink** | `~/.config/*`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`, unbound configs | Editing the live file edits the repo file. Nothing to sync. |
-| **Copy** | LaunchAgents, LaunchDaemons, `/etc/newsyslog.d`, `/usr/local/bin` | launchd and root-owned locations refuse to follow links into a user checkout. The repo copy is still the truth — re-run the play after editing. |
+| Mechanism   | Used for                                                                    | Why                                                                                                                                             |
+| ----------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Symlink** | `~/.config/*`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`, unbound configs | Editing the live file edits the repo file. Nothing to sync.                                                                                     |
+| **Copy**    | LaunchAgents, LaunchDaemons, `/etc/newsyslog.d`, `/usr/local/bin`           | launchd and root-owned locations refuse to follow links into a user checkout. The repo copy is still the truth — re-run the play after editing. |
 
 If a config is not in this repo, it is not managed, and rebuilding the machine
 will lose it.
@@ -48,21 +110,22 @@ ansible-playbook site.yml --tags unbound -e enable_unbound=true   # force a disa
 `--ask-become-pass` is only needed for the roles that touch root-owned
 locations: `unbound`, `java`, `kanata`.
 
-| Role / tag | Switch | What it does |
-| --- | --- | --- |
-| `base_dirs` | `enable_base_dirs` | `~/bin`, `~/tmp`, `~/Workspace` |
-| `homebrew` | `enable_homebrew` | `brew bundle` per Brewfile, each file individually toggleable |
-| `dotfiles` | `enable_dotfiles` | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/` |
-| `git` | `enable_git` | links the shared git ignore file, checks the signing key |
-| `ssh` | `enable_ssh` | links `~/.ssh/config`, fixes permissions |
-| `java` | `enable_java` | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines` |
-| `kanata` | `enable_kanata` | builds kanata with `cmd`, installs both daemons + log rotation |
-| `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents |
-| `mail` | `enable_mail` | maildir, notmuch index, offlineimap/omt agents, mail dotfiles |
-| `unbound` | `enable_unbound` | loopback aliases, `_unbound` account, configs, resolver daemon |
-| `macswitcher` | `enable_macswitcher` | seeds `~/.config/macswitcher` and the shell proxy variables |
-| `gcloud` | `enable_gcloud` | gcloud components |
-| `work` | `enable_work` | employer profile, supplied by the work overlay |
+| Role / tag      | Switch                 | What it does                                                     |
+| --------------- | ---------------------- | ---------------------------------------------------------------- |
+| `base_dirs`     | `enable_base_dirs`     | `~/bin`, `~/tmp`, `~/Workspace`                                  |
+| `homebrew`      | `enable_homebrew`      | `brew bundle` per Brewfile, each file individually toggleable    |
+| `dotfiles`      | `enable_dotfiles`      | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`    |
+| `git`           | `enable_git`           | links the shared git ignore file, checks the signing key         |
+| `ssh`           | `enable_ssh`           | links `~/.ssh/config`, fixes permissions                         |
+| `java`          | `enable_java`          | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines` |
+| `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation   |
+| `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                        |
+| `mail`          | `enable_mail`          | maildir, notmuch index, offlineimap/omt agents, mail dotfiles    |
+| `unbound`       | `enable_unbound`       | loopback aliases, `_unbound` account, configs, resolver daemon   |
+| `macswitcher`   | `enable_macswitcher`   | seeds `~/.config/macswitcher` and the shell proxy variables      |
+| `gcloud`        | `enable_gcloud`        | gcloud components                                                |
+| `ai`            | `enable_ai`            | links `schretzi-skills` into every assistant, assistant configs  |
+| `work`          | `enable_work`          | employer profile, supplied by the work overlay                   |
 
 Two helper roles are never run directly: `link` (backup-then-symlink) and
 `launchd` (copy or render plist + `bootout`/`bootstrap`).
@@ -73,11 +136,11 @@ This repository is the **public base**: all machinery, no identity. Nothing in
 it names a person, an address or an employer. Two private repositories layer on
 top:
 
-| Repo | Setting | Holds |
-| --- | --- | --- |
-| this one | — | roles, Brewfiles, scripts, plists, shared dotfiles |
-| private | `private_repo_root` | `identity.yml`, personal git/ssh/mail config |
-| work | `work_repo_root` | employer mail account, intranet DNS, work aliases and sessions |
+| Repo     | Setting             | Holds                                                          |
+| -------- | ------------------- | -------------------------------------------------------------- |
+| this one | —                   | roles, Brewfiles, scripts, plists, shared dotfiles             |
+| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config                   |
+| work     | `work_repo_root`    | employer mail account, intranet DNS, work aliases and sessions |
 
 Both paths may be empty. **A machine with neither cloned still converges** — it
 simply has nothing personal configured, and the mail role reports that it found
@@ -109,7 +172,7 @@ These come before Ansible exists, so they cannot be automated.
 
 ## 1. macOS itself
 
-Run the setup wizard: WLAN, local user, iCloud accounts, Touch ID.
+Run the setup wizard: Wifi, local user, iCloud accounts, Touch ID.
 
 ## 2. Homebrew
 
@@ -118,7 +181,7 @@ Run the setup wizard: WLAN, local user, iCloud accounts, Touch ID.
 ```
 
 This also pulls in the Xcode Command Line Tools — which is where `git` comes
-from — and takes a while. Then put it on the PATH:
+from — and takes awhile. Then put it on the PATH:
 
 ```bash
 (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> ~/.zprofile
@@ -130,16 +193,16 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 
 ## 3. SSH key
 
-The config files in this repo are private, so cloning needs SSH first. **Each
+The configuration files in this repo are private, so cloning needs to SSH first. **Each
 device and each usage gets its own key, with its own passphrase:**
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_mbm5_github -C "mbm5 github"
-ssh-add --apple-use-keychain ~/.ssh/id_mbm5_github
+ssh-keygen -t ed25519 -f ~/.ssh/id_thishost_github -C "thishost github"
+ssh-add --apple-use-keychain ~/.ssh/id_thishost_github
 ```
 
 Add the public key to GitHub **twice** — once as an authentication key, once as
-a *signing* key — otherwise signed commits show as unverified.
+a _signing_ key — otherwise signed commits show as unverified.
 
 The passphrase prompt is interactive by design, which is why the `ssh` role
 only reports missing keys instead of creating them.
@@ -150,6 +213,8 @@ only reports missing keys instead of creating them.
 mkdir -p ~/Workspace/Schretzi
 git clone git@github.com:schretzi/MacbookSetup.git ~/Workspace/Schretzi/MacbookSetup
 ```
+
+Clone also the Overlay if you want it in one step
 
 ## 5. Minimum tooling for Ansible
 
@@ -170,10 +235,10 @@ From here on, run the playbook.
 
 ## User directories
 
-`~/bin` (personal binaries), `~/tmp` (scratch, and the unbound control socket),
+`~/bin` (personal binaries), `~/tmp` (Scratch, And the unbound control socket),
 `~/Workspace` (all checkouts). Already on the PATH via `.zshrc`.
 
-*Role: `base_dirs`*
+_Role: `base_dirs`_
 
 ## Homebrew packages
 
@@ -182,15 +247,15 @@ decides which files are installed — `12_microsoft`, `51_mqtt` and `70_studio`
 are off by default.
 
 The Brewfiles pull from third-party taps (koekeishiya, FelixKratz, hashicorp,
-saiyam1814, goreleaser, samuong, go-swagger). Those execute arbitrary code at
+saiyam1814, goreleaser, samuong, go-swagger, schretzi). Those execute arbitrary code at
 install time — review them before the first run, or drop the entries you do not
 want. A tap you have not accepted makes `brew bundle` exit non-zero; the role
 keeps going and prints a summary at the end rather than aborting the setup.
 
 ### Verifying casks are really installed
 
-`brew bundle` answers *"does Homebrew have a receipt"*, which is not the same
-question as *"is the software installed"*. Two ways they diverge:
+`brew bundle` answers _"does Homebrew have a receipt"_, which is not the same
+question as _"is the software installed"_. Two ways they diverge:
 
 - a **pkg cask** (Tailscale, for example) downloads an installer and runs it
   with sudo. Skip or cancel that prompt and the Caskroom receipt is written
@@ -213,11 +278,7 @@ reinstall the named cask:
 brew reinstall --cask tailscale-app     # will prompt for your password
 ```
 
-> Cask tokens get renamed upstream and the old name keeps resolving, so nothing
-> looks wrong. `google-cloud-sdk` became `gcloud-cli` this way; the Brewfile now
-> uses the current token.
-
-*Role: `homebrew`*
+_Role: `homebrew`_
 
 ## Dotfiles
 
@@ -230,16 +291,13 @@ Mail configs are a separate list and only linked when `enable_mail` is true.
 Neovim is launched as `NVIM_APPNAME=neobean nvim` (see `.zsh/aliases/general`),
 so the real config directory is `~/.config/neobean` — there is no `~/.config/nvim`.
 
-*Role: `dotfiles`*
+_Role: `dotfiles`_
 
 ## Shell
 
 `~/.zshrc` and `~/.zsh/` (aliases, completions, functions, rcs) are symlinked.
 
-**Umlauts:** the old setup added `export LC_CTYPE='UTF-8'`. Not needed any more —
-`.zshrc` already sets `LANG=en_US.UTF-8`, which covers it.
-
-*Role: `dotfiles`*
+_Role: `dotfiles`_
 
 ## Terminal environment
 
@@ -256,28 +314,16 @@ the first time each binary runs, in **System Settings → Privacy & Security**:
 - **Accessibility** → yabai
 - **Input Monitoring** → skhd
 
-The yabai scripting addition is deliberately *not* installed — it requires
+The yabai scripting addition is deliberately _not_ installed — it requires
 disabling SIP.
 
-> `nnn` comes from Homebrew now. The old note about building it (and sxiv) from
-> the GitHub project is obsolete.
-
-*Role: `windowmanager`*
+_Role: `windowmanager`_
 
 ## Kanata (keyboard remapping)
 
-Two manual prerequisites:
+two requirements:
 
-1. **Karabiner DriverKit VirtualHIDDevice, exactly version 6.2.0.** The version
-   bundled with full Karabiner-Elements is wrong and breaks kanata.
-   - Download the `.pkg` from
-     <https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice>
-   - Install it, then activate:
-     ```bash
-     /Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager activate
-     ```
-   - Approve the extension in **System Settings → Privacy & Security**
-   - Confirm with `systemextensionsctl list` — it must show 6.2.0
+1. **karabiner drinver** installed already in the manual section
 2. **Input Monitoring** for kanata in System Settings.
 
 Ansible then does the rest: it verifies the driver is active and the right
@@ -288,7 +334,7 @@ and installs the newsyslog rule that rotates `/tmp/kanata.*.log`.
 
 The keymap itself is `Dotfiles/kanata/kanata.kbd`, symlinked to
 `~/.config/kanata/`. Keybindings are documented in
-[Dotfiles/KEYBINDINGS.md](Dotfiles/KEYBINDINGS.md).
+[Dotfiles/Keybindings/keybindings.md](Dotfiles/Keybindings/keybindings.md).
 
 ### `cmd` actions and `$HOME`
 
@@ -313,7 +359,7 @@ hyper-s (cmd /bin/sh -c "exec $HOME/.config/kitty/scripts/kitty-focus-or-launch.
 > `$HOME` aborts the script outright and the shortcut silently does nothing.
 > The comments in those files explain it; do not "fix" them to `$HOME`.
 
-*Role: `kanata`*
+_Role: `kanata`_
 
 ## Git
 
@@ -324,7 +370,7 @@ edits land in the repo file.
 Commit and tag signing use the SSH key, not GPG:
 
 - `gpg.format = ssh`
-- `user.signingkey = ~/.ssh/id_mbm5_github.pub`
+- `user.signingkey = ~/.ssh/id_thishost.pub`
 - `commit.gpgsign = true`
 - `gpg.ssh.allowedSignersFile = ~/.ssh/allowed_signers` — needed for
   `git log --show-signature` to verify rather than just display
@@ -335,7 +381,7 @@ work overlay) switches to the work identity for anything cloned there.
 The role warns if the signing key is missing — with `commit.gpgsign` on, every
 commit would otherwise fail at the worst moment.
 
-*Role: `git`*
+_Role: `git`_
 
 ## SSH
 
@@ -355,7 +401,7 @@ playbook. Run it once by hand:
 ssh-add --apple-use-keychain ~/.ssh/<key>
 ```
 
-*Role: `ssh`*
+_Role: `ssh`_
 
 ## Java
 
@@ -364,7 +410,7 @@ and anything using it (maven, IDEs) cannot find it. The role symlinks every
 installed `openjdk*` into `/Library/Java/JavaVirtualMachines/` and then prints
 what macOS detects.
 
-*Role: `java`* — needs sudo
+_Role: `java`_ — needs sudo
 
 ## Mail
 
@@ -389,7 +435,7 @@ two LaunchAgents: `org.schretzi.omt-daemon` (keeps tokens fresh) and
 
 msmtp, notmuch, offlineimap, omt and muttrc each enumerate **every account in a
 single line of a single file**. There is no include mechanism in any of them,
-which is exactly why they are *rendered* from one list rather than symlinked —
+which is exactly why they are _rendered_ from one list rather than symlinked —
 it is the only way the work account can come from one repository while the
 personal accounts come from another.
 
@@ -400,10 +446,10 @@ mail_accounts:
   - id: gmail-personal
     sync_order: 10
     address: …
-    login: …          # differs from address for Workspace aliases
-    provider: google  # google | o365 | o365-consumers
-    backend: Gmail    # offlineimap repository type
-    mutt_key: "2"     # neomutt switch digit - pinned so it never reshuffles
+    login: … # differs from address for Workspace aliases
+    provider: google # google | o365 | o365-consumers
+    backend: Gmail # offlineimap repository type
+    mutt_key: "2" # neomutt switch digit - pinned so it never reshuffles
     work: false
 ```
 
@@ -437,43 +483,25 @@ Scripts/verify-mail-config.sh baseline    # before
 Scripts/verify-mail-config.sh check       # after
 ```
 
-### Retired tooling
-
-`neverest`, `ortie` and `himalaya` were experiments alongside this stack and
-have all been removed — configs deleted, `~/.config` links dropped, hand-built
-binaries deleted from `~/.local/bin`. None of them was ever in a Brewfile, so a
-rebuild does not bring them back.
-
-Their jobs are covered by what remains: `ortie` handed OAuth tokens to
-offlineimap, which **omt** does; `neverest` mirrored maildirs, which
-**offlineimap** does; `himalaya` was an optional TUI next to **neomutt**. The
-recent releases of that family are still in flux and did not work reliably
-here, which is why they are gone rather than pinned.
-
-The zsh `m` function (a `himalaya envelopes list` wrapper) went with them.
-
-> **Fixed during the migration:** the config directory and file were named
-> `mstmp/.mstmprc`, and `~/.mstmprc` was linked to it — but the binary is
-> `msmtp`, which reads `~/.msmtprc`. The config was never being read. Renamed to
-> `Dotfiles/msmtp/.msmtprc`; `msmtp -P` now confirms it loads.
-
 Set `enable_mail: false` to skip the whole stack, including the mail dotfiles.
 
-*Role: `mail`*
+_Role: `mail`_
 
 ## DNS — local unbound resolver
 
-I need different DNS routing depending on where I am: home network, k3d
-clusters, lima VMs, VPN. A local unbound instance resolves all of them at once
+I need different DNS routing depending on where I am: home network, local kubernetes
+clusters, VMs, VPN. A local unbound instance resolves all of them at once
 instead of rewriting resolver settings per network.
 
 The role runs the full chain:
 
-1. **Loopback aliases.** mDNSResponder already owns `127.0.0.1:53`, so unbound
-   listens on `127.0.0.2`. The k3d and cluster zones resolve to `127.0.0.3` …
-   `127.0.0.12` and `127.0.0.100`, and those addresses must exist first.
-   `Scripts/MacOS/localhost_alias.sh` is copied to `/usr/local/bin/localhost_alias`
-   and run at boot by `org.localhost.alias`.
+1. **Loopback aliases.** mDNSResponder owned `127.0.0.1:53` before, so unbound
+   listens on `127.0.0.2`, would not be needed anymore, but still stays for
+   historical reasons. `Scripts/MacOS/localhost_alias.sh` is copied to
+   `/usr/local/bin/localhost_alias` and run at boot by `org.localhost.alias`.
+   This adds additional IPs on loopback which I used for different clusters
+   earlier with k3d, with apple containers not necessary anymore, but cheap and I
+   keep it for maybe future use.
 2. **Service account.** `_unbound`, uid/gid 444 (system range — check
    `/etc/passwd` if 444 is taken), created via `dscl`. Its `RecordName` lists
    both `_unbound` and `unbound` so either name in the config resolves.
@@ -493,12 +521,12 @@ profiles get symlinked in — plus `unbound_profiles_overlay` from each overlay.
 That is what lets a zone set be switched off without editing `unbound.conf`;
 naming a disabled file directly would make unbound refuse to start.
 
-| Profile | From | Default | Notes |
-| --- | --- | --- | --- |
-| `forwarders.conf` | base | on | upstream resolvers — runtime-managed at `/opt/homebrew/etc/unbound/conf.d/forwarders.conf` |
-| `kiac.conf` | base | on | local kubernetes hosts on the vmnet (`192.168.64.0/24`) |
-| `schretzi.conf` | private overlay | on | home LAN and private domains |
-| intranet zones | work overlay | follows `enable_work` | employer forward zones |
+| Profile           | From            | Default               | Notes                                                                                      |
+| ----------------- | --------------- | --------------------- | ------------------------------------------------------------------------------------------ |
+| `forwarders.conf` | base            | on                    | upstream resolvers — runtime-managed at `/opt/homebrew/etc/unbound/conf.d/forwarders.conf` |
+| `kiac.conf`       | base            | on                    | local kubernetes hosts on the vmnet (`192.168.64.0/24`)                                    |
+| `schretzi.conf`   | private overlay | on                    | home LAN and private domains                                                               |
+| intranet zones    | work overlay    | follows `enable_work` | employer forward zones                                                                     |
 
 The role warns about any `.conf` in `conf.d/` it does not know about — unbound
 loads those too — and **deletes links whose target no longer exists**. A profile
@@ -520,8 +548,9 @@ unbound-control reload
 Default is Quad9 then Google. On an office LAN that resolves internal names,
 point the root zone at the LAN gateway instead.
 
-To restart the daemon without a sudo password, the unbound role installs this
-restricted sudoers entry:
+To restart the daemon without a sudo password, the sudoers role installs this
+restricted rule (see `roles/sudoers/defaults/main.yml` for every rule and how
+to add more, or to switch passwordless sudo off entirely):
 
 ```sudoers
 schretzi ALL=(root) NOPASSWD: /bin/launchctl kickstart -k system/net.unbound
@@ -546,11 +575,28 @@ sudo container system dns create mydomain
 container system dns list
 ```
 
-That writes `/etc/resolver/mydomain`, which mDNSResponder consults *before* the
+That writes `/etc/resolver/mydomain`, which mDNSResponder consults _before_ the
 configured nameserver — so those names resolve on the host regardless of
-whether the system points at unbound. Add a forward-zone here only if the kiac
-VMs need to resolve them, since they query unbound directly at the vmnet
-gateway and never see the host's `/etc/resolver`.
+whether the system points at unbound.
+
+**kiac clusters resolve through the host.** kiac is a Go tool of its own
+(`~/Workspace/Schretzi/kiac`); nothing about it is installed from this
+repository. Its node VMs sit on the same `vmnet` network and take their
+nameserver from the vmnet gateway `192.168.64.1` — the Mac's own mDNSResponder
+— so their lookups follow whatever the active network service points at. With
+the system pointed at `127.0.0.2`, `kiac.conf` answers `*.kiac` for the VMs as
+well as for the host. It maps the fixed vmnet addresses: host-side containers
+(gitea, registry, the pull-through mirrors) at `192.168.64.10-15`, and each
+cluster's Gateway LoadBalancer at `.20` (main) and `.30` (test1).
+
+Two consequences follow from going through mDNSResponder:
+
+- A `/etc/resolver` split — the container runtime's, Tailscale's — is host-side
+  only. Anything the VMs must resolve needs a real zone here.
+- A VPN client that seizes port 53 stops mDNSResponder answering on the gateway
+  and every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
+  writes the VM's `resolv.conf` directly and bypasses the gateway, but only at
+  creation time.
 
 ### Adding private domains
 
@@ -576,7 +622,7 @@ that overlay's `Dotfiles/unbound/` and register it in its `overlay.yml`:
 ```yaml
 unbound_profiles_overlay:
   - { file: schretzi.conf, enabled: true, root: "{{ private_repo_root }}" }
-  - { file: lab.conf,      enabled: true, root: "{{ private_repo_root }}" }
+  - { file: lab.conf, enabled: true, root: "{{ private_repo_root }}" }
 ```
 
 Then `ansible-playbook site.yml --tags unbound --ask-become-pass`, or just
@@ -584,7 +630,7 @@ symlink it into `conf.d/` and reload — the Homebrew prefix is user-writable, s
 that needs no sudo either.
 
 Zone-type cheat sheet: **`transparent`** answers what you list and forwards the
-rest, **`redirect`** answers *every* name under the zone with the listed data,
+rest, **`redirect`** answers _every_ name under the zone with the listed data,
 **`static`** answers what you list and returns NXDOMAIN for the rest.
 
 ### Reloading without sudo
@@ -605,10 +651,7 @@ control always needs root. Over TCP the client authenticates with
 user (`0600`) while leaving the server key to `_unbound`. Access is still
 loopback-only and still certificate-gated.
 
-> `unbound-control` lives in `/opt/homebrew/sbin`, which `.zshrc` now puts on
-> the PATH.
-
-**Do not use `unbound-control start`.** It exists, but it launches a *new*
+**Do not use `unbound-control start`.** It exists, but it launches a _new_
 daemon as whoever runs it — and an unprivileged process cannot bind
 `127.0.0.2:53`, so it fails with:
 
@@ -618,7 +661,7 @@ fatal error: could not open ports
 ```
 
 The daemon is owned by launchd, which starts it as root and lets it drop
-privileges to `_unbound` *after* binding. Start, stop and restart it there:
+privileges to `_unbound` _after_ binding. Start, stop and restart it there:
 
 ```bash
 sudo launchctl kickstart -k system/net.unbound   # restart
@@ -676,65 +719,88 @@ Two cases make this mandatory rather than cosmetic:
   anyway — the answer is bogus by definition.
 - Anything forwarded that sits under a **signed public parent**. The old
   `docker.arpa` entry was the example: `.arpa` is signed, so the root proves
-  `docker.arpa` does not exist. That entry has since been removed entirely —
-  it pointed at Colima's resolver, and Colima is no longer installed.
+  `docker.arpa` does not exist. That entry has since been removed entirely, but
+  is a good example for such use-cases.
 
 Zones answered by `local-zone`/`local-data` (`kiac.`, the private overlay's
 LAN zone) need nothing — local data is returned without validation. It is only
-*forwarding* that has to be exempted. The work overlay marks all of its
+_forwarding_ that has to be exempted. The work overlay marks all of its
 forwarded zones insecure for consistency, so adding one there does not silently
 require hunting down a matching entry.
 
 ### Tailscale
 
-**You do not need an unbound profile for Tailscale**, and the old
-`tailscale.conf` has been deleted — it had an unbalanced quote on line 2 and its
-remaining lines were a stray copy of the home zone. Tailscale is not currently
-installed on this machine at all.
+Tailscale is installed by the `homebrew` role — `tailscale-app` in
+`60_security.brew`. It is a pkg cask, so it is exactly the case
+`Scripts/verify-casks.sh` exists to catch: cancel its installer prompt and the
+receipt is written anyway. Signing in stays manual, once per machine.
 
-MagicDNS is handled by Tailscale itself: it registers a split-DNS resolver for
-your tailnet domain, so `<host>.<tailnet>.ts.net` resolves without unbound
-knowing anything about it.
+**It needs no unbound profile, even with the system pointed at `127.0.0.2`.**
+Tailscale registers a split-DNS resolver for the tailnet domain, and
+mDNSResponder consults that _before_ the configured nameserver — the same
+mechanism as `/etc/resolver`:
 
-The one case where it matters: **if you point the whole system at unbound**
-(see below), tailnet queries reach unbound instead of Tailscale's resolver and
-fail. The fix is a forward, not local data — add to the private overlay:
+```bash
+scutil --dns | grep -A3 ts.net
+#   domain   : tail….ts.net
+#   nameserver[0] : 100.100.100.100     <- Tailscale's fixed MagicDNS resolver
+
+dscacheutil -q host -a name <host>.<tailnet>.ts.net
+```
+
+The catch: that split lives in mDNSResponder, not in unbound. Anything that
+talks to a resolver directly — `dig`, `host`, the kiac VMs — never sees it. So
+test MagicDNS with `dscacheutil` or `ping`, not with `dig @127.0.0.2`, which
+correctly returns nothing. If a tailnet name really has to come out of unbound,
+forward the zone from the private overlay rather than adding local data:
 
 ```
 forward-zone:
   name: "ts.net"
-  forward-addr: 100.100.100.100      # Tailscale's local MagicDNS resolver
+  forward-addr: 100.100.100.100
 ```
-
-`100.100.100.100` is Tailscale's fixed internal resolver address. Confirm with
-`scutil --dns | grep -A3 ts.net` once Tailscale is running.
 
 ### Pointing the system at it
 
-unbound only listens on `127.0.0.2`. To route the machine through it, set
-`127.0.0.2` as the DNS server of the active network service (System Settings →
-Network → Details → DNS, or `networksetup -setdnsservers Wi-Fi 127.0.0.2`).
-This is left manual on purpose — it is the step that breaks all name
-resolution if the resolver is not healthy.
+unbound only listens on `127.0.0.2`, so nothing reaches it until a network
+service's DNS server is set to that address. **macswitcher does that on every
+context switch**: it runs `networksetup -setdnsservers` against every active
+service, using `dns.local_resolver` from `~/.config/macswitcher/config.yaml`
+(`127.0.0.2` here) unless the context overrides it with its own
+`dns.resolvers`. One switch therefore repoints the machine and rewrites
+`conf.d/forwarders.conf` together, which is the point — the resolver and its
+upstreams always match the network you are on.
+
+```bash
+macswitcher switch home
+macswitcher status
+networksetup -getdnsservers Wi-Fi     # 127.0.0.2
+```
+
+**Ansible never sets this**, on purpose: it is the one step that breaks all
+name resolution when the resolver is not healthy, and unbound has to be
+verified running first. Without macswitcher, or to back out, do it by hand —
+System Settings → Network → Details → DNS, or:
+
+```bash
+networksetup -setdnsservers Wi-Fi 127.0.0.2   # point at unbound
+networksetup -setdnsservers Wi-Fi empty       # back to whatever DHCP hands out
+```
 
 Logs: `/tmp/unbound.err.log`, `/tmp/unbound.out.log`.
 
-*Role: `unbound`* — needs sudo
+_Role: `unbound`_ — needs sudo
 
 ## AI tooling — one set of skills, every assistant
 
-Skills are `SKILL.md` directories on disk. They are **not** stored in any
-tool's state database — Copilot's `auth.db` is purely OAuth tokens (four
-tables: `oauth_tokens`, `active_sessions`, `editor_signout`, `metadata`), and
-Claude keeps its credentials in the macOS keychain. Being plain files is what
-makes a single shared set possible.
+Skills are `SKILL.md` directories on disk.
 
 Each assistant looks in a different place:
 
-| Tool | Personal skills |
-| --- | --- |
-| Claude | `~/.claude/skills/` |
-| Copilot CLI | `~/.copilot/skills/` or `~/.agents/skills/` |
+| Tool        | Personal skills                                         |
+| ----------- | ------------------------------------------------------- |
+| Claude      | `~/.claude/skills/`                                     |
+| Copilot CLI | `~/.copilot/skills/` or `~/.agents/skills/`             |
 | per project | `.github/skills/`, `.agents/skills/`, `.claude/skills/` |
 
 The source of truth is a **separate repository**,
@@ -768,24 +834,15 @@ timestamps and commit SHAs.
 
 ### Deliberately not versioned
 
-Conversation content and caches: `~/.claude/projects/` (22 MB of transcripts),
+Conversation content and caches: `~/.claude/projects/`,
 `history.jsonl` (every prompt typed), `backups/`, `file-history/`, `sessions/`,
 `paste-cache/`, `shell-snapshots/`, `plugins/cache|data|marketplaces/`,
 `~/.gemini/google_accounts.json`, `~/.copilot/logs/`, and every `auth.db*`.
-
-> `~/.config/github-copilot` used to be symlinked into this repo, which meant
-> Copilot wrote a live OAuth token *inside the source tree*. That link is gone
-> and the directory is no longer managed — nothing in it is worth versioning.
 
 ## Google Cloud
 
 The SDK comes from `41_clouds.brew`. The role installs the components
 (`alpha`, `beta`), skipping ones already present.
-
-> `terraform-tools` was in the old list but the Homebrew SDK does not offer it —
-> `gcloud components install` exits 0 with "All components are up to date" and
-> installs nothing. Dropped; terraform itself comes from `40_kubernetes_ci.brew`.
-> The role now checks availability first and reports anything it cannot provide.
 
 `gcloud init` needs a browser and stays manual:
 
@@ -793,7 +850,7 @@ The SDK comes from `41_clouds.brew`. The role installs the components
 gcloud init
 ```
 
-*Role: `gcloud`*
+_Role: `gcloud`_
 
 ## Yubikey
 
@@ -817,19 +874,6 @@ export YKSERIAL=$(ykman list --serials)
 ykman --device $YKSERIAL info
 ```
 
-## Software outside Homebrew
-
-Manual downloads, mostly because of vendor installers or App Store gating:
-
-- Dymo Label Printer
-- GoodNotes
-- HP Smart
-- LabCom
-- Ivory (Mastodon client)
-- `obsidian_calendar.sh`
-
-`oauth2ms` from the old list is superseded by **omt** (see Mail).
-
 ## Not managed here
 
 - `Dotfiles/github-copilot/auth.db` — holds a live OAuth token, now gitignored
@@ -838,26 +882,71 @@ Manual downloads, mostly because of vendor installers or App Store gating:
 
 ---
 
+## Trusting locally-generated root CAs (Firefox/Zen)
+
+Locally-generated root CAs — e.g. from a LocalKubernetes-style cluster's
+`roles/host_ca` — are trusted system-wide with:
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain <path-to-root_ca.crt>
+```
+
+Safari and Chrome (WebKit/Chromium) read the System keychain directly, so that
+one command is enough for them. Firefox does not: it ships its own NSS cert
+store (`cert9.db`, per-profile) and ignores OS trust settings entirely unless
+told otherwise — normally that means a separate `certutil -A` import into
+every profile, and doing it again after every new profile.
+
+The `firefox_enterprise_roots` role removes that step. It writes
+`Contents/Resources/distribution/policies.json` (Mozilla's
+`ImportEnterpriseRoots` enterprise policy) into every installed Firefox-based
+browser's `.app` bundle — currently Zen, and anything else in
+`roles/firefox_enterprise_roots/defaults/main.yml`. With that policy in
+place, the browser reads the System keychain's trusted roots on startup: the
+`security add-trusted-cert` command above is then all that is needed for
+Safari, Chrome **and** Firefox/Zen alike.
+
+Caveats:
+
+- A cask reinstall that replaces the whole `.app` (rather than updating it in
+  place) wipes `policies.json` along with it — re-run
+  `ansible-playbook site.yml --tags firefox_enterprise_roots --ask-become-pass`
+  after that.
+- The policy takes effect on the browser's next restart, not immediately.
+- **macOS's App Management privacy protection (Ventura+) blocks this even as
+  root.** Writing into another app's `.app` bundle needs the *calling
+  process* — the terminal you run `ansible-playbook` from (Terminal, iTerm,
+  Kitty, ...) — to be granted access under **System Settings → Privacy &
+  Security → App Management**, in addition to `sudo`/`--ask-become-pass`. A
+  failure here shows up as `Operation not permitted [Errno 1]` even though
+  the become password was accepted. Enable the toggle for that terminal app
+  (add it with **+** if missing), restart it, and re-run the tag.
+
+_Role: `firefox_enterprise_roots`_ — `enable_firefox_enterprise_roots`
+
+---
+
 ## macswitcher configuration
 
-*Role: `macswitcher`* — `enable_macswitcher`
+_Role: `macswitcher`_ — `enable_macswitcher`
 
 **Nothing under `~/.config/macswitcher` is a symlink, by design.** macswitcher
 rewrites `config.yaml`, the context files and `state.json` in place on every
 switch. Linking any of them back into a repository means the runtime writes its
 live values into the source tree — the same trap `dotfiles_real_dirs` documents
 and the same one the unbound role avoids for `forwarders.conf`. So the role
-*seeds* each file once (`copy` with `force: false`) and never touches it again.
+_seeds_ each file once (`copy` with `force: false`) and never touches it again.
 
 Where each file comes from:
 
-| File | Source | Notes |
-| --- | --- | --- |
-| `config.yaml` | this repo, `Dotfiles/macswitcher/config.yaml` | generic, no addresses |
-| `contexts/home.yaml`, `contexts/remote.yaml` | private overlay | via `macswitcher_contexts_overlay` |
-| `contexts/work.yaml` | work overlay | same, follows `enable_work` |
-| `state.json` | macswitcher itself | never versioned |
-| `~/.zsh/rcs/proxy` | this repo, `Dotfiles/macswitcher/proxy.zsh` | neutral defaults, then owned by the runtime |
+| File                                         | Source                                        | Notes                                       |
+| -------------------------------------------- | --------------------------------------------- | ------------------------------------------- |
+| `config.yaml`                                | this repo, `Dotfiles/macswitcher/config.yaml` | generic, no addresses                       |
+| `contexts/home.yaml`, `contexts/remote.yaml` | private overlay                               | via `macswitcher_contexts_overlay`          |
+| `contexts/work.yaml`                         | work overlay                                  | same, follows `enable_work`                 |
+| `state.json`                                 | macswitcher itself                            | never versioned                             |
+| `~/.zsh/rcs/proxy`                           | this repo, `Dotfiles/macswitcher/proxy.zsh`   | neutral defaults, then owned by the runtime |
 
 `Dotfiles/macswitcher/proxy.zsh` deliberately does **not** live in
 `Dotfiles/zsh/.zsh/rcs/`. That directory is a dotfiles merge dir: every file in
@@ -887,16 +976,4 @@ from the macOS Keychain and must not be added to any repository.
 - [unbound on macOS](https://sizeof.cat/post/unbound-on-macos/)
 - [YubiKey guide](https://github.com/drduh/YubiKey-Guide)
 - [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice)
-
-## Open items
-
-- **`~/Workspace/Schretzi/schretzi-skills` has no git remote.** It is the
-  source of truth for all 33 shared skills and currently exists only on this
-  machine — a disk failure loses them, and a rebuild cannot restore them.
-  Push it somewhere before relying on the setup being reproducible.
-
-- `Dotfiles/unbound/tailscale.conf` has a syntax error (unbalanced quote,
-  line 2). It is disabled, so it does not break anything — fix it before
-  enabling.
-- The unbound config does not set `auto-trust-anchor-file`, so the `root.key`
-  the role fetches is not actually used for DNSSEC validation yet.
+- [DisplayLink macOS driver (Synaptics)](https://www.synaptics.com/products/displaylink-graphics/downloads/macos)

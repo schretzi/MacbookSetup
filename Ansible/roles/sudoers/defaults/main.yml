@@ -1,0 +1,35 @@
+---
+# Central switchboard for passwordless sudo.
+#
+# Every NOPASSWD rule the user needs — for shell aliases like `flush_dns` or
+# for other roles that shell out to a root command at runtime — is declared
+# here as one entry, instead of being scattered across each role's tasks.
+# That keeps everything a user can run as root without a password prompt
+# auditable in a single file.
+#
+# Each entry becomes its own file under /etc/sudoers.d/<name>:
+#   - name: a short, unique identifier; also the destination filename
+#   - comment: why this rule exists (rendered into the file for auditing)
+#   - commands: absolute paths only - sudoers wildcards are not supported
+sudoers_rules:
+  - name: unbound-restart
+    comment: restart the unbound resolver (unbound role, flush_dns/DNS profile switches)
+    commands:
+      - /bin/launchctl kickstart -k system/net.unbound
+
+  - name: dns-flush
+    comment: flush macOS's system DNS resolver cache (flush_dns alias)
+    commands:
+      - /usr/bin/dscacheutil -flushcache
+      - /usr/bin/killall -HUP mDNSResponder
+
+  - name: openconnect
+    comment: start openconnect VPN app
+    commands:
+      - /opt/homebrew/bin/openconnect
+
+# Master switch: set to false to refuse passwordless sudo entirely. Any
+# rule files this role previously installed are removed and none are
+# (re)created; every command in sudoers_rules then falls back to a normal
+# password prompt through `sudo`.
+sudoers_passwordless_enabled: true

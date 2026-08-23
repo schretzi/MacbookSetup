@@ -125,6 +125,12 @@
       when: enable_ssh | bool
       tags: [ssh]
 
+    # central switchboard for passwordless (NOPASSWD) sudo rules; runs before
+    # any role that relies on one (unbound's flush_dns/restart aliases)
+    - role: sudoers
+      when: enable_sudoers | bool
+      tags: [sudoers, sudo]
+
     - role: java
       when: enable_java | bool
       tags: [java]
@@ -144,6 +150,14 @@
     - role: unbound
       when: enable_unbound | bool
       tags: [unbound, dns]
+
+    # trusts locally-generated root CAs (`security add-trusted-cert ...
+    # System.keychain`) in Firefox-based browsers too - Safari/Chrome do this
+    # natively, Firefox/NSS needs ImportEnterpriseRoots turned on explicitly.
+    # Runs after homebrew so the browsers it targets already exist.
+    - role: firefox_enterprise_roots
+      when: enable_firefox_enterprise_roots | bool
+      tags: [firefox_enterprise_roots, certs, firefox]
 
     # after unbound: it seeds contexts that reload the resolver
     - role: macswitcher

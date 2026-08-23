@@ -1,0 +1,5 @@
+# Managed by Ansible (roles/sudoers) - do not edit by hand.
+# {{ item.comment | default('no description given') }}
+{% for cmd in item.commands %}
+{{ ansible_facts.user_id }} ALL=(root) NOPASSWD: {{ cmd }}
+{% endfor %}

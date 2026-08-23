@@ -15,7 +15,7 @@ ansible-playbook site.yml --tags unbound -e enable_unbound=true   # force a disa
 ansible-lint site.yml                                # must stay clean
 ```
 
-Only `unbound`, `java` and `kanata` need `--ask-become-pass`.
+Only `unbound`, `java`, `kanata` and `firefox_enterprise_roots` need `--ask-become-pass`.
 
 ## Layout
 
@@ -34,9 +34,11 @@ Per-role knobs live in `roles/<role>/defaults/main.yml`:
 | `roles/homebrew/defaults/main.yml` | which Brewfiles are installed |
 | `roles/dotfiles/defaults/main.yml` | the symlink map |
 | `roles/unbound/defaults/main.yml` | which DNS zone profiles are active |
+| `roles/sudoers/defaults/main.yml` | every passwordless (NOPASSWD) sudo rule, and the master `sudoers_passwordless_enabled` switch |
 | `roles/kanata/defaults/main.yml` | kanata version, driver version, rebuild |
 | `roles/gcloud/defaults/main.yml` | gcloud components |
 | `roles/macswitcher/defaults/main.yml` | where the seeded config and contexts come from |
+| `roles/firefox_enterprise_roots/defaults/main.yml` | which Firefox-based browser bundles are checked, and the policies.json content |
 
 ## Overlays — the three-repo split
 

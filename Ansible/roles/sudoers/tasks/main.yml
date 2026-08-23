@@ -1,0 +1,41 @@
+---
+# One rule file per entry in sudoers_rules (see defaults/main.yml) - the
+# single place every passwordless (NOPASSWD) sudo rule is declared and
+# audited, instead of scattered across whichever role happens to need one.
+#
+# sudoers_passwordless_enabled: false refuses passwordless sudo altogether:
+# any previously installed rule files are removed and none are (re)created,
+# so every command in sudoers_rules falls back to a normal `sudo` prompt.
+
+- name: Sudoers | ensure the sudoers include directory exists
+  ansible.builtin.file:
+    path: /etc/sudoers.d
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+
+- name: Sudoers | remove managed rule files when passwordless sudo is disabled
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item.name }}"
+    state: absent
+  loop: "{{ sudoers_rules }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  when: not (sudoers_passwordless_enabled | bool)
+
+- name: Sudoers | install passwordless rule files
+  ansible.builtin.template:
+    src: rule.j2
+    dest: "/etc/sudoers.d/{{ item.name }}"
+    owner: root
+    group: wheel
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+  loop: "{{ sudoers_rules }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  when: sudoers_passwordless_enabled | bool

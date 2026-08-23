@@ -1,0 +1,54 @@
+# Kanata — system-wide key remapping
+
+**Config:** [`../kanata/kanata.kbd`](../kanata/kanata.kbd)
+Runs as a LaunchDaemon ([`../kanata/com.kanata.daemon.plist`](../kanata/com.kanata.daemon.plist)) and intercepts keys system-wide, before any app (including kitty) sees them. German QWERTZ layout; key names below are kanata's physical-position names, not printed characters.
+
+## Defaults
+
+Kanata has no keybindings of its own to fall back on. Once it loads, it
+intercepts the **entire** keyboard: any key listed in `defsrc` is fully
+remapped by this config (there is no factory/stock behavior underneath it to
+revert to), and any key *not* listed in `defsrc` passes straight through as
+its raw literal. The **F-row table** below looks like a "default" but isn't
+one — it's this config *restoring* macOS's own stock media-key behavior,
+which would otherwise silently break the moment kanata claimed the keyboard.
+
+## Custom bindings
+
+| Key (physical) | Tap | Hold |
+|---|---|---|
+| `;` (prints `ö`) | ö | `\` (backslash, sent as literal unicode) |
+| `'` (prints `ä`) | ä | `\|` (pipe) |
+| `[` (prints `ü`) | ü | `~` (tilde) |
+| Caps Lock | *nothing* | **Hyper**: holds Ctrl+Shift+Alt+Cmd together |
+
+**"apps" layer** — active only while **`^`** (kanata name `nubs` — this key reports as `KEY_102ND`, the ISO "extra" key, *not* `KEY_GRAVE`/`grv` despite sitting where a US grave/backtick key would be; confirmed via `kanata --debug`, don't assume `grv` for this key on other keyboards without checking) is held. This is the dedicated app-switching layer; Hyper (Caps Lock) is intentionally kept for non-switching actions instead (see [skhd](skhd.md)). `^` replaced an earlier fn-based trigger because fn sits far from the home row on a full-size external keyboard, and an even earlier "a"-based trigger because "a" is typed constantly and the tap/hold ambiguity made typing feel laggy. Unlike fn, `^` is a genuine tap-hold key (`caret_apps` alias, using `tap-hold-press`): tapping it still composes accents as normal (e.g. `^` then `a` → `â`), holding it activates the apps layer. `tap-hold-press` resolves to "hold" the instant another key (e.g. `k`) is pressed while `^` is still down, regardless of timing, so there's no perceptible delay on the shortcuts below; only a lone tap of `^` waits out the tap-timeout before typing the character.
+
+| Key | Action |
+|---|---|
+| `^` + y *(physical "Z", German swap of Y/Z)* | Launch/switch to **Zen** |
+| `^` + k | Launch/switch to **kitty** |
+| `^` + b | Launch/switch to **Bitwarden** |
+| `^` + c | Launch/switch to **Claude** |
+| `^` + t | Launch/switch to **Microsoft Teams** |
+| `^` + s | Go to (or launch) the **setup** dedicated kitty instance ([`../kitty/sessions/setup.kitty-session`](../kitty/sessions/setup.kitty-session)): cwd `~/Workspace/Schretzi/MacbookSetup`, opens neobean |
+| `^` + d | Go to (or launch) the **daily-note** dedicated kitty instance: today's Obsidian daily note in neobean, creating it from the daily template if it doesn't exist yet ([`../kitty/scripts/open-daily-note.sh`](../kitty/scripts/open-daily-note.sh)) |
+| `^` + o | Go to (or launch) the **obsidian** dedicated kitty instance ([`../kitty/sessions/obsidian.kitty-session`](../kitty/sessions/obsidian.kitty-session)): cwd `~/Obsidian/Documents/Schretzi`, opens neobean |
+| `^` + r | Go to (or launch) the **work-network** dedicated kitty instance: three shells (VPN / Proxy / Tunneling). Session file and binding come from the work overlay; without it this key does nothing. |
+| `^` + m | Go to (or launch) the **mail** dedicated kitty instance ([`../kitty/sessions/mail.kitty-session`](../kitty/sessions/mail.kitty-session)): runs neomutt; quitting neomutt closes the whole instance |
+| `^` + F1 … `^` + F12 | Literal **F1–F12** (see the F-row table below for what these keys do *without* `^` held) |
+
+Notes baked into the config itself: `^` + s / `^` + d call [`kitty-focus-or-launch.sh`](../kitty/scripts/kitty-focus-or-launch.sh) / [`open-daily-note.sh`](../kitty/scripts/open-daily-note.sh) — see [kitty.md](kitty.md) "Dedicated instances" for how those work and why plain `open -a kitty --args --session <file>` doesn't. fn is no longer listed in `defsrc` at all, so it's passed straight through unmodified — it may or may not regain its native macOS behavior (emoji picker/dictation/etc.), not verified. Hyper (Caps Lock hold) is consumed by skhd — see [skhd.md](skhd.md).
+
+**F-row (bare, `^` not held)** — F1-F12 are listed explicitly in `defsrc` and mapped to their stock macOS media-key actions, restoring the standard "bare F-key = media action, `^` + F-key = literal function key" behavior (kanata takes over the whole keyboard, so any key not listed in `defsrc` is passed through as a raw literal - this is what silently broke brightness/mute once kanata started managing this keyboard):
+
+| Key | Action |
+|---|---|
+| F1 / F2 | Brightness down / up |
+| F3 | Mission Control |
+| F4 | Spotlight search |
+| F5 | Dictation |
+| F6 | Do Not Disturb |
+| F7 / F8 / F9 | Previous track / play-pause / next track |
+| F10 | Mute |
+| F11 / F12 | Volume down / up |

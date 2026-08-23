@@ -104,14 +104,24 @@
 # --------------------------------------------------------------------------
 # 3. Configuration - repo is the truth, brew's etc dir gets symlinks
 # --------------------------------------------------------------------------
-- name: Unbound | ensure the config directories exist
+# unbound_etc needs group-write for {{ unbound_user }}: unbound periodically
+# rewrites its auto-trust-anchor-file (root.key) in place there (a
+# write-new-file-then-rename), and without it the write fails with
+# "Permission denied", which unbound treats as fatal — causing a crash loop
+# (new PID every few seconds) that is easy to mistake for a DNS-availability
+# bug rather than a filesystem-permission one.
+- name: Unbound | ensure unbound's own etc directory is group-writable
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ unbound_etc }}"
+    state: directory
+    group: "{{ unbound_user }}"
+    mode: "0775"
+
+- name: Unbound | ensure the conf.d directory exists
+  ansible.builtin.file:
+    path: "{{ unbound_confd }}"
     state: directory
     mode: "0755"
-  loop:
-    - "{{ unbound_etc }}"
-    - "{{ unbound_confd }}"
 
 # unbound.conf puts the remote-control socket here.
 - name: Unbound | ensure the control socket directory exists
@@ -333,26 +343,8 @@
     launchd_plist: net.unbound.plist
     launchd_label: net.unbound
 
-- name: Unbound | ensure the sudoers include directory exists
-  ansible.builtin.file:
-    path: /etc/sudoers.d
-    state: directory
-    owner: root
-    group: wheel
-    mode: "0755"
-  become: true
-
-- name: Unbound | allow passwordless restarts
-  ansible.builtin.copy:
-    content: >-
-      {{ ansible_facts.user_id }} ALL=(root) NOPASSWD:
-      /bin/launchctl kickstart -k system/net.unbound
-    dest: /etc/sudoers.d/unbound-restart
-    owner: root
-    group: wheel
-    mode: "0440"
-    validate: "/usr/sbin/visudo -cf %s"
-  become: true
+# Passwordless restarts (flush_dns alias, unbound-restart, DNS cache flush)
+# are managed centrally by the sudoers role - see roles/sudoers/defaults/main.yml.
 
 - name: Unbound | restart after a change to the main configuration
   ansible.builtin.command:

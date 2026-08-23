@@ -56,3 +56,7 @@ done
 for fn_file in ~/.zsh/functions/*(-.N); do
   source "$fn_file"
 done
+
+# sops+age (LocalKubernetes vault.sops.yaml) — macOS default lookup path is
+# ~/Library/Application Support/sops/age/keys.txt, not ~/.config/...
+export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"

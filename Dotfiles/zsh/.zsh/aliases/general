@@ -7,7 +7,7 @@ unbound_restart() {
   sudo -n /bin/launchctl kickstart -k system/net.unbound
 }
 
-alias flush_dns="sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder"
+alias flush_dns="sudo -n /usr/bin/dscacheutil -flushcache; sudo -n /usr/bin/killall -HUP mDNSResponder"
 
 alias ws="cd ~/Workspace"
 alias wss="cd ~/Workspace/Schretzi"

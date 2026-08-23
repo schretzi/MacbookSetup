@@ -6,6 +6,7 @@ local_proxy:
     - 127.0.0.1
     - "::1"
     - kubernetes
+    - kiac
 alpaca:
   enabled: true
   command:

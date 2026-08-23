@@ -205,6 +205,42 @@
     label: "{{ item.file }}"
   register: unbound_profiles_removed
 
+# Seed files (kiac.conf) are copied - never linked - and only when conf.d has
+# none yet: `force: false` makes copy a no-op if the destination already
+# exists, so a real file dropped/edited there (by hand or by the kubernetes
+# ansible) is never touched again, unlike the symlinked profiles above.
+#
+# One-time migration: kiac.conf used to be in unbound_profiles and got
+# symlinked like any other profile. A symlink still counts as "exists" to the
+# copy task below, so it would never get materialized into a real file on its
+# own - remove it first, but only the still-symlinked case, never a real file.
+- name: Unbound | check seed files for a leftover symlink from the old setup
+  ansible.builtin.stat:
+    path: "{{ unbound_confd }}/{{ item }}"
+    follow: false
+  loop: "{{ unbound_confd_seed_files }}"
+  loop_control:
+    label: "{{ item }}"
+  register: unbound_seed_files_state
+
+- name: Unbound | replace a leftover seed file symlink with a real copy
+  ansible.builtin.file:
+    path: "{{ unbound_confd }}/{{ item.item }}"
+    state: absent
+  loop: "{{ unbound_seed_files_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.exists and item.stat.islnk
+
+- name: Unbound | seed conf.d files that are managed elsewhere after first install
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Dotfiles/unbound/{{ item }}"
+    dest: "{{ unbound_confd }}/{{ item }}"
+    force: false
+    mode: "0644"
+  loop: "{{ unbound_confd_seed_files }}"
+  register: unbound_seed_files_copied
+
 # A profile file that was deleted from the repo leaves a dangling symlink here,
 # and unbound refuses to start on an include it cannot open - a failure that
 # only shows up at the next reload or reboot. Remove broken links outright.
@@ -234,11 +270,13 @@
 - name: Unbound | warn about unmanaged conf.d entries
   ansible.builtin.debug:
     msg: >-
-      {{ item }} is in conf.d but not listed in unbound_profiles - unbound is
-      loading it. Add it to Ansible/roles/unbound/defaults/main.yml or remove it.
+      {{ item }} is in conf.d but not listed in unbound_profiles or
+      unbound_confd_seed_files - unbound is loading it. Add it to
+      Ansible/roles/unbound/defaults/main.yml or remove it.
   loop: >-
     {{ unbound_confd_found.files | map(attribute='path') | map('basename') | list
-       | difference(unbound_all_profiles | map(attribute='file') | list) }}
+       | difference(unbound_all_profiles | map(attribute='file') | list)
+       | difference(unbound_confd_seed_files) }}
 
 # --------------------------------------------------------------------------
 # 4. DNSSEC anchor + remote-control certificates
@@ -333,6 +371,7 @@
     unbound_needs_reload: >-
       {{ (unbound_profiles_linked.changed | default(false))
          or (unbound_profiles_removed.changed | default(false))
+         or (unbound_seed_files_copied.changed | default(false))
          or (unbound_links_pruned.changed | default(false)) }}
 
 - name: Unbound | install the resolver daemon

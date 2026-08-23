@@ -16,8 +16,15 @@ unbound_run_dir: "{{ homebrew_prefix }}/var/run"
 unbound_profiles:
   - file: forwarders.conf
     enabled: true             # upstream resolvers - edit this when the network changes
-  - file: kiac.conf
-    enabled: true             # local kubernetes (kiac) hosts on the vmnet
+
+# Files seeded from Dotfiles/unbound/<file> the first time conf.d has none,
+# then left alone for good - never (re)linked, relinked, or removed by this
+# role again, even if the repo template changes or the file goes missing.
+# kiac.conf starts as a copy of the repo's placeholder IPs so unbound has
+# something to load before any kubernetes hosts exist; the kubernetes ansible
+# owns its real content (actual vmnet IPs) from then on.
+unbound_confd_seed_files:
+  - kiac.conf
 
 # mDNSResponder already owns 127.0.0.1:53, so unbound listens on 127.0.0.2.
 # .3 to .12 and .100 are used as target addresses by the k3d/cluster zones.

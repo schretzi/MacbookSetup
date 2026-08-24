@@ -1,4 +1,5 @@
 layout stack
+enabled_layouts stack,tall,splits
 cd ~
 # Launched through a LOGIN shell (-l), not `zsh -c` or the binary directly:
 # this instance is started by `open -a kitty -n` (see kitty-focus-or-launch.sh),

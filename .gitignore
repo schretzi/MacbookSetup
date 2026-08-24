@@ -1,0 +1,11 @@
+# Vendor/auto-generated content that changes on every run of the tool that
+# owns it. Tracking it just creates permanent diff noise with nothing to
+# review - keep it on disk (still symlinked/copied by Ansible where needed)
+# but out of git.
+
+# Raycast Store extensions: installed and rebuilt by Raycast itself
+# (compiled .js/.js.map + package.json, no source of ours involved).
+Dotfiles/raycast/extensions/
+
+# lazy.nvim's plugin lockfile: rewritten on every `:Lazy update`.
+Dotfiles/neobean/lazy-lock.json

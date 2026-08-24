@@ -1,4 +1,5 @@
 layout tall
+enabled_layouts stack,tall,splits
 cd ~
 launch --title "home"
 focus

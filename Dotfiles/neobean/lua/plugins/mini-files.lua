@@ -380,6 +380,10 @@ end
 
 return {
   "nvim-mini/mini.files",
+  -- Not using mini.files anymore - neo-tree owns <leader>e now (see
+  -- plugins/neotree.lua). Kept in the repo (disabled) rather than deleted in
+  -- case I want to revisit the preview/git-status work below.
+  enabled = false,
   opts = function(_, opts)
     -- I didn't like the default mappings, so I modified them
     -- Module mappings created only inside explorer.
@@ -446,27 +450,6 @@ return {
   end,
 
   keys = {
-    {
-      -- Open the directory of the file currently being edited
-      -- If the file doesn't exist because you maybe switched to a new git branch
-      -- open the current working directory
-      "<leader>e",
-      function()
-        local buf_name = vim.api.nvim_buf_get_name(0)
-        local dir_name = vim.fn.fnamemodify(buf_name, ":p:h")
-        if vim.fn.filereadable(buf_name) == 1 then
-          -- Pass the full file path to highlight the file
-          require("mini.files").open(buf_name, true)
-        elseif vim.fn.isdirectory(dir_name) == 1 then
-          -- If the directory exists but the file doesn't, open the directory
-          require("mini.files").open(dir_name, true)
-        else
-          -- If neither exists, fallback to the current working directory
-          require("mini.files").open(vim.uv.cwd(), true)
-        end
-      end,
-      desc = "Open mini.files (Directory of Current File or CWD if not exists)",
-    },
     -- Open the current working directory
     {
       "<leader>E",

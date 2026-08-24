@@ -4,13 +4,11 @@ return {
   {
     "nvim-neo-tree/neo-tree.nvim",
     -- This disables or enables the plugin
-    -- I'm switching over to mini.files (mini-files.lua) because neotree had
-    -- some issues for me, when renaming files or directories sometimes they
-    -- didn't update so had to be using oil.nvim
+    -- Back to neo-tree as my explorer - mini.files (mini-files.lua) is
+    -- disabled now, so neo-tree owns <leader>e/<leader>r.
     enabled = true,
     keys = {
-      -- I'm using these 2 keyamps already with mini.files, so avoiding conflict
-      { "<leader>e", false },
+      -- <leader>E is still mini.files' cwd-open keymap, so leave that be
       { "<leader>E", false },
       -- -- I swapped these 2
       -- { "<leader>e", "<leader>fE", desc = "Explorer NeoTree (cwd)", remap = true },
@@ -44,14 +42,16 @@ return {
               vim.cmd("Neotree reveal")
             end
           else
-            -- If the file doesn't exist, execute the logic for <leader>R
+            -- If the file doesn't exist, toggle NeoTree open at cwd instead
             require("neo-tree.command").execute({ toggle = true, dir = vim.uv.cwd() })
           end
         end,
         desc = "[P]Toggle current file in NeoTree or open cwd if file doesn't exist",
       },
+      -- Moved here from <leader>R, which no longer exists - mini.files
+      -- (mini-files.lua) is disabled now, so <leader>e is free for this.
       {
-        "<leader>R",
+        "<leader>e",
         function()
           require("neo-tree.command").execute({ reveal = true })
         end,

@@ -66,7 +66,7 @@ return {
   {
     "folke/snacks.nvim",
     keys = {
-      -- I use this keymap with mini.files, but snacks explorer was taking over
+      -- <leader>e is neo-tree's explorer keymap, but snacks explorer was taking over
       -- https://github.com/folke/snacks.nvim/discussions/949
       { "<leader>e", false },
       {

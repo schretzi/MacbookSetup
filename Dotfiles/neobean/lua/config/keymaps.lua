@@ -16,6 +16,11 @@ local M = {}
 -- For this to work, make sure you have the plugin installed
 -- vim.keymap.set("n", "<S-h>", "<cmd>BufExplorer<cr>", { desc = "[P]Open bufexplorer" })
 
+-- Cycle open buffers with Tab/Shift-Tab (bufferline.nvim is disabled outside
+-- neovide, so this is plain :bnext/:bprevious rather than a bufferline jump)
+vim.keymap.set("n", "<Tab>", "<cmd>bnext<cr>", { desc = "[P]Next buffer" })
+vim.keymap.set("n", "<S-Tab>", "<cmd>bprevious<cr>", { desc = "[P]Previous buffer" })
+
 -- I was running out of Ctrl keys that I use for several things, like pasting
 -- images intoa file using img-clip.nvim, or uploading images to imgur, pasting
 -- the path of a file to the clipboard, etc, so I switched all of those ctrl

@@ -98,6 +98,7 @@ The old LazyVim-style in-nvim window-nav mappings for these same keys are **expl
 | n, v | `<Leader>wl` / `<Leader>wh` | Vertical resize ±5 |
 | n | `<S-h>` | Snacks buffer picker (overrides LazyVim default "prev buffer"); `d` inside picker deletes a buffer |
 | n | `<S-l>` | **No custom binding** — falls back to Vim/LazyVim default (next buffer). Comments at `keymaps.lua:239-248` say this was meant to move to a `snipe.nvim` plugin file, but `snipe.nvim` was never installed — an asymmetric, incomplete migration vs. its `<S-h>` sibling |
+| n | `<Tab>` / `<S-Tab>` | Next / previous buffer (`:bnext`/`:bprevious`) — different mode from blink-cmp's `<Tab>`/`<S-Tab>` (insert-mode, completion popup only), so not a conflict |
 | n | `<M-BS>` / `<leader><BS>` | `:e #` (alternate buffer) |
 | n | `<leader>br` | Reload buffer |
 
@@ -115,9 +116,9 @@ Claude Code and GitHub Copilot are wired in as official LazyVim extras (`lazy.lu
 
 | Mode | Key | Action | File |
 |---|---|---|---|
-| n | `<leader>e` | Open **mini.files** at current file's directory | `plugins/mini-files.lua` (owner); explicitly disabled in `plugins/neotree.lua` and `plugins/snacks.lua` to avoid a clash |
-| n | `<leader>E` | Open mini.files at cwd | `plugins/mini-files.lua` (same disable-in-others pattern) |
-| n | `<leader>r` / `<leader>R` | neo-tree: reveal current file / open at cwd | `plugins/neotree.lua` |
+| n | `<leader>e` | Open **neo-tree**, revealing current file's directory | `plugins/neotree.lua` (moved here from the now-removed `<leader>R`); mini.files' old `<leader>e` is gone (`plugins/mini-files.lua`, disabled) |
+| n | `<leader>E` | Open mini.files at cwd — **dead**, mini.files is disabled | `plugins/mini-files.lua` |
+| n | `<leader>r` | neo-tree: toggle current file (or cwd if it doesn't exist) | `plugins/neotree.lua` — `<leader>R` no longer exists |
 | n | `ff` / `fg` / `fz` / `fc` | Find files / live grep / fuzzy live grep / grep word under cursor | `plugins/fff.lua` — **see conflict below** |
 | n | `<leader>fO` / `<M-f>` | Open file in Finder/explorer |
 | n | `<leader>fN` | Open in Neovide |
@@ -128,7 +129,7 @@ Claude Code and GitHub Copilot are wired in as official LazyVim extras (`lazy.lu
 | n | `<M-b>` | Git branches picker (Snacks) |
 | n | `<leader><space>` | Smart picker (Snacks) |
 
-**mini.files buffer-local map** (only active while the mini.files window has focus) — [`../neobean/lua/config/modules/mini-files-km.lua`](../neobean/lua/config/modules/mini-files-km.lua):
+**mini.files buffer-local map** (`enabled = false` in `plugins/mini-files.lua` — kept for reference, currently dead code) — [`../neobean/lua/config/modules/mini-files-km.lua`](../neobean/lua/config/modules/mini-files-km.lua):
 
 | Key | Action |
 |---|---|

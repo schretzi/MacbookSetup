@@ -479,10 +479,17 @@ kubeconfig-merge                             # (re)build ~/.kube/config from eve
 
 `<name>` becomes the cluster, context and user name, so pick something short
 and unique - `kubectx`/`kubens` then work as usual against the merged
-`~/.kube/config`. Only client-certificate/client-key auth is handled;
-token-based or exec-plugin kubeconfigs need manual setup. A previous
-`~/.kube/config` is backed up (`config.bak-<timestamp>`) before each merge, and
-the active context is preserved across re-merges when it still exists.
+`~/.kube/config`. The CA cert is always pulled out into its own file when
+present; the client certificate/key are too, if the cluster uses cert-based
+auth. Clusters using a token, an `exec` plugin or `auth-provider` (OIDC etc.)
+have nothing else to extract, so that part of the user entry is copied
+through unchanged - still smaller than before since the CA is out of the way.
+The original download can sit next to other files (notes, a README) in the
+same directory; only the file that actually parses as a kubeconfig is picked
+up automatically, and `--source` breaks the tie if more than one does. A
+previous `~/.kube/config` is backed up (`config.bak-<timestamp>`) before each
+merge, and the active context is preserved across re-merges when it still
+exists.
 
 _Role: `kubeconfig`_
 

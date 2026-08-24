@@ -21,3 +21,4 @@ brew "weasyprint"
 
 # Multimedia
 cask "gimp"
+cask "drawio"

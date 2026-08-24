@@ -1,0 +1,35 @@
+---
+# Scaffolding only - see Setup.md -> Kubernetes. This role never touches
+# ~/.kube/config itself or the per-cluster subdirectories' contents; those are
+# owned by `kubeconfig-add`/`kubeconfig-merge` (Dotfiles/zsh/.zsh/functions/
+# kubeconfig), run by hand once per cluster.
+
+- name: Kubeconfig | check kubectl and yq are installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/{{ item }}"
+  loop:
+    - kubectl
+    - yq
+  register: kubeconfig_bins
+
+- name: Kubeconfig | warn about missing tooling
+  ansible.builtin.debug:
+    msg: >-
+      Not installed: {{ kubeconfig_bins.results | rejectattr('stat.exists')
+                        | map(attribute='item') | list | join(', ') }}.
+      `kubeconfig-add`/`kubeconfig-merge` need both - see 40_kubernetes_ci.brew
+      and 00_base.brew.
+  when: kubeconfig_bins.results | rejectattr('stat.exists') | list | length > 0
+
+# 0700 because every subdirectory beneath it ends up holding a private key.
+- name: Kubeconfig | ensure ~/.kube exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.kube"
+    state: directory
+    mode: "0700"
+
+- name: Kubeconfig | ensure ~/.kube/configs exists
+  ansible.builtin.file:
+    path: "{{ kubeconfig_configs_dir }}"
+    state: directory
+    mode: "0700"

@@ -129,6 +129,10 @@
       when: enable_gitlab | bool
       tags: [gitlab, glab]
 
+    - role: kubeconfig
+      when: enable_kubeconfig | bool
+      tags: [kubeconfig, kube, kubernetes]
+
     # central switchboard for passwordless (NOPASSWD) sudo rules; runs before
     # any role that relies on one (unbound's flush_dns/restart aliases)
     - role: sudoers

@@ -68,6 +68,11 @@ enable_ssh: true
 # gitlab_instances, contributed by the private and work overlays - empty here.
 enable_gitlab: true
 
+# ~/.kube/configs, for kubeconfig-add/kubeconfig-merge (see Setup.md ->
+# Kubernetes). Per-cluster subdirectories and their contents are never
+# touched by this repo - you create and populate them by hand.
+enable_kubeconfig: true
+
 # Passwordless (NOPASSWD) sudo rules - see roles/sudoers/defaults/main.yml
 # for the actual rule list. Set sudoers_passwordless_enabled: false below to
 # refuse passwordless sudo altogether without disabling this role (existing

@@ -118,6 +118,7 @@ locations: `unbound`, `java`, `kanata`.
 | `git`           | `enable_git`           | links the shared git ignore file, checks the signing key         |
 | `ssh`           | `enable_ssh`           | links `~/.ssh/config`, fixes permissions                         |
 | `gitlab`        | `enable_gitlab`        | renders instance list for `gl`, checks tokens are in the keychain |
+| `kubeconfig`    | `enable_kubeconfig`    | creates `~/.kube/configs` for `kubeconfig-add`/`kubeconfig-merge` |
 | `java`          | `enable_java`          | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines` |
 | `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation   |
 | `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                        |
@@ -452,6 +453,38 @@ It reads the token from the keychain at switch time and exports
 `GITLAB_HOST`/`GITLAB_API_HOST`/`GITLAB_TOKEN`; nothing is written to disk.
 
 _Role: `gitlab`_
+
+## Kubernetes
+
+Dozens of clusters means dozens of kubeconfigs, and one growing
+`~/.kube/config` with every cluster's certs and keys embedded inline becomes
+unreadable and hard to audit. Instead, each cluster gets its own directory
+under `~/.kube/configs/` holding its extracted `ca.crt`/`client.crt`/
+`client.key` and a `config` that references them by full path; `~/.kube/config`
+itself is a generated merge of just those `config` files, so it stays small
+and secret-free.
+
+The role only creates `~/.kube/configs` (mode `0700`, since it ends up full of
+private keys) - it never touches what goes inside it. That is `kubeconfig-add`
+and `kubeconfig-merge`'s job (`Dotfiles/zsh/.zsh/functions/kubeconfig`):
+
+```bash
+mkdir -p ~/.kube/configs/<name>
+mv ~/Downloads/kubeconfig.yaml ~/.kube/configs/<name>/   # the cluster's original download
+
+kubeconfig-add <name>                        # extract ca/cert/key, write config
+kubeconfig-add <name> --server host:port     # ... overriding the address (SSH tunnel etc.)
+kubeconfig-merge                             # (re)build ~/.kube/config from every configs/*/config
+```
+
+`<name>` becomes the cluster, context and user name, so pick something short
+and unique - `kubectx`/`kubens` then work as usual against the merged
+`~/.kube/config`. Only client-certificate/client-key auth is handled;
+token-based or exec-plugin kubeconfigs need manual setup. A previous
+`~/.kube/config` is backed up (`config.bak-<timestamp>`) before each merge, and
+the active context is preserved across re-merges when it still exists.
+
+_Role: `kubeconfig`_
 
 ## Java
 

@@ -1,0 +1,5 @@
+---
+# Where per-cluster subdirectories live. Each one holds the originally
+# downloaded kubeconfig plus, once `kubeconfig-add` has run, the extracted
+# ca.crt/client.crt/client.key and a `config` referencing them by full path.
+kubeconfig_configs_dir: "{{ ansible_facts.env.HOME }}/.kube/configs"

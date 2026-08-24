@@ -9,3 +9,7 @@
 gcloud_components:
   - alpha
   - beta
+  # Lets `kubectl`/`kubeconfig-add` authenticate against GKE clusters using
+  # the caller's gcloud identity instead of an embedded client cert - see
+  # Setup.md -> Google Cloud -> "Application Default Credentials".
+  - gke-gcloud-auth-plugin

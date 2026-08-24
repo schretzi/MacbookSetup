@@ -12,6 +12,7 @@ dotfiles_links:
 
   # --- terminal & editor ---------------------------------------------------
   - { src: Dotfiles/neobean, dest: .config/neobean }
+  - { src: Dotfiles/starship/starship.toml, dest: .config/starship.toml }
 
   # --- window management & keyboard ---------------------------------------
   - { src: Dotfiles/yabai, dest: .config/yabai }

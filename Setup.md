@@ -301,6 +301,33 @@ _Role: `dotfiles`_
 
 _Role: `dotfiles`_
 
+## Starship prompt
+
+`~/.config/starship.toml` is symlinked from `Dotfiles/starship/starship.toml`.
+It keeps every one of Starship's built-in default modules and styling
+(`directory`, `git_branch`, `git_status`, `gcloud`, `character`, ...) via the
+`$all` placeholder in `format`, and adds two things Starship doesn't show by
+default, on their own second line:
+
+- **`env_var.PROXY_STATE`** — mirrors `PROXY_STATE` from
+  `Dotfiles/macswitcher/proxy.zsh` (`"off"` until `macswitcher proxy set`
+  flips it), so an accidentally-left-on proxy is never invisible.
+- **`kubernetes`** — the active context from `~/.kube/config` (built by the
+  `kubeconfig` role — see Kubernetes below), enabled since it's off by
+  default in Starship.
+
+```
+MacbookSetup on  main [!] on ☁️  user@corp.example
+proxy: off on ⛵ APL-GCP-2-Staging
+❯
+```
+
+Only referenced modules move; everything else keeps its default position,
+order and color. `$all`/`${env_var.PROXY_STATE}` and friends are Starship's
+own [config schema](https://starship.rs/config/) — see there for module docs.
+
+_Role: `dotfiles`_
+
 ## Terminal environment
 
 - **kitty** — terminal emulator; sessions and scripts under `Dotfiles/kitty/`
@@ -492,6 +519,11 @@ merge, and the active context is preserved across re-merges when it still
 exists.
 
 _Role: `kubeconfig`_
+
+GKE clusters are the exception: they have no cert to extract, and `kubectl`
+authenticates live through `gke-gcloud-auth-plugin`, which needs Application
+Default Credentials rather than a kubeconfig entry - see Google Cloud ->
+"Application Default Credentials" below.
 
 ## Java
 
@@ -932,7 +964,7 @@ Conversation content and caches: `~/.claude/projects/`,
 ## Google Cloud
 
 The SDK comes from `41_clouds.brew`. The role installs the components
-(`alpha`, `beta`), skipping ones already present.
+(`alpha`, `beta`, `gke-gcloud-auth-plugin`), skipping ones already present.
 
 `gcloud init` needs a browser and stays manual:
 
@@ -941,6 +973,76 @@ gcloud init
 ```
 
 _Role: `gcloud`_
+
+### Application Default Credentials (ADC)
+
+`gcloud init`/`gcloud auth login` only authenticate the `gcloud` CLI itself.
+Everything else that talks to Google on your behalf — `kubectl` against a GKE
+cluster, `gcloud compute start-iap-tunnel`, Terraform's `google` provider, any
+Google client library — looks for a separate credential file instead:
+**Application Default Credentials**. The `gcloud` role checks for it and
+prints a reminder if it's missing, but enabling it is an interactive, manual
+step:
+
+```bash
+gcloud auth application-default login
+```
+
+This opens a browser, and on success writes
+`~/.config/gcloud/application_default_credentials.json`. Run it once per
+machine (and again if the file is deleted or the login is revoked).
+
+What it's needed for here:
+
+- **Kubernetes access** — `kubectl`/`kubectx` against a GKE cluster added via
+  `gcloud container clusters get-credentials` authenticate through the
+  `gke-gcloud-auth-plugin`, which reads ADC. Without it, `kubectl` commands
+  fail with an auth error even though `gcloud` itself is logged in.
+- **Tunneling** — `gcloud compute start-iap-tunnel` (Identity-Aware Proxy
+  tunnels, used to reach a private cluster's control plane or a VM with no
+  public IP) also authenticates through ADC.
+
+Reference: [Google Cloud — Set up Application Default
+Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc).
+
+### Tunneling (IAP)
+
+Not automated yet — no wrapper script exists here for
+`gcloud compute start-iap-tunnel`. Until then, do it by hand:
+
+- **SSH key setup** — the tunnel forwards a local port to a target's SSH port,
+  but Google still needs an OS Login SSH key for the target project before
+  anything can accept a connection on the other end. Running any
+  `gcloud compute ssh` once against the target generates a key pair (if
+  needed) and pushes the public key via OS Login; do this before relying on a
+  tunnel. See [Google Cloud — Manage OS Login
+  keys](https://cloud.google.com/compute/docs/oslogin/manage-oslogin-in-a-project).
+- **`/etc/hosts` alias** — the tunnel listens on `localhost`, but whatever is
+  configured to use it (a kubeconfig server address, TLS SNI, etc.) may expect
+  a real-looking hostname such as `kubernetes` rather than `localhost` /
+  `127.0.0.1` for things to resolve correctly. Add the alias once, manually
+  (root, since `/etc/hosts` is not writable otherwise):
+
+  ```bash
+  echo "127.0.0.1 kubernetes" | sudo tee -a /etc/hosts
+  ```
+
+  Not yet wired into the `unbound`/`gcloud` roles - a manual, one-time edit
+  until the tunnel wrapper script lands.
+- **Tunnel connects but the SSH session immediately drops/reconnects** — this
+  is almost always a stale or untrusted host key/cert for `localhost:<port>`
+  in `~/.ssh/known_hosts`, not a problem with the tunnel itself. Connect
+  directly against the forwarded port to see and accept the real prompt:
+
+  ```bash
+  ssh -p <port from the tunnel> <gcp-username>@localhost
+  # e.g. ssh -p 12022 ext_user_corp@localhost
+  ```
+
+  Accept/refresh the host key there, then retry whatever was using the tunnel.
+
+Reference: [Google Cloud — Use IAP for TCP
+forwarding](https://cloud.google.com/iap/docs/using-tcp-forwarding).
 
 ## Yubikey
 

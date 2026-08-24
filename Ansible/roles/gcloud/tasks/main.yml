@@ -71,3 +71,26 @@
       Run `gcloud init` once to authenticate and pick a default project;
       it needs a browser and cannot be automated.
   when: gcloud_which.rc == 0
+
+# `gcloud init`/`gcloud auth login` only cover the CLI's own calls. Anything
+# else that talks to Google APIs on your behalf - kubectl via
+# gke-gcloud-auth-plugin, Terraform's google provider, `gcloud compute
+# start-iap-tunnel` - reads Application Default Credentials instead, which
+# live in a separate file and need their own login. Both are interactive
+# (browser OAuth) and so stay manual - see Setup.md -> Google Cloud.
+- name: GCloud | check Application Default Credentials
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.env.HOME }}/.config/gcloud/application_default_credentials.json"
+  register: gcloud_adc
+  when: gcloud_which.rc == 0
+
+- name: GCloud | note the ADC manual step
+  ansible.builtin.debug:
+    msg: >-
+      Application Default Credentials not found - run
+      `gcloud auth application-default login` once. Required for kubectl
+      access to GKE clusters (gke-gcloud-auth-plugin), IAP tunnels
+      (`gcloud compute start-iap-tunnel` / `gcloud alpha compute tpus tunnel`)
+      and any tool using a Google client library (Terraform, etc.). See
+      Setup.md -> Google Cloud -> "Application Default Credentials".
+  when: gcloud_which.rc == 0 and not gcloud_adc.stat.exists

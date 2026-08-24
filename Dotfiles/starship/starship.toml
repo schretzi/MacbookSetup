@@ -1,0 +1,26 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Starship otherwise runs on its built-in defaults (directory, git_branch,
+# git_status, gcloud, character, ...) - see Setup.md -> "Starship prompt".
+# `$all` keeps every one of those in its default order/style; only the
+# modules referenced explicitly below (line_break, env_var.PROXY_STATE,
+# kubernetes, character) are pulled out of that default position and placed
+# on their own line instead.
+format = """$all$line_break${env_var.PROXY_STATE}$kubernetes$line_break$character"""
+
+# Reflects PROXY_STATE from Dotfiles/macswitcher/proxy.zsh ("off" until
+# `macswitcher proxy set` flips it). Shown always, not just when a proxy is
+# active, so an accidentally-left-on proxy is never invisible.
+[env_var.PROXY_STATE]
+variable = "PROXY_STATE"
+format = "proxy: [$env_value]($style) "
+style = "bold yellow"
+default = "off"
+
+# Disabled by default in starship; enabled here since every cluster context
+# comes from the kubeconfig role (Setup.md -> Kubernetes) and knowing which
+# one is active before running kubectl matters.
+[kubernetes]
+disabled = false
+format = 'on [⛵ $context( ($namespace))]($style) '
+style = "bold blue"

@@ -518,6 +518,26 @@ previous `~/.kube/config` is backed up (`config.bak-<timestamp>`) before each
 merge, and the active context is preserved across re-merges when it still
 exists.
 
+### Switching clusters per shell
+
+`kubectx`/`kubens` switch `current-context` in the merged `~/.kube/config`,
+which is shared by every shell - fine day-to-day, but awkward when different
+terminals need different clusters at the same time. `kubeconfig-use` instead
+points `KUBECONFIG` at one cluster's own `~/.kube/configs/<name>/config` for
+the current shell only; nothing is written to disk and other shells are
+unaffected.
+
+```bash
+kubeconfig-use            # interactive picker: fzf if installed, else a
+                           # numbered `select` menu - both just scroll, no
+                           # typing required; <TAB> also completes names
+kubeconfig-use <name>      # switch straight to <name>
+kubeconfig-use -           # unset KUBECONFIG, back to the merged config
+```
+
+`kubects` is an alias for `kubeconfig-use` (`kubects <name>`, `kubects -`, ...),
+named after `kubectx`/`kubens` for muscle memory.
+
 _Role: `kubeconfig`_
 
 GKE clusters are the exception: they have no cert to extract, and `kubectl`

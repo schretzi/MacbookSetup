@@ -1,3 +1,6 @@
 alias k="kubectl"
 alias i="istioctl"
+# Named after kubectx/kubens, but shell-local: see kubeconfig-use in
+# Dotfiles/zsh/.zsh/functions/kubeconfig.
+alias kubects="kubeconfig-use"
 

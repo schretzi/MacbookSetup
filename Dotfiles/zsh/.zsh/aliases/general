@@ -24,3 +24,5 @@ alias tf="terraform"
 alias tg="terragrunt"
 
 alias restart_kanata="sudo launchctl kickstart -k system/com.kanata.daemon"
+
+alias f="fzf"

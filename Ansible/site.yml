@@ -159,6 +159,11 @@
       when: enable_unbound | bool
       tags: [unbound, dns]
 
+    # after sudoers (uses its NOPASSWD rule for manual on-demand refresh)
+    - role: pf_vmnet_nat
+      when: enable_pf_vmnet_nat | bool
+      tags: [pf_vmnet_nat, kiac, vmnet]
+
     # trusts locally-generated root CAs (`security add-trusted-cert ...
     # System.keychain`) in Firefox-based browsers too - Safari/Chrome do this
     # natively, Firefox/NSS needs ImportEnterpriseRoots turned on explicitly.

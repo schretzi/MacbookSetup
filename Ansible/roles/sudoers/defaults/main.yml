@@ -33,6 +33,11 @@ sudoers_rules:
     commands:
       - /opt/homebrew/bin/openconnect
 
+  - name: vmnet-nat-refresh
+    comment: manually re-run the kiac vmnet NAT interface refresh (pf_vmnet_nat role) without waiting for the LaunchDaemon watcher
+    commands:
+      - /usr/local/bin/vmnet_nat_refresh
+
 # Master switch: set to false to refuse passwordless sudo entirely. Any
 # rule files this role previously installed are removed and none are
 # (re)created; every command in sudoers_rules then falls back to a normal

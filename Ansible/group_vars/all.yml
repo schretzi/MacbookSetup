@@ -97,6 +97,12 @@ enable_mail: true
 # (needs sudo)
 enable_unbound: true
 
+# pf NAT for LocalKubernetes' (kiac) vmnet subnet, kept pointed at whichever
+# interface currently owns the default route (Wi-Fi/Ethernet/VPN switches)
+# (needs sudo). Only meaningful on machines running kiac clusters — safe to
+# leave enabled elsewhere, it just NATs a private subnet nothing else uses.
+enable_pf_vmnet_nat: true
+
 # Trusts locally-generated root CAs (added via `security add-trusted-cert`
 # into /Library/Keychains/System.keychain) in Firefox-based browsers too -
 # Firefox/NSS ignores the System keychain by default, unlike Safari/Chrome.

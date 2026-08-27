@@ -1,3 +1,4 @@
+
 # Backlog
 
 Open topics collected from past working sessions and `Setup.md`. Check items
@@ -34,8 +35,12 @@ instead of scattering them across chat history.
 - [ ] Tunneling script modernization (see gcloud IAP item above).
 - [ ] Move Work configs into an overlay and find/create a repo to push it to.
 - [ ] Regular vulnerability checks + a way to track overall project status.
-- [ ] SSH config is one big file mixing private and work — split it.
+- [x] SSH config is one big file mixing private and work — split it.
+      (`Include ~/.ssh/config.d/*.conf` in the public repo, per-host blocks
+      moved to `Dotfiles/ssh/config.d/{private,work}.conf` in the overlays.)
 - [ ] look into checkmate.nvim (see above — partially researched already).
+- [ ] macswitcher: list context
+- [ ] macswitcher: autocompletion on context
 
 ## Recently resolved (for reference)
 

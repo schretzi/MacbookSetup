@@ -1,20 +1,18 @@
 # Managed by MacbookSetup - Ansible role "ssh"
 # Truth lives in Dotfiles/ssh/config, symlinked to ~/.ssh/config
 #
-# Private keys are deliberately NOT in this repo. Create them per device and
-# per usage (see Setup.md -> SSH), then add a matching Host block here.
+# Private keys are deliberately NOT in this repo, and neither are per-host
+# blocks that would name one (or an internal/work hostname) - see Setup.md ->
+# SSH. Those live in the private and work overlays as
+# ~/.ssh/config.d/{private,work}.conf, pulled in below. This file only holds
+# generic client behavior that applies regardless of which overlays (if any)
+# are cloned.
+
+Include ~/.ssh/config.d/*.conf
 
 Host *
-    # Load the passphrase from the macOS keychain instead of prompting
     UseKeychain yes
-    # Keep unlocked keys in ssh-agent for the rest of the session
     AddKeysToAgent yes
-    ServerAliveInterval 60
+    ServerAliveInterval 240
     ServerAliveCountMax 3
-
-Host github.com
-    HostName ssh.github.com
-    Port 443
-    User git
-    IdentityFile ~/.ssh/id_mbm5_github
-    IdentitiesOnly yes
+    SetEnv TERM=xterm-256color

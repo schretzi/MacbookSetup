@@ -426,16 +426,50 @@ _Role: `git`_
 ## SSH
 
 Private keys are never generated or stored here. The role manages
-`~/.ssh/config` and `~/.ssh/allowed_signers` (both symlinked from
-`Dotfiles/ssh/`), enforces `0700` on `~/.ssh`, and reports which keys are not
-yet loaded in the agent.
+`~/.ssh/config` (symlinked from `Dotfiles/ssh/config`), enforces `0700` on
+`~/.ssh`, and reports which keys are not yet loaded in the agent.
+
+This repo's `Dotfiles/ssh/config` is the **public base only** — generic client
+behavior, no key names, no internal/work hostnames:
+
+```
+Include ~/.ssh/config.d/*.conf
+
+Host *
+    UseKeychain yes
+    AddKeysToAgent yes
+    ServerAliveInterval 240
+    ServerAliveCountMax 3
+    SetEnv TERM=xterm-256color
+```
 
 `Host *` sets `UseKeychain yes` and `AddKeysToAgent yes`, so a passphrase is
-entered once and then comes from the login keychain.
+entered once and then comes from the login keychain; it deliberately carries
+no `IdentityFile` — SSH always additionally offers whatever keys are already
+loaded in the agent, `IdentityFile` here would only matter for a non-default-
+named key that also isn't in the agent yet, and per-host blocks below already
+name the right key explicitly where needed. `SetEnv TERM=xterm-256color`
+overrides kitty's own `TERM=xterm-kitty` for the remote session, since most
+remote hosts don't have kitty's terminfo installed; the remote `sshd` must
+have `AcceptEnv TERM` (or accept it another way) for this to take effect —
+without that, the client sends it but the server silently drops it.
 
-It deliberately does **not** run `ssh-add` for you: for a key whose passphrase
-is not in the keychain yet, `ssh-add` prompts on the terminal and would hang the
-playbook. Run it once by hand:
+Actual per-host blocks — personal hosts (including `github.com`) and work
+hosts alike, each with its own key name — live in the private and work
+overlays as `Dotfiles/ssh/config.d/{private,work}.conf`, linked via
+`dotfiles_links_overlay` to `~/.ssh/config.d/{private,work}.conf` and pulled
+in by the `Include` above. `Include` runs before `Host *` so a specific
+block's own settings win over the generic fallback; nothing overlay-specific
+ever needs to touch this repo. A machine with neither overlay cloned still
+gets a working, if hostname-empty, `~/.ssh/config`.
+
+Public keys trusted for verifying signed commits (`allowed_signers`) follow
+the same overlay pattern via `dotfiles_links_overlay` — see the private
+overlay's `overlay.yml`.
+
+The role deliberately does **not** run `ssh-add` for you: for a key whose
+passphrase is not in the keychain yet, `ssh-add` prompts on the terminal and
+would hang the playbook. Run it once by hand:
 
 ```bash
 ssh-add --apple-use-keychain ~/.ssh/<key>

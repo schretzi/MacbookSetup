@@ -38,6 +38,7 @@ AGH_GENERATED="/etc/adguardhome"
 UNBOUND_LABEL="net.unbound"
 BREW_UNBOUND="homebrew.mxcl.unbound"
 PROBE="example.com"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -138,23 +139,30 @@ answers 127.0.0.3 ||
 log "AdGuard Home is healthy on 127.0.0.3"
 
 # ---------------------------------------------------------------------------
-# 1b. Move the generated inputs somewhere readable
+# 1b. Put the generated inputs somewhere readable
 # ---------------------------------------------------------------------------
-# The trial installed upstreams.conf and zones/ under /opt/adguardhome. That is
-# the wrong place: AdGuard Home chmods its own work directory to 0700 at
-# startup, so nothing running as your user can read them - and `macswitcher
-# observe` reads the upstream file to show what is being forwarded, so its row
-# would permanently and silently report "no upstreams".
-if [[ -f ${AGH_PREFIX}/upstreams.conf && ! -f ${AGH_GENERATED}/upstreams.conf ]]; then
-    log "moving generated files to ${AGH_GENERATED} (/opt/adguardhome is forced to 0700)"
-    sudo mkdir -p "${AGH_GENERATED}/zones"
-    sudo chmod 0755 "${AGH_GENERATED}" "${AGH_GENERATED}/zones"
-    sudo cp "${AGH_PREFIX}/upstreams.conf" "${AGH_GENERATED}/upstreams.conf"
-    sudo cp "${AGH_PREFIX}"/zones/*.txt "${AGH_GENERATED}/zones/" 2>/dev/null || true
-    sudo chmod 0644 "${AGH_GENERATED}/upstreams.conf" || true
-    sudo chmod 0644 "${AGH_GENERATED}"/zones/*.txt 2>/dev/null || true
+# AdGuard Home chmods its own work directory to 0700 at startup, so anything
+# under /opt/adguardhome is unreadable to a non-root process - and `macswitcher
+# observe` reads the upstream file as your user to show what is being
+# forwarded. The generated inputs therefore live in /etc/adguardhome.
+#
+# Written unconditionally rather than guarded on the old files still existing:
+# regenerating is cheap and idempotent, and a guard on file presence gets this
+# wrong the moment the files were created by hand or a previous run was
+# interrupted half way.
+log "generating upstreams and zones into ${AGH_GENERATED}"
+sudo mkdir -p "${AGH_GENERATED}/zones"
+sudo chmod 0755 "${AGH_GENERATED}" "${AGH_GENERATED}/zones"
+sudo "${REPO_ROOT}/Scripts/MacOS/unbound_to_adguard.py" --out-dir "${AGH_GENERATED}"
+sudo chmod 0644 "${AGH_GENERATED}/upstreams.conf" 2>/dev/null || true
+sudo chmod 0644 "${AGH_GENERATED}"/zones/*.txt 2>/dev/null || true
 
-    log "repointing AdGuard Home at the new paths"
+# Repoint AdGuard Home only if its config still names the old location. Driven
+# by the config rather than by which files happen to exist, so that generating
+# the new files first (or re-running this script) cannot skip the rewrite and
+# leave AdGuard Home reading a directory that is about to be deleted.
+if sudo grep -qE "${AGH_PREFIX}/(upstreams\.conf|zones/)" "${AGH_CONF}"; then
+    log "repointing AdGuard Home from ${AGH_PREFIX} to ${AGH_GENERATED}"
     sudo python3 - "${AGH_CONF}" "${AGH_PREFIX}" "${AGH_GENERATED}" <<'PYEOF'
 import sys, yaml
 
@@ -184,7 +192,6 @@ with open(path, "w") as fh:
 PYEOF
     sudo rm -rf "${AGH_PREFIX}/zones" "${AGH_PREFIX}/upstreams.conf"
 fi
-
 
 # ---------------------------------------------------------------------------
 # 2. Stop unbound, then take the wildcard

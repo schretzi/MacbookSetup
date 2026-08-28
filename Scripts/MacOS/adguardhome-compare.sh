@@ -10,8 +10,11 @@
 # The names come from unbound's own conf.d, so a zone added there is covered
 # here automatically rather than needing this list maintained by hand.
 #
-#   Scripts/MacOS/adguardhome-compare.sh          every local name + the probes
-#   Scripts/MacOS/adguardhome-compare.sh foo.kiac just these names
+#   Scripts/MacOS/adguardhome-compare.sh           every local name + the probes
+#   Scripts/MacOS/adguardhome-compare.sh --upstream only the probes: plain
+#                                                  resolution, DNSSEC, ad
+#                                                  blocking, and latency
+#   Scripts/MacOS/adguardhome-compare.sh foo.kiac  just these names
 #
 # Exit status is non-zero if any name disagreed, so it can gate the cutover.
 # ============================================================================
@@ -57,7 +60,19 @@ local_names() {
     ' "${CONF_D}"/*.conf 2>/dev/null | sed 's/\.$//' | sort -u
 }
 
-if [[ $# -gt 0 ]]; then
+upstream_only=false
+if [[ ${1:-} == "--upstream" ]]; then
+    upstream_only=true
+    shift
+fi
+
+if [[ ${upstream_only} == true ]]; then
+    # Evaluating AdGuard Home as a plain resolver, before caring about the
+    # local zones. Skips every local name, which is also what you want while
+    # unbound has not reloaded its conf.d - those would all be false
+    # differences.
+    names=()
+elif [[ $# -gt 0 ]]; then
     names=("$@")
     probes=()
 else
@@ -94,7 +109,17 @@ for name in "${names[@]}"; do
     [[ -n ${name} ]] && check "${name}"
 done
 
-if [[ ${#probes[@]} -gt 0 ]]; then
+if [[ ${#probes[@]} -gt 0 || ${upstream_only} == true ]]; then
+    if [[ ${upstream_only} == true ]]; then
+        probes=(
+            "example.com"
+            "cloudflare.com"
+            "dnssec-failed.org"
+            "doubleclick.net"
+            "google.com"
+            "github.com"
+        )
+    fi
     echo
     for name in "${probes[@]}"; do
         case "${name}" in
@@ -116,6 +141,22 @@ if [[ ${#probes[@]} -gt 0 ]]; then
         else
             printf 'DNSSEC @%-12s %s\n' "${server}" "$(red "no AD flag (flags: ${flags:-none})")"
         fi
+    done
+fi
+
+# Latency, because "is it fast enough day to day" is most of what a resolver
+# swap actually feels like. Cold cache first (a name neither has seen), then
+# the same name again warm.
+if [[ ${upstream_only} == true ]]; then
+    echo
+    probe="$(printf 'x%s.example.com' "$RANDOM")"
+    for server in "${UNBOUND}" "${ADGUARD}"; do
+        cold="$(dig +time=2 +tries=1 "@${server}" "${probe}" A 2>/dev/null |
+            sed -n 's/;; Query time: \([0-9]*\).*/\1/p' | head -1)"
+        warm="$(dig +time=2 +tries=1 "@${server}" example.com A >/dev/null 2>&1
+        dig +time=2 +tries=1 "@${server}" example.com A 2>/dev/null |
+            sed -n 's/;; Query time: \([0-9]*\).*/\1/p' | head -1)"
+        printf 'latency @%-12s cold %sms, cached %sms\n' "${server}" "${cold:-?}" "${warm:-?}"
     done
 fi
 

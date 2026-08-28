@@ -60,6 +60,14 @@ local_names() {
     ' "${CONF_D}"/*.conf 2>/dev/null | sed 's/\.$//' | sort -u
 }
 
+# macOS still ships bash 3.2 as /bin/bash, which is what `env bash` finds
+# here. That rules out `mapfile`, and makes "${arr[@]}" on an empty array a
+# fatal "unbound variable" under `set -u`. Both are worked around below rather
+# than by demanding a newer bash: this script has to run on a machine whose DNS
+# is currently broken, which is a bad moment to discover a missing dependency.
+names=()
+probes=()
+
 upstream_only=false
 if [[ ${1:-} == "--upstream" ]]; then
     upstream_only=true
@@ -71,12 +79,20 @@ if [[ ${upstream_only} == true ]]; then
     # local zones. Skips every local name, which is also what you want while
     # unbound has not reloaded its conf.d - those would all be false
     # differences.
-    names=()
+    probes=(
+        "example.com"      # plain upstream resolution
+        "cloudflare.com"   # DNSSEC-signed, should carry AD
+        "dnssec-failed.org" # bogus signature, should be SERVFAIL
+        "doubleclick.net"  # ad domain - the whole point of AdGuard
+        "google.com"
+        "github.com"
+    )
 elif [[ $# -gt 0 ]]; then
     names=("$@")
-    probes=()
 else
-    mapfile -t names < <(local_names)
+    while IFS= read -r discovered; do
+        [[ -n ${discovered} ]] && names+=("${discovered}")
+    done < <(local_names)
     # Names that are not local data, chosen to exercise one behaviour each.
     probes=(
         "example.com"                # plain upstream resolution
@@ -105,21 +121,13 @@ check() {
     printf '%-46s  %-26s  %-26s  %s %s\n' "${name}" "${a}" "${b}" "${mark}" "${note}"
 }
 
-for name in "${names[@]}"; do
-    [[ -n ${name} ]] && check "${name}"
-done
+if [[ ${#names[@]} -gt 0 ]]; then
+    for name in "${names[@]}"; do
+        [[ -n ${name} ]] && check "${name}"
+    done
+fi
 
-if [[ ${#probes[@]} -gt 0 || ${upstream_only} == true ]]; then
-    if [[ ${upstream_only} == true ]]; then
-        probes=(
-            "example.com"
-            "cloudflare.com"
-            "dnssec-failed.org"
-            "doubleclick.net"
-            "google.com"
-            "github.com"
-        )
-    fi
+if [[ ${#probes[@]} -gt 0 ]]; then
     echo
     for name in "${probes[@]}"; do
         case "${name}" in

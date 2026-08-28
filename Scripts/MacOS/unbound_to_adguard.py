@@ -41,7 +41,7 @@ What deliberately does not carry over:
                     reported, not translated.
 
 Usage:
-    unbound_to_adguard.py                      # write into /opt/adguardhome
+    unbound_to_adguard.py                      # write into /etc/adguardhome
     unbound_to_adguard.py --dry-run            # print what would be written
     unbound_to_adguard.py --out-dir /tmp/agh   # somewhere else
 """
@@ -57,7 +57,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONF_D = Path("/opt/homebrew/etc/unbound/conf.d")
-DEFAULT_OUT_DIR = Path("/opt/adguardhome")
+DEFAULT_OUT_DIR = Path("/etc/adguardhome")
 
 # unbound block headers. A line consisting of one of these opens a section;
 # every `key: value` after it belongs to that section until the next header.

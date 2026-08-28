@@ -40,10 +40,11 @@ dns:
   # The alias itself is created at boot by com.schretzi.localhost-alias (the
   # unbound role installs it; localhost_alias 2-12 100).
   #
-  # NOTE: this is deliberately NOT 0.0.0.0. unbound binds the wildcard, so
-  # while it is running, AdGuard Home can only have a specific address. At
-  # cutover this becomes 0.0.0.0 (or 127.0.0.3 + 192.168.64.1) so the kiac VMs
-  # can reach it on the vmnet gateway.
+  # NOTE: this is the *trial* value. While unbound is running it holds the
+  # wildcard, so AdGuard Home can only have a specific address.
+  # Scripts/MacOS/adguardhome-cutover.sh flips this to 0.0.0.0 once unbound is
+  # stopped, which is what lets the kiac node VMs reach it on the vmnet gateway
+  # 192.168.64.1. allowed_clients above still limits who gets an answer.
   bind_hosts:
     - 127.0.0.3
   port: 53
@@ -59,11 +60,16 @@ dns:
     - id.server
     - hostname.bind
 
-  # Generated from unbound's forward-zones. The "." zone becomes the plain
-  # upstream lines; the work overlay's intranet zones become [/zone/]addr.
-  # macswitcher rewrites the unbound side of this on every context switch.
+  # Generated from unbound's forward-zones: the "." zone becomes the plain
+  # upstream lines, the work overlay's intranet zones become [/zone/]addr.
+  # macswitcher rewrites the default upstreams here on every context switch.
+  #
+  # Note the path. AdGuard Home forces its own work directory to 0700 at
+  # startup, so anything that must stay readable to a non-root process cannot
+  # live under /opt/adguardhome - and `macswitcher observe` reads this file as
+  # your user to show what is being forwarded.
   upstream_dns: []
-  upstream_dns_file: /opt/adguardhome/upstreams.conf
+  upstream_dns_file: /etc/adguardhome/upstreams.conf
   bootstrap_dns:
     - 9.9.9.10
     - 149.112.112.10
@@ -137,15 +143,15 @@ tls:
 # unbound does not do.
 filters:
   - enabled: true
-    url: /opt/adguardhome/zones/kiac.txt
+    url: /etc/adguardhome/zones/kiac.txt
     name: local zones - kiac
     id: 1001
   - enabled: true
-    url: /opt/adguardhome/zones/schretzi.txt
+    url: /etc/adguardhome/zones/schretzi.txt
     name: local zones - private overlay
     id: 1002
   - enabled: true
-    url: /opt/adguardhome/zones/work.txt
+    url: /etc/adguardhome/zones/work.txt
     name: local zones - work overlay
     id: 1003
   - enabled: true
@@ -184,7 +190,7 @@ filtering:
   # Local files AdGuard Home is allowed to load rule lists from. Without a
   # matching pattern the zones/*.txt filters above are refused.
   safe_fs_patterns:
-    - /opt/adguardhome/zones/*
+    - /etc/adguardhome/zones/*
     - /opt/adguardhome/data/userfilters/*
 
   # The security half of what AdGuard brings over unbound. Safe browsing is a

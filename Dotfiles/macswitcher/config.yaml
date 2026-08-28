@@ -23,7 +23,7 @@ dns:
 unbound:
   forwarders_file: /opt/homebrew/etc/unbound/conf.d/forwarders.conf
 adguard:
-  upstreams_file: /opt/adguardhome/upstreams.conf
+  upstreams_file: /etc/adguardhome/upstreams.conf
 daemons:
   unbound:
     label: net.unbound
@@ -31,6 +31,8 @@ daemons:
   adguardhome:
     label: com.schretzi.adguardhome
     scope: system
+  container:
+    label: com.apple.container.apiserver
   kerberos_keep_alive:
     label: com.schretzi.kerberoskeepalive
   omt:

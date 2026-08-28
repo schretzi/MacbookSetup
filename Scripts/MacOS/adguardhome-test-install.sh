@@ -32,6 +32,7 @@ set -euo pipefail
 
 AGH_VERSION="v0.107.79"
 AGH_PREFIX="/opt/adguardhome"
+AGH_GENERATED="/etc/adguardhome"
 AGH_LABEL="com.schretzi.adguardhome"
 AGH_ADDR="127.0.0.3"
 AGH_WEB_PORT="3000"
@@ -68,8 +69,8 @@ uninstall() {
     sudo launchctl bootout "system/${AGH_LABEL}" 2>/dev/null || true
     sudo rm -f "/Library/LaunchDaemons/${AGH_LABEL}.plist"
     sudo rm -f /etc/newsyslog.d/adguardhome.conf
-    log "removing ${AGH_PREFIX}"
-    sudo rm -rf "${AGH_PREFIX}"
+    log "removing ${AGH_PREFIX} and ${AGH_GENERATED}"
+    sudo rm -rf "${AGH_PREFIX}" "${AGH_GENERATED}"
     log "done - unbound was never touched; nothing else to undo"
     exit 0
 }
@@ -155,7 +156,13 @@ log "checksum ok"
 
 unzip -q -o "${tmp}/agh.zip" -d "${tmp}"
 
-sudo mkdir -p "${AGH_PREFIX}/zones" "${AGH_PREFIX}/data"
+sudo mkdir -p "${AGH_PREFIX}/data"
+# The generated inputs deliberately do NOT live under AGH_PREFIX: AdGuard Home
+# chmods its own work directory to 0700 at startup, which would make them
+# unreadable to anything running as the user - including `macswitcher observe`,
+# which reads the upstream file to show what is being forwarded.
+sudo mkdir -p "${AGH_GENERATED}/zones"
+sudo chmod 0755 "${AGH_GENERATED}" "${AGH_GENERATED}/zones"
 sudo install -m 0755 -o root -g wheel "${tmp}/AdGuardHome/AdGuardHome" "${AGH_PREFIX}/AdGuardHome"
 log "installed ${AGH_PREFIX}/AdGuardHome"
 
@@ -209,7 +216,7 @@ fi
 # 3. Zones and upstreams, generated from unbound
 # ---------------------------------------------------------------------------
 log "translating unbound's conf.d"
-sudo "${REPO_ROOT}/Scripts/MacOS/unbound_to_adguard.py" --out-dir "${AGH_PREFIX}"
+sudo "${REPO_ROOT}/Scripts/MacOS/unbound_to_adguard.py" --out-dir "${AGH_GENERATED}"
 
 # ---------------------------------------------------------------------------
 # 4. launchd + rotation

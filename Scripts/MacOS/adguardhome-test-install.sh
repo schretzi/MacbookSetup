@@ -87,10 +87,30 @@ uninstall() {
 ifconfig lo0 | grep -q "inet ${AGH_ADDR} " ||
     die "${AGH_ADDR} is not on lo0 - run: sudo /usr/local/bin/localhost_alias 2-12 100"
 
+# Everything below needs root. Establish that once, up front, with a message
+# that names the problem - otherwise the first sudo failure surfaces as
+# whatever that particular step was testing, which sent me chasing a bind
+# problem that did not exist.
+if ! sudo -n true 2>/dev/null; then
+    if [[ ! -t 0 ]]; then
+        die "this needs root and there is no terminal to ask on.
+Run it from an interactive shell:  Scripts/MacOS/adguardhome-test-install.sh
+(in Claude Code, prefix it with '!' so it runs in your session)."
+    fi
+    log "asking for sudo up front - the rest of the install needs root"
+    sudo -v || die "could not obtain root"
+fi
+
 # unbound binds 0.0.0.0:53, so it already holds every loopback alias. A
 # specific bind on top of a wildcard bind is exactly what has to work for the
 # two to run in parallel; find out now rather than from a crash loop later.
-if ! sudo python3 - "$AGH_ADDR" <<'EOF'
+# Exit 1 means the bind was refused; anything else means the probe itself
+# failed and says nothing about the address.
+# `|| probe_rc=$?` rather than a bare call followed by $?: under `set -e` an
+# unchecked failing command aborts the script before the exit code can be
+# read, so the diagnostic below would never print.
+probe_rc=0
+sudo python3 - "$AGH_ADDR" <<'EOF' || probe_rc=$?
 import socket, sys
 addr = sys.argv[1]
 for typ in (socket.SOCK_DGRAM, socket.SOCK_STREAM):
@@ -104,10 +124,13 @@ for typ in (socket.SOCK_DGRAM, socket.SOCK_STREAM):
     finally:
         s.close()
 EOF
-then
+if [[ ${probe_rc} -eq 1 ]]; then
     die "${AGH_ADDR}:53 is not bindable while unbound holds the wildcard.
 Options: point unbound at an explicit interface (interface: 127.0.0.2 in
 Dotfiles/unbound/unbound.conf) and restart it, or stop unbound for the test."
+elif [[ ${probe_rc} -ne 0 ]]; then
+    die "could not test whether ${AGH_ADDR}:53 is bindable (probe exited ${probe_rc}).
+Nothing has been changed."
 fi
 
 # ---------------------------------------------------------------------------
@@ -157,9 +180,15 @@ else
     # AdGuard Home stores a bcrypt hash; macOS ships htpasswd, which produces
     # exactly that.
     [[ -x /usr/sbin/htpasswd ]] || die "/usr/sbin/htpasswd not found - cannot hash the password"
-    printf 'web UI password for user "admin": '
-    read -rs password
-    echo
+    # AGH_WEB_PASSWORD lets this run unattended; otherwise ask, which needs a
+    # terminal to read from.
+    password="${AGH_WEB_PASSWORD:-}"
+    if [[ -z ${password} ]]; then
+        [[ -t 0 ]] || die "no web UI password: set AGH_WEB_PASSWORD, or run this from a terminal"
+        printf 'web UI password for user "admin": '
+        read -rs password
+        echo
+    fi
     [[ -n ${password} ]] || die "empty password"
     hash="$(/usr/sbin/htpasswd -nbB admin "${password}" | cut -d: -f2)"
     unset password

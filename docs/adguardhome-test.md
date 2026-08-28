@@ -196,9 +196,50 @@ networksetup -setdnsservers Wi-Fi 127.0.0.3   # try AdGuard Home
 networksetup -setdnsservers Wi-Fi 127.0.0.2   # back to unbound
 ```
 
-For a full cutover later, `dns.local_resolver` in
-`~/.config/macswitcher/config.yaml` is the one place that decides where every
-context points.
+`dns.local_resolver` in `~/.config/macswitcher/config.yaml` is **not** the one
+place that decides this, which is easy to get wrong: a context's own
+`dns.resolvers` overrides it, and every context except `work` pinned
+`127.0.0.2` explicitly. Switching the machine over means changing
+`local_resolver` *and* each context:
+
+```go
+resolvers := []string{strings.TrimSpace(cfg.DNS.LocalResolver)}
+if ctx, ok := cfg.Contexts[cfg.CurrentContext]; ok && len(ctx.DNS.Resolvers) > 0 {
+    resolvers = ctx.DNS.Resolvers   // context wins
+}
+```
+
+### Tailscale sits in front of the resolver
+
+Setup.md describes Tailscale as registering a split-DNS resolver for the
+tailnet domain only. That is not what it does here. With `--accept-dns` on it
+becomes the *system* resolver — `/etc/resolv.conf` says `100.100.100.100`, and
+`scutil --dns` puts it at order 103400, ahead of the loopback resolver at
+200000:
+
+```
+resolver #1  nameserver[0] : 100.100.100.100   order : 103400   (utun4)
+resolver #2  nameserver[0] : 127.0.0.3         order : 200000
+```
+
+This is harmless *as long as* the tailnet has no global nameservers configured:
+`tailscale dns status` then reports "no resolvers configured, system default
+will be used", and MagicDNS forwards everything that is not a tailnet name to
+whatever `networksetup` has set — so AdGuard Home stays in the path. Confirmed
+end to end: `dscacheutil -q host -a name doubleclick.net` returns `0.0.0.0`
+while `github.com` resolves normally, and `mbm5.tail3c0f6.ts.net` still works.
+
+Two consequences worth knowing:
+
+- Tailscale caches what it believes the system default is. After changing
+  `networksetup -setdnsservers`, check `tailscale dns status` really shows the
+  new address before concluding anything from a test.
+- If the tailnet ever gets a global nameserver in the admin console, or
+  "Override Local DNS" is turned on, **every local resolver is bypassed** —
+  unbound included. That would have been silently true for the old setup too.
+
+So a test through `dig @127.0.0.3` proves what AdGuard Home does; only
+`dscacheutil` (or an actual browser) proves what the machine does.
 
 Web UI: <http://127.0.0.3:3000> (user `admin`, password set at install).
 

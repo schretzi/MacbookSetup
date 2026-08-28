@@ -1,0 +1,278 @@
+# ============================================================================
+# AdGuard Home - the candidate replacement for unbound, on trial.
+# ============================================================================
+# This file is a SEED, not a symlink target. AdGuard Home rewrites its own
+# configuration whenever anything is changed through the web UI or the API, so
+# linking it back into the repository would write runtime state into the source
+# tree - the same lesson as unbound's forwarders.conf and macswitcher's
+# config.yaml.
+#
+#   Scripts/MacOS/adguardhome-test-install.sh   copies this to
+#   /opt/adguardhome/AdGuardHome.yaml the first time and never again.
+#
+# The parts that mirror unbound are NOT in here. They are generated from
+# unbound's own conf.d by Scripts/MacOS/unbound_to_adguard.py:
+#
+#   upstreams.conf   referenced below as dns.upstream_dns_file
+#   zones/*.txt      referenced below in the filters list
+#
+# so that while both resolvers run side by side, unbound's conf.d stays the
+# single source of truth and the two cannot drift.
+#
+# Password for the web UI at http://127.0.0.3:3000 is set by the installer.
+# ============================================================================
+
+http:
+  # The web UI rides on the same loopback alias as the resolver, so it does not
+  # collide with anything already on 127.0.0.1:3000.
+  address: 127.0.0.3:3000
+  session_ttl: 720h
+
+users: []
+auth_attempts: 5
+block_auth_min: 15
+http_proxy: ""
+language: en
+theme: auto
+
+dns:
+  # 127.0.0.3, because unbound has 127.0.0.2 and mDNSResponder has 127.0.0.1.
+  # The alias itself is created at boot by com.schretzi.localhost-alias (the
+  # unbound role installs it; localhost_alias 2-12 100).
+  #
+  # NOTE: this is deliberately NOT 0.0.0.0. unbound binds the wildcard, so
+  # while it is running, AdGuard Home can only have a specific address. At
+  # cutover this becomes 0.0.0.0 (or 127.0.0.3 + 192.168.64.1) so the kiac VMs
+  # can reach it on the vmnet gateway.
+  bind_hosts:
+    - 127.0.0.3
+  port: 53
+
+  # unbound's access-control, translated. Empty would mean "allow everyone";
+  # these are the same two ranges unbound allows - loopback and the kiac vmnet.
+  allowed_clients:
+    - 127.0.0.0/8
+    - 192.168.64.0/24
+  disallowed_clients: []
+  blocked_hosts:
+    - version.bind
+    - id.server
+    - hostname.bind
+
+  # Generated from unbound's forward-zones. The "." zone becomes the plain
+  # upstream lines; the work overlay's intranet zones become [/zone/]addr.
+  # macswitcher rewrites the unbound side of this on every context switch.
+  upstream_dns: []
+  upstream_dns_file: /opt/adguardhome/upstreams.conf
+  bootstrap_dns:
+    - 9.9.9.10
+    - 149.112.112.10
+  fallback_dns: []
+  upstream_mode: load_balance
+  fastest_timeout: 1s
+
+  # DNSSEC. Be clear about what this does: AdGuard Home does NOT validate
+  # locally the way unbound does. It sets the DO/AD bits towards the upstream
+  # and reports whatever AD flag comes back. Quad9 validates, so bogus domains
+  # still fail - but the validation is no longer happening on this machine.
+  # This is the one real regression against the unbound setup; see
+  # docs/adguardhome-test.md.
+  enable_dnssec: true
+
+  cache_size: 4194304
+  cache_ttl_min: 0
+  cache_ttl_max: 86400
+  cache_optimistic: true
+
+  # unbound answers .kiac and the private LAN zones locally, and those names
+  # must not be sent anywhere. use_private_ptr_resolvers/local_ptr_upstreams
+  # keep reverse lookups for the vmnet from leaking to the public internet.
+  private_networks:
+    - 192.168.64.0/24
+  use_private_ptr_resolvers: true
+  local_ptr_upstreams: []
+  hostsfile_enabled: true
+
+  ratelimit: 0
+  refuse_any: true
+  aaaa_disabled: false
+  handle_ddr: true
+  serve_plain_dns: true
+  serve_http3: false
+  use_http3_upstreams: false
+  edns_client_subnet:
+    custom_ip: ""
+    enabled: false
+    use_custom: false
+  max_goroutines: 300
+  upstream_timeout: 10s
+  pending_requests:
+    enabled: true
+
+tls:
+  enabled: false
+  server_name: ""
+  force_https: false
+  port_https: 443
+  port_dns_over_tls: 853
+  port_dns_over_quic: 853
+  port_dnscrypt: 0
+  dnscrypt_config_file: ""
+  allow_unencrypted_doh: false
+  certificate_chain: ""
+  private_key: ""
+  certificate_path: ""
+  private_key_path: ""
+  strict_sni_check: false
+
+# ---------------------------------------------------------------------------
+# Filters
+# ---------------------------------------------------------------------------
+# The local zone lists come first, generated from unbound's conf.d. Absolute
+# paths are read from disk rather than fetched over HTTP, and every one of them
+# has to be matched by filtering.safe_fs_patterns below or AdGuard Home refuses
+# to load it.
+#
+# The blocklists after them are the point of the whole exercise - the thing
+# unbound does not do.
+filters:
+  - enabled: true
+    url: /opt/adguardhome/zones/kiac.txt
+    name: local zones - kiac
+    id: 1001
+  - enabled: true
+    url: /opt/adguardhome/zones/schretzi.txt
+    name: local zones - private overlay
+    id: 1002
+  - enabled: true
+    url: /opt/adguardhome/zones/work.txt
+    name: local zones - work overlay
+    id: 1003
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
+    name: AdAway Default Blocklist
+    id: 2
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_59.txt
+    name: AdGuard DNS Popup Hosts filter
+    id: 59
+
+whitelist_filters: []
+
+user_rules:
+  - "! Hand-written exceptions go here - this list is NOT generated, so it"
+  - "! survives a regeneration of the zones/*.txt files above."
+  - "! Unblock something the blocklists got wrong:  @@||example.com^"
+
+filtering:
+  protection_enabled: true
+  filtering_enabled: true
+  blocking_mode: default
+  blocked_response_ttl: 10
+  filters_update_interval: 24
+
+  # DNS rewrites set through the web UI land here. The generated zone files
+  # above are the migrated unbound records; this stays empty so the two do not
+  # fight over the same name.
+  rewrites: []
+  rewrites_enabled: true
+
+  # Local files AdGuard Home is allowed to load rule lists from. Without a
+  # matching pattern the zones/*.txt filters above are refused.
+  safe_fs_patterns:
+    - /opt/adguardhome/zones/*
+    - /opt/adguardhome/data/userfilters/*
+
+  # The security half of what AdGuard brings over unbound. Safe browsing is a
+  # malware/phishing blocklist; parental control is off deliberately.
+  safebrowsing_enabled: true
+  safebrowsing_cache_size: 1048576
+  safebrowsing_block_host: standard-block.dns.adguard.com
+  parental_enabled: false
+  parental_cache_size: 1048576
+  parental_block_host: family-block.dns.adguard.com
+  safe_search:
+    enabled: false
+    bing: true
+    duckduckgo: true
+    ecosia: true
+    google: true
+    pixabay: true
+    yandex: true
+    youtube: true
+  safesearch_cache_size: 1048576
+  cache_time: 30
+  blocked_services:
+    schedule:
+      time_zone: Local
+    ids: []
+  max_http_size: 64MB
+
+clients:
+  runtime_sources:
+    whois: true
+    arp: true
+    rdns: true
+    dhcp: false
+    hosts: true
+  persistent: []
+
+querylog:
+  enabled: true
+  file_enabled: true
+  interval: 168h
+  size_memory: 1000
+  ignored: []
+  anonymize_client_ip: false
+
+statistics:
+  enabled: true
+  interval: 168h
+  ignored: []
+
+dhcp:
+  enabled: false
+  interface_name: ""
+  local_domain_name: lan
+  dhcpv4:
+    gateway_ip: ""
+    subnet_mask: ""
+    range_start: ""
+    range_end: ""
+    lease_duration: 86400
+    icmp_timeout_msec: 1000
+    options: []
+  dhcpv6:
+    range_start: ""
+    lease_duration: 86400
+    ra_slaac_only: false
+    ra_allow_slaac: false
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+# CONVENTIONS.md says nothing rotates itself and newsyslog owns rotation. This
+# is the documented exception, for the same reason as corp-vpn: AdGuard Home is
+# a third-party binary that holds its log fd open and cannot be taught to
+# reopen after newsyslog renames the file, so its own rotation stays on and
+# newsyslog only covers adguardhome.err.log (which launchd writes and which
+# stays a few KB).
+log:
+  file: /Library/Logs/adguardhome.log
+  max_backups: 5
+  max_size: 5
+  max_age: 30
+  compress: true
+  local_time: true
+  verbose: false
+
+os:
+  group: ""
+  user: ""
+  rlimit_nofile: 0
+
+schema_version: 34

@@ -122,6 +122,33 @@ A difference on `doubleclick.net` is AdGuard Home doing its job, not a fault.
 > (`sudo launchctl kickstart -k system/net.unbound`) before trusting a diff, or
 > every local name shows up as a false difference.
 
+### First measured run
+
+`--upstream`, both resolvers live, AdGuard Home freshly installed:
+
+| query               | unbound (127.0.0.2)      | AdGuard Home (127.0.0.3) |
+| ------------------- | ------------------------ | ------------------------ |
+| `example.com`       | same                     | same ✅                   |
+| `cloudflare.com`    | same                     | same ✅                   |
+| `google.com`        | same                     | same ✅                   |
+| `github.com`        | `140.82.121.4`           | `140.82.121.3` (round-robin, benign) |
+| `doubleclick.net`   | resolves                 | `0.0.0.0` — **blocking works** |
+| `dnssec-failed.org` | **resolves (NOERROR)**   | **SERVFAIL** ✅           |
+| AD flag             | **absent**               | **present** ✅            |
+| latency             | cold 10ms, cached 0ms    | cold 32ms, cached 0ms    |
+
+The DNSSEC rows are the opposite of what the theory predicts, and worth
+understanding rather than celebrating. The architectural point below still
+holds — AdGuard Home does not validate locally, it relays Quad9's verdict. But
+the unbound instance *actually running on this machine* is not validating at
+all: no AD flag, and it happily returns an address for `dnssec-failed.org`.
+Together with the stale zones and the refused control port, that says the
+running unbound is in a bad state, not that AdGuard Home has gained a feature.
+
+So: AdGuard Home is currently giving better answers than unbound is, while
+being architecturally the weaker of the two on this point. Fix unbound first,
+then re-run, or the comparison flatters AdGuard Home for the wrong reason.
+
 ---
 
 ## macswitcher

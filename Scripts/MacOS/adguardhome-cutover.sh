@@ -129,7 +129,11 @@ fi
 # ---------------------------------------------------------------------------
 # 1. Preconditions
 # ---------------------------------------------------------------------------
-[[ -f ${AGH_CONF} ]] || die "${AGH_CONF} not found - run adguardhome-test-install.sh first"
+# `sudo test`, not `[[ -f ]]`: AdGuard Home forces its work directory to 0700
+# at startup, so an unprivileged existence check reports "missing" for a file
+# that is plainly there - the directory cannot even be traversed.
+sudo test -f "${AGH_CONF}" ||
+    die "${AGH_CONF} not found - run adguardhome-test-install.sh first"
 
 sudo launchctl print "system/${AGH_LABEL}" >/dev/null 2>&1 ||
     die "${AGH_LABEL} is not loaded - run adguardhome-test-install.sh first"

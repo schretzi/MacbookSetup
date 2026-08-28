@@ -172,7 +172,12 @@ log "installed ${AGH_PREFIX}/AdGuardHome"
 # AdGuard Home rewrites this file on every change made through the web UI, so
 # it is copied rather than linked and never overwritten again. Same reasoning
 # as unbound's forwarders.conf and macswitcher's config.yaml.
-if [[ -f ${AGH_PREFIX}/AdGuardHome.yaml ]]; then
+# `sudo test`, not `[[ -f ]]`: AdGuard Home forces this directory to 0700 at
+# startup, so an unprivileged check cannot see the file and would report it as
+# missing. That matters more here than anywhere else - the else branch below
+# re-seeds the config, which would overwrite the live one (admin password hash
+# and every web-UI change with it) on every single re-run.
+if sudo test -f "${AGH_PREFIX}/AdGuardHome.yaml"; then
     log "AdGuardHome.yaml exists - left alone (delete it to re-seed)"
 else
     sudo install -m 0640 -o root -g wheel \

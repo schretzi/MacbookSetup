@@ -4,7 +4,7 @@ local_proxy:
   no_proxy:
     - localhost
     - 127.0.0.1
-    - "::1"
+    - ::1
     - kubernetes
     - kiac
 alpaca:
@@ -22,17 +22,25 @@ dns:
   local_resolver: 127.0.0.2
 unbound:
   forwarders_file: /opt/homebrew/etc/unbound/conf.d/forwarders.conf
-applications:
+adguard:
+  upstreams_file: /opt/adguardhome/upstreams.conf
+daemons:
   unbound:
-    reload:
-      - unbound-control
-      - reload
-    restart:
-      - sudo
-      - launchctl
-      - kickstart
-      - -k
-      - system/net.unbound
+    label: net.unbound
+    scope: system
+  adguardhome:
+    label: com.schretzi.adguardhome
+    scope: system
+  kerberos_keep_alive:
+    label: com.schretzi.kerberoskeepalive
+  omt:
+    label: com.schretzi.omt
+  vpn:
+    label: com.schretzi.corp-vpn
+    interface: utun99
+  tunneling:
+    label: com.schretzi.tunneling
+applications:
   docker:
     start:
       - open
@@ -55,3 +63,20 @@ applications:
       - osascript
       - -e
       - tell application "Elgato Stream Deck" to quit
+  unbound:
+    restart:
+      - sudo
+      - launchctl
+      - kickstart
+      - -k
+      - system/net.unbound
+    reload:
+      - unbound-control
+      - reload
+  adguardhome:
+    restart:
+      - sudo
+      - launchctl
+      - kickstart
+      - -k
+      - system/com.schretzi.adguardhome

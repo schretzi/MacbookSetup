@@ -29,17 +29,61 @@ instead of scattering them across chat history.
       `docs/adguardhome-test.md`. Zones/upstreams are still generated from
       unbound's `conf.d`, which stays the single source of truth.
 
-      Still open before this can be called finished:
-      - retire the unbound role. Its `conf.d` is still the source of truth
-        that AdGuard Home's zones are generated from, so the zones have to
-        move to native AdGuard Home rule files first — which also means
-        changing what LocalKubernetes' `host_dns` renders, and rewriting the
-        two overlay zone files.
+      Still open before this can be called finished — in this order, because
+      each step keeps DNS answering while the next is prepared:
+
+      1. **`work.txt` — work overlay.** Same move as `schretzi.txt` already
+         did: write `Dotfiles/adguardhome/zones.d/work.txt` in the work
+         overlay by hand (start from the current generated file, the rule set
+         must come out identical), swap `unbound_profiles_overlay` for
+         `adguardhome_zones_overlay` in its `overlay.yml`, then
+         `rm /opt/homebrew/etc/unbound/conf.d/corp.conf`. The role refuses to
+         manage a zone whose unbound source still exists, and says so with the
+         exact `rm`.
+         Also move its per-domain forwarders (`[/corp.example/]10.0.0.106`
+         and friends) into `adguardhome_upstreams_overlay`, or they vanish
+         from `upstreams.conf` the first time it is re-seeded.
+      2. **`kiac.txt` — LocalKubernetes.** `roles/host_dns` there renders
+         unbound config into `conf.d/kiac.conf`. It has to render AdGuard Home
+         rules into `/etc/adguardhome/zones/kiac.txt` instead and then call
+         `sudo -n /usr/local/bin/adguardhome_zones_refresh`. Until that lands,
+         `kiac.conf` must stay in `conf.d` and keep being translated — this is
+         the one zone that cannot simply be hand-written, because the vmnet
+         hands out new addresses on every reboot.
+      3. **macswitcher.** Drop `Unbound.ForwardersFile` and the writer behind
+         it (`internal/app/config.go`, `internal/app/network.go`). It already
+         writes `upstreams.conf` natively and preserves the `[/domain/]addr`
+         lines, so this is a removal, not a rewrite.
+      4. **Retire unbound.** Only once 1–3 are done and nothing reads
+         `conf.d` any more: the `unbound` role, `Dotfiles/unbound/`,
+         `net.unbound.plist`, the formula in `00_base.brew`, the
+         `unbound-restart` sudoers rule, `enable_unbound`,
+         `unbound_to_adguard.py`, `adguardhome-compare.sh`,
+         `adguardhome-cutover.sh`, `adguardhome-test-install.sh`, and
+         `adguardhome_legacy_confd` plus the migration guard in the
+         `adguardhome` role. On the machine: `launchctl bootout`,
+         `brew uninstall unbound`, remove the `_unbound` account and
+         `/opt/homebrew/etc/unbound`. Then rewrite `Setup.md` → DNS, which
+         still describes unbound as the resolver, and dissolve
+         `docs/adguardhome-test.md` into it — the trial is over.
       - a Homebrew tap formula + a GitHub workflow tracking upstream
         releases, so the version stops being pinned by hand. The `adguardhome`
         role installs the release itself now (verified against a checksum
         before it is unpacked), but bumping it is still editing two lines in
         `roles/adguardhome/defaults/main.yml`.
+
+      Two smaller things noticed on the way:
+      - **The `zonesync` account does not exist on this machine.** The zone
+        refresh therefore never takes the API path (`POST
+        /control/filtering/refresh`, no restart, cache kept) and always falls
+        back to rewriting the filter cache and restarting. Create the account
+        in the web UI with the password the role put in the System keychain
+        under `adguardhome api`.
+      - **Adding a zone to a running machine needs a manual step.** AdGuard
+        Home loads a rule list because `AdGuardHome.yaml`'s `filters:` block
+        names it with a fixed id, and that file belongs to the runtime after
+        the first seed. Either add the entry in the web UI, or delete the
+        config and let the role re-seed.
 
       **Open, deliberately not decided while the base setup is being
       finished — to understand properly first, then decide:**
@@ -68,6 +112,15 @@ instead of scattering them across chat history.
       before every resolver role. The addresses outlive whichever resolver
       uses them, which is exactly why tying them to unbound broke when unbound
       was switched off.
+- [ ] **`ansible-lint site.yml` is not clean.** `Ansible/README.md` says it
+      must stay clean; it currently reports 24 findings, all in the launchd
+      conventions work committed in fd44d94 and none of them behavioural:
+      7× `name[casing]` in `pf_vmnet_nat`, 12× `var-naming[no-role-prefix]`
+      across `kerberoskeepalive`, `launchd/require_service_cli`, `macswitcher`,
+      `mail` and `tunneling`, 3× `name[template]`, 1× `no-handler` in
+      `newsyslog`, 1× `yaml[line-length]` in `work`. Mechanical to fix, but it
+      touches five roles, so it wants its own commit rather than riding along
+      with something else.
 - [ ] **gcloud IAP tunneling wrapper script** — currently only documented
       manually in `Setup.md` (SSH key prereq via `gcloud compute ssh`,
       `/etc/hosts` `kubernetes` alias, stale-host-key workaround). Script

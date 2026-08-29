@@ -1,0 +1,153 @@
+---
+# The local zones AdGuard Home answers from, and the per-domain upstreams it
+# forwards to.
+#
+# Zones are plain AdGuard Home rule lists now, not translated from unbound.
+# The migration runs one zone at a time: a zone is either still listed in
+# unbound's conf.d (translated by unbound_to_adguard.py) or listed here
+# (installed from a repository), never both. The translator only prunes files
+# carrying its own header, so the two coexist while the move is under way.
+#
+# Registration is NOT here. AdGuard Home loads a zone because the `filters:`
+# block of AdGuardHome.yaml names it with a fixed id, and that file belongs to
+# the runtime after the first seed. Adding a zone to a machine that is already
+# running therefore means adding it in the web UI too, or deleting
+# AdGuardHome.yaml and letting the role re-seed. Setup.md says so as well.
+
+- name: AdGuardHome | merge the overlay zone contributions
+  ansible.builtin.set_fact:
+    adguardhome_all_zones: "{{ adguardhome_zones + adguardhome_zones_overlay }}"
+
+# A zone must not be in both worlds at once. unbound's conf.d is still read by
+# unbound_to_adguard.py on every refresh, so a leftover source there would
+# regenerate the file this role just installed - the two would take turns
+# overwriting each other, and which one AdGuard Home ends up serving would
+# depend on the order of the last run. Refuse instead.
+#
+# Migration machinery: goes away with unbound and its conf.d.
+- name: AdGuardHome | check no migrated zone still has an unbound source
+  ansible.builtin.stat:
+    path: "{{ adguardhome_legacy_confd }}/{{ item.file | splitext | first }}.conf"
+    follow: false
+  loop: "{{ adguardhome_all_zones | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: adguardhome_legacy_sources
+  changed_when: false
+  check_mode: false
+
+- name: AdGuardHome | fail on a zone that is migrated and still translated
+  ansible.builtin.assert:
+    that: not item.stat.exists
+    # Built from the loop item, not from the stat result: fail_msg is
+    # templated even when the assertion passes, and a stat result carries no
+    # `invocation` to read the path back out of.
+    fail_msg: >-
+      {{ item.item.file }} is installed from a repository, but
+      {{ adguardhome_legacy_confd }}/{{ item.item.file | splitext | first }}.conf
+      still exists, so unbound_to_adguard.py keeps regenerating it and the two
+      overwrite each other. Remove the leftover source:
+      rm {{ adguardhome_legacy_confd }}/{{ item.item.file | splitext | first }}.conf
+  loop: "{{ adguardhome_legacy_sources.results }}"
+  loop_control:
+    label: "{{ item.item.file }}"
+
+- name: AdGuardHome | install the zone files
+  ansible.builtin.copy:
+    src: "{{ item.root | default(repo_root) }}/Dotfiles/adguardhome/zones.d/{{ item.file }}"
+    dest: "{{ adguardhome_generated }}/zones/{{ item.file }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  loop: "{{ adguardhome_all_zones | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: adguardhome_zones_installed
+
+- name: AdGuardHome | remove the zone files that are switched off
+  ansible.builtin.file:
+    path: "{{ adguardhome_generated }}/zones/{{ item.file }}"
+    state: absent
+  become: true
+  loop: "{{ adguardhome_all_zones | rejectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: adguardhome_zones_removed
+
+# Seeded once, then owned by macswitcher - the same arrangement as unbound's
+# forwarders.conf, and the reason this is `force: false`.
+- name: AdGuardHome | seed the default upstreams
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Dotfiles/adguardhome/upstreams.conf"
+    dest: "{{ adguardhome_generated }}/upstreams.conf"
+    owner: root
+    group: wheel
+    mode: "0644"
+    force: false
+  become: true
+
+# Per-domain upstreams an overlay contributes ("[/intranet.example/]10.0.0.1").
+# Ensured line by line rather than templated: the rest of the file is
+# macswitcher's, rewritten on every context switch, and it carries these
+# lines over. Ensuring them here means an overlay can add one and have it
+# reach the machine on the next play instead of only on a re-seed.
+- name: AdGuardHome | ensure the overlay per-domain upstreams are present
+  ansible.builtin.lineinfile:
+    path: "{{ adguardhome_generated }}/upstreams.conf"
+    line: "{{ item }}"
+    regexp: "^{{ item | regex_escape }}$"
+    state: present
+  become: true
+  loop: "{{ adguardhome_upstreams_overlay }}"
+  register: adguardhome_upstreams_added
+
+# Anything else in zones/ is either written by another tool at runtime
+# (kiac.txt, rendered by LocalKubernetes' host_dns) or left over from a zone
+# that was removed from a repository. Point it out rather than deleting it.
+- name: AdGuardHome | list the zone files on disk
+  ansible.builtin.find:
+    paths: "{{ adguardhome_generated }}/zones"
+    patterns: "*.txt"
+  register: adguardhome_zones_found
+  changed_when: false
+  check_mode: false
+
+# Still-translated zones are not unowned - unbound's conf.d owns them until
+# they are migrated. They are recognisable by the header the generator writes,
+# which is also the only thing that makes it safe to prune them.
+- name: AdGuardHome | list the ones unbound_to_adguard.py still generates
+  ansible.builtin.find:
+    paths: "{{ adguardhome_generated }}/zones"
+    patterns: "*.txt"
+    contains: "Generated by Scripts/MacOS/unbound_to_adguard.py"
+  register: adguardhome_zones_generated
+  changed_when: false
+  check_mode: false
+
+- name: AdGuardHome | report zone files nobody owns
+  ansible.builtin.debug:
+    msg: >-
+      {{ item }} is loaded by AdGuard Home but is neither installed from a
+      repository, nor generated from unbound's conf.d, nor a known runtime
+      file. Add it to adguardhome_zones, or remove it.
+  loop: >-
+    {{ adguardhome_zones_found.files | map(attribute='path') | map('basename') | list
+       | difference(adguardhome_all_zones | map(attribute='file') | list)
+       | difference(adguardhome_zones_runtime)
+       | difference(adguardhome_zones_generated.files | map(attribute='path')
+                    | map('basename') | list) }}
+
+# Writing a zone file changes nothing on its own: AdGuard Home keeps its own
+# copy under data/filters/<id>.txt and does not re-read the path at startup.
+# The refresh script is what closes that gap, and it verifies the answers
+# afterwards rather than trusting them.
+- name: AdGuardHome | make AdGuard Home pick up the changed zones
+  ansible.builtin.command:
+    cmd: /usr/local/bin/adguardhome_zones_refresh
+  become: true
+  when: >-
+    (adguardhome_zones_installed.changed | default(false))
+    or (adguardhome_zones_removed.changed | default(false))
+    or (adguardhome_upstreams_added.changed | default(false))
+  changed_when: true

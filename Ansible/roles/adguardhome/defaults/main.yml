@@ -37,6 +37,44 @@ adguardhome_address: 127.0.0.3
 # newcomer, so it is the one that moves. "53" is the mnemonic.
 adguardhome_web_port: 3053
 
+# ---------------------------------------------------------------------------
+# Zones and upstreams
+# ---------------------------------------------------------------------------
+# Local zones, as native AdGuard Home rule lists installed from
+# <root>/Dotfiles/adguardhome/zones.d/<file>. This repository ships none of its
+# own - every zone here belongs to an overlay or to another tool.
+#
+# Being migrated off unbound one zone at a time: a zone is either still listed
+# in unbound's conf.d and translated by unbound_to_adguard.py, or listed here,
+# never both. The translator prunes only files carrying its own header, so the
+# two coexist while the move is under way.
+#
+# Adding a zone to a machine that already runs needs one manual step: AdGuard
+# Home loads a list because AdGuardHome.yaml's `filters:` block names it with
+# a fixed id, and that file is the runtime's after the first seed.
+adguardhome_zones: []
+# Where unbound's conf.d lives, so the role can refuse to manage a zone that is
+# still being translated from there. Migration machinery only - this and the
+# check that uses it go away with unbound.
+adguardhome_legacy_confd: "{{ homebrew_prefix }}/etc/unbound/conf.d"
+
+
+# Same shape, contributed by the overlays through their overlay.yml, plus
+# `root:` pointing at the checkout the file comes from.
+adguardhome_zones_overlay: []
+
+# Zone files written by something else at runtime, which this role must
+# neither install nor report as unmanaged. kiac.txt is re-rendered by
+# LocalKubernetes' host_dns role whenever the vmnet hands out new addresses.
+adguardhome_zones_runtime:
+  - kiac.txt
+
+# Per-domain upstreams an overlay contributes, in AdGuard Home's syntax:
+#   "[/intranet.example/]10.0.0.1"
+# Ensured line by line in upstreams.conf, whose default block macswitcher
+# rewrites on every network context switch while carrying these over.
+adguardhome_upstreams_overlay: []
+
 # AdGuard Home's accounts. It has no permission model - every entry in
 # `users:` is a full admin - so this is credential isolation, not privilege
 # isolation: the zone sync does not carry the human's password and can be

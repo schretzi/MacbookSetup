@@ -8,8 +8,9 @@
 # worth reading separately:
 #
 #   install.yml    the pinned release, verified before it is unpacked as root
-#   configure.yml  AdGuardHome.yaml, seeded exactly once, with its web account
-#   (here)         scripts, daemons, rotation, verification
+#   configure.yml  AdGuardHome.yaml, seeded exactly once, with its accounts
+#   zones.yml      the local zones and the per-domain upstreams
+#   (here)         scripts, daemons, rotation, zones, verification
 #
 # What this role does NOT own is anything AdGuard Home writes itself: the
 # config after the first seed, its data directory, its filter cache. The web
@@ -123,6 +124,18 @@
   vars:
     launchd_plist: "{{ adguardhome_label }}.plist"
     launchd_label: "{{ adguardhome_label }}"
+  when: adguardhome_enabled | bool
+
+# Zones last, and for the same reason the bind refresh is late: installing one
+# ends in adguardhome_zones_refresh, which runs the translator, talks to the
+# daemon and restarts it if the API is not reachable. Both the scripts it needs
+# and the LaunchDaemon it drives have to exist first - putting this before them
+# meant the refresh ran the *previously installed* translator, and the old one
+# pruned every zone file it had no unbound source for, including the one the
+# play had just installed. The zone then came back as "changed" on the next
+# run, for ever.
+- name: AdGuardHome | install its zones and upstreams
+  ansible.builtin.include_tasks: zones.yml
   when: adguardhome_enabled | bool
 
 # After the daemon is loaded, not before: this rewrites dns.bind_hosts and

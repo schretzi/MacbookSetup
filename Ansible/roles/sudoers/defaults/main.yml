@@ -1,7 +1,5 @@
 ---
-# Central switchboard for how sudo authenticates on this machine: which
-# commands need no password at all, whether Touch ID answers the prompt, and
-# how long an authentication is cached.
+# Central switchboard for passwordless sudo.
 #
 # Every NOPASSWD rule the user needs — for shell aliases like `flush_dns` or
 # for other roles that shell out to a root command at runtime — is declared
@@ -55,43 +53,6 @@ sudoers_rules:
 # (re)created; every command in sudoers_rules then falls back to a normal
 # password prompt through `sudo`.
 sudoers_passwordless_enabled: true
-
-# ---------------------------------------------------------------------------
-# Touch ID
-# ---------------------------------------------------------------------------
-# Authenticate `sudo` with the fingerprint sensor instead of the login
-# password, by writing /etc/pam.d/sudo_local (the include Apple provides for
-# exactly this and preserves across system updates). Turning this off removes
-# that file again, which is the stock macOS state.
-#
-# Falling back is automatic and unconditional: whenever the sensor is not
-# available or the caller cannot prompt, sudo asks for the password as before.
-sudoers_touchid_enabled: true
-
-# Only relevant inside tmux/screen: those detach the PAM session from the GUI
-# login session, so pam_tid has nowhere to show its dialog and Touch ID just
-# does nothing. pam_reattach fixes it - `brew install pam-reattach` first, the
-# role refuses to render a reference to a module that is not there. Off here
-# because kitty is the only terminal on this machine and needs none of it.
-sudoers_touchid_pam_reattach: false
-
-# ---------------------------------------------------------------------------
-# Credential cache
-# ---------------------------------------------------------------------------
-# Share one sudo credential cache across all terminals (/etc/sudoers.d/
-# 00-timestamp) rather than sudo's default of one per tty. Without it a
-# `sudo -v` typed in a shell does nothing for the sudo calls Ansible's become
-# makes from its own tty-less children, and every `become: true` task
-# authenticates separately.
-#
-# Set to false to keep sudo's stock per-terminal behaviour; the rule file is
-# then removed and `ansible-playbook` needs --ask-become-pass again.
-sudoers_shared_timestamp: true
-
-# Minutes the cache stays valid. Long enough to cover a full site.yml run,
-# whose become tasks are spread out over slow roles like homebrew; each use
-# renews it, so this only has to cover the longest gap between two of them.
-sudoers_timestamp_timeout: 20
 
 # kitty sets TERMINFO to its own bundled terminfo directory so it works
 # without the kitty-terminfo package being installed system-wide. sudo's

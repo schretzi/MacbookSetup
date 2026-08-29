@@ -1,0 +1,97 @@
+---
+# roles/adguardhome — the glue around an installed AdGuard Home, not the
+# install itself (see defaults/main.yml).
+#
+# Chain: bind refresh script -> LaunchDaemon that re-runs it as the vmnet comes
+# and goes -> sudoers rules so the LocalKubernetes playbooks can trigger both
+# refreshes without a password.
+
+- name: AdGuardHome | install the bind_hosts refresh script
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/adguardhome_bind_refresh.sh"
+    dest: /usr/local/bin/adguardhome_bind_refresh
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | ensure /usr/local/libexec exists
+  ansible.builtin.file:
+    path: /usr/local/libexec
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: adguardhome_enabled | bool
+
+# The bind_hosts editor the refresh script calls. Standard library only, on
+# purpose: it runs as root at boot, and PyYAML is only in the login user's
+# site-packages (see the script's header).
+- name: AdGuardHome | install the bind_hosts editor
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/adguardhome_bind_hosts.py"
+    dest: /usr/local/libexec/adguardhome_bind_hosts.py
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: adguardhome_enabled | bool
+
+# The generator is installed rather than called out of the repo checkout: the
+# zone refresh runs as root from a LaunchDaemon and from LocalKubernetes'
+# playbooks, and neither should depend on where this repository happens to be
+# cloned, or on it being readable at all. The repo copy stays the source.
+- name: AdGuardHome | install the unbound -> AdGuard Home translator
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/unbound_to_adguard.py"
+    dest: /usr/local/libexec/unbound_to_adguard.py
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | install the zone refresh script
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/adguardhome_zones_refresh.sh"
+    dest: /usr/local/bin/adguardhome_zones_refresh
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | install the LaunchDaemon that follows the vmnet gateway
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: daemon
+  vars:
+    launchd_plist: com.schretzi.adguardhome-bind.plist
+    launchd_label: com.schretzi.adguardhome-bind
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | rotate the bind refresh logs
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: adguardhome-bind.conf
+  when: adguardhome_enabled | bool
+
+# AdGuard Home writes adguardhome.log itself and keeps its own rotation on for
+# it (it holds the fd open and cannot reopen after a rename) - this conf covers
+# only the .err.log launchd writes. The documented exception in CONVENTIONS.md.
+- name: AdGuardHome | rotate the resolver's stderr log
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: adguardhome.conf
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | put the bind list right now rather than at the next tick
+  ansible.builtin.command: /usr/local/bin/adguardhome_bind_refresh
+  become: true
+  when: adguardhome_enabled | bool
+  register: adguardhome_bind_run
+  changed_when: "'bind_hosts:' in adguardhome_bind_run.stdout"

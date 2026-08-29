@@ -1,21 +1,32 @@
-# AdGuard Home, on trial next to unbound
+# AdGuard Home, the resolver
 
-unbound has been the local resolver here for years (Setup.md → DNS). This is an
-evaluation of **AdGuard Home** as its replacement, run *next to* it rather than
-instead of it: unbound keeps answering on `127.0.0.2`, AdGuard Home answers on
-`127.0.0.3`, and nothing about the unbound setup is modified. Backing out is
-deleting one directory and one plist.
+unbound was the local resolver here for years (Setup.md → DNS). AdGuard Home
+replaced it. This file is the record of that: it started as a side-by-side
+trial and the sections below are still written in that order, because the
+comparison is what the decision rests on — but the trial is over.
 
-The reason to consider the switch is the half unbound does not do: ad and
-tracker blocking, malware/phishing filtering, a query log and per-client stats.
-The reason to be careful about it is in [What is actually
-worse](#what-is-actually-worse) — it is not a strict upgrade.
+**Where things stand now:**
 
-**Nothing here is wired into `site.yml`.** A normal
-`ansible-playbook site.yml` neither installs, configures, nor removes any of
-it. If AdGuard Home wins the evaluation, the install moves into a Homebrew tap
-with a workflow tracking upstream releases, and the wiring becomes a role like
-every other daemon.
+| | |
+| --- | --- |
+| serving DNS | AdGuard Home, on `127.0.0.1/.2/.3` and, while the vmnet is up, `192.168.64.1` |
+| unbound | `bootout` + `launchctl disable`, `enable_unbound: false` |
+| unbound's `conf.d` | still the single source of truth for zones, *translated* into AdGuard Home's inputs |
+| in `site.yml` | the `adguardhome` role — the runtime glue only, **not** the install |
+| the install | still `Scripts/MacOS/adguardhome-test-install.sh`; there is no Homebrew formula |
+| rollback | `Scripts/MacOS/adguardhome-cutover.sh --revert` |
+
+The reason to make the switch was the half unbound does not do: ad and tracker
+blocking, malware/phishing filtering, a query log and per-client stats. The
+reason to be careful about it is in [What is actually
+worse](#what-is-actually-worse) — it is not a strict upgrade, and the open
+DNSSEC question in `BACKLOG.md` is still open.
+
+Two things the cutover broke that are worth reading before anything else,
+because neither was predicted and both took the machine's containers down:
+[Serving the vmnet](#serving-the-vmnet-why-bind_hosts-is-a-list-and-not-0000)
+and the web UI's port, at the end of [Pointing something at
+it](#pointing-something-at-it).
 
 ---
 
@@ -241,7 +252,246 @@ Two consequences worth knowing:
 So a test through `dig @127.0.0.3` proves what AdGuard Home does; only
 `dscacheutil` (or an actual browser) proves what the machine does.
 
-Web UI: <http://127.0.0.3:3000> (user `admin`, password set at install).
+Web UI: <http://127.0.0.3:3053> (user `admin`, password set at install).
+
+**Not 3000, and this is not cosmetic.** gitea publishes `0.0.0.0:3000` on the
+host, and a wildcard bind fails outright when a specific address on that port
+is already taken — so AdGuard Home holding `127.0.0.3:3000` stopped the gitea
+container from starting at all, with nothing but `bind(...): Address already
+in use (errno: 48)` to go on. AdGuard Home is the newcomer, so it moved.
+
+---
+
+## Serving the vmnet: why `bind_hosts` is a list and not `0.0.0.0`
+
+The cutover script set `bind_hosts: [0.0.0.0]`, mirroring unbound's
+`interface: 0.0.0.0`, on the reasoning that the wildcard covers the vmnet
+gateway `192.168.64.1` whenever it happens to exist. It does cover it — the
+socket accepts the query. It just never answers it.
+
+Measured on this machine, AdGuard Home v0.107.79, with a container running:
+
+| from | to | proto | result |
+| --- | --- | --- | --- |
+| host | `127.0.0.3:53` | UDP | answers |
+| host | `192.168.64.1:53` | TCP | answers |
+| container `192.168.64.2` | `192.168.64.1:53` | TCP | full answer |
+| container `192.168.64.2` | `192.168.64.1:53` | **UDP** | **silence** |
+| container `192.168.64.2` | `192.168.64.1:5354` (test echo server, wildcard bind) | UDP | answers |
+
+The last row is the one that rules everything else out: a plain wildcard UDP
+socket on the host replies to the container fine, so this is neither pf, nor
+Little Snitch, nor `allowed_clients` — the TCP rows come from the same client
+and are answered.
+
+What is left is visible in `lsof`. `bind_hosts: [0.0.0.0]` is a wildcard
+address, so Go opens **one AF_INET6 dual-stack socket**:
+
+```
+AdGuardHo  root  101u  IPv6  UDP *:53
+AdGuardHo  root  102u  IPv6  TCP *:53 (LISTEN)
+```
+
+TCP is connection-oriented and needs no help with the reply's source address.
+For UDP, dnsproxy reads the query's local address out of the socket's control
+messages and sets it explicitly on the reply — and for an IPv4-mapped client
+that is not on loopback, that reply does not leave the host. Every container
+and every kiac node VM gets `nameserver 192.168.64.1` from the runtime and asks
+over UDP, so the entire vmnet had no resolver: `kiac resume` could not pull an
+image, and containers could not resolve each other.
+
+Naming the addresses instead gives each one its own AF_INET socket:
+
+```
+AdGuardHo  root   96u  IPv4  UDP 127.0.0.1:53
+AdGuardHo  root  103u  IPv4  UDP 127.0.0.2:53
+AdGuardHo  root  104u  IPv4  UDP 127.0.0.3:53
+AdGuardHo  root  105u  IPv4  UDP 192.168.64.1:53
+```
+
+and the reply source is simply what the socket is bound to.
+
+### Which is why the bind list moves
+
+`192.168.64.1` exists only while the vmnet bridge is up, i.e. while at least
+one container runs — and AdGuard Home refuses to start on an address it cannot
+bind. A fixed list containing it would mean: boot with no containers, no
+resolver at all, launchd respawn-looping. So the list follows the interface:
+
+| | `bind_hosts` |
+| --- | --- |
+| vmnet up | `127.0.0.1 127.0.0.2 127.0.0.3 192.168.64.1` |
+| vmnet down | `127.0.0.1 127.0.0.2 127.0.0.3` |
+
+`Scripts/MacOS/adguardhome_bind_refresh.sh` owns that, installed as
+`/usr/local/bin/adguardhome_bind_refresh` by the `adguardhome` role and run by
+`com.schretzi.adguardhome-bind`. It restarts AdGuard Home only when the list
+really changes, and if the daemon does not come back it restores a byte-exact
+backup rather than leaving the machine without DNS.
+
+The plist polls every 60s rather than the 300s its sibling
+`com.schretzi.vmnet-nat-refresh` uses, because the trigger here is a container
+starting — which is not a system network change and touches neither watched
+file, so the poll is the primary mechanism and not the safety net. Anything
+that cannot wait a minute calls the script directly; it has a NOPASSWD rule.
+
+Two loopback addresses are in the list purely because the wildcard used to
+cover them: `127.0.0.1`, and `127.0.0.2` because that is the address unbound
+served for years and things still point at it.
+
+### Editing the config without PyYAML
+
+`adguardhome_bind_hosts.py` does the actual edit with the standard library
+only. That is not purity: the refresh script runs as root from a LaunchDaemon
+at boot and from Ansible's `become`, and PyYAML on this machine lives in
+`~/Library/Python/*/site-packages` — user site-packages, invisible to root. The
+first version imported `yaml` and died with `ModuleNotFoundError` the moment it
+left an interactive shell.
+
+It is a structural edit rather than a `sed`: it finds the top-level `dns:`
+mapping, then `bind_hosts:` inside it, and replaces exactly that key's list,
+copying every other byte through untouched — because AdGuard Home rewrites this
+file itself whenever anything changes in the web UI, so its formatting is not
+ours to predict. It reads block style at either indentation and flow style, and
+always writes block style.
+
+---
+
+## Keeping `.kiac` current
+
+The vmnet hands out addresses by DHCP in start order, so container and node-VM
+IPs drift on every reboot — `gitea.kiac` was `192.168.64.2` before this
+session's restart and `192.168.64.10` after it. Nothing here is static.
+
+LocalKubernetes' `roles/host_dns` is what tracks that: it looks up every
+container's live IP and each cluster's Gateway address, then re-renders
+`/opt/homebrew/etc/unbound/conf.d/kiac.conf`. That file is still the single
+source of truth — the whole point of migrating by translation rather than by
+copying — and it now has to be translated before anything reads it:
+
+```
+host_dns  ->  conf.d/kiac.conf  ->  adguardhome_zones_refresh
+                                    ->  /etc/adguardhome/zones/kiac.txt
+```
+
+`roles/host_dns` used to end with `launchctl kickstart -k system/net.unbound`.
+After the cutover that is a no-op — the job is booted out and `disable`d — so
+the render would be written and never served. It now calls
+`/usr/local/bin/adguardhome_zones_refresh` (and the bind refresh) instead, both
+through NOPASSWD rules so a non-interactive play can do it.
+
+### Restarting AdGuard Home does not reload a local rule list
+
+This is the trap, and it has no symptom other than wrong answers.
+
+A filter whose `url` is an absolute path is still a *filter list*: AdGuard Home
+keeps its own copy under `data/filters/<id>.txt`, and **that copy is what it
+loads**. It does not read the configured path at startup at all. So "write the
+file, kickstart the daemon" leaves it serving the previous addresses.
+
+Measured, in this session: gitea moved from `192.168.64.2` to `.10`, the zone
+file on disk said `.10`, AdGuard Home was restarted 12 seconds *after* the file
+was written — and `dig @127.0.0.3 gitea.kiac` still answered `.2`, with
+`blocked_response_ttl` as the TTL, i.e. straight out of a stale rewrite rule.
+Eleven of the nineteen names were wrong that way.
+
+The obvious guess — "drop the cached copy and it will re-read the source" — is
+wrong, and worth recording because it fails *silently in the right direction*.
+With `data/filters/1001.txt` moved aside and the daemon restarted:
+
+```
+gitea.kiac      -> (no answer)     the file was not recreated
+registry.kiac   -> (no answer)     nothing was read from zones/kiac.txt
+```
+
+A refresh from the `url` happens on the update interval or through the HTTP
+API, and the API needs the admin password — not something a non-interactive
+root script has.
+
+### The supported way: the API, live, no restart
+
+`POST /control/filtering/refresh` makes AdGuard Home re-read the local path and
+rewrite its cached copy — no restart, so the DNS cache survives. Measured, with
+the source file changed and nothing restarted:
+
+```
+{"updated":1}                              exactly the one list that changed
+data/filters/1001.txt                      rewritten, new mtime, new content
+gitea.kiac  192.168.64.10 -> 10.99.99.99   answered, without a restart
+```
+
+That is what `adguardhome_zones_refresh` does now.
+
+Beware how easy it is to mis-measure this. The first attempt queried the canary
+name *before* changing the zone, which cached the NXDOMAIN for
+`blocked_response_ttl` = 10s, then re-queried 2s later and read "no change"
+as "the API does not work". The second attempt used a name never queried
+before — and still got nothing, because a bare `A` rule in a `static` zone is
+swallowed by the `||kiac^$dnsrewrite=NXDOMAIN` catch-all unless it also gets
+its `@@` exception. The proof is the `gitea.kiac` row: an existing name, whose
+exception the generator already emits, changing address with no restart.
+
+### The credential
+
+The API needs one, and **AdGuard Home has no permission model**: every account
+under `users:` is a full admin. There is no read-only account and no way to
+scope one to `filtering/refresh`. A separate account is therefore credential
+isolation, not privilege isolation — worth having so a root script does not
+carry your own password and can be rotated on its own, but it is not a
+sandbox.
+
+Created once, by hand. `htpasswd` ships with macOS and produces the bcrypt
+hash AdGuard Home wants:
+
+```bash
+PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+HASH="$(htpasswd -bnBC 10 '' "$PASS" | tr -d ':\n')"
+# add {name: zonesync, password: $HASH} to users: in AdGuardHome.yaml, restart
+sudo security add-generic-password -U -s "adguardhome api" -a zonesync \
+     -w "$PASS" /Library/Keychains/System.keychain
+```
+
+The System keychain rather than the login keychain, because the reader is a
+root script with no login session. `adguardhome_zones_refresh` looks it up
+there and says so plainly when it is missing.
+
+### The fallback
+
+Without a credential — or with the API unreachable — the script writes the
+cached copy itself and restarts: each generated zone is copied over its
+`data/filters/<id>.txt` (`!` comment lines are valid in a rule list, so nothing
+is stripped). The `id` → source mapping comes out of AdGuard Home's own
+`filters:` block, so no ID is hardcoded. The source under
+`/etc/adguardhome/zones` is kept current either way — otherwise the next
+scheduled refresh would quietly revert everything.
+
+The previous cached copy is kept aside until the zone verifies, and put back if
+it does not, so a failed attempt never leaves the machine with no `.kiac` zone
+at all — which is worse than a stale one.
+
+### Why the zones show up under "Blocklists" in the web UI
+
+Because AdGuard Home has exactly two list categories, `filters` and
+`whitelist_filters`, and a rule list full of `$dnsrewrite` rules belongs to the
+first. There is no "local zones" category to put them in. Cosmetic; the `name`
+field (`local zones - kiac`) is what tells them apart.
+
+And it verifies unconditionally, not just when the generated files changed —
+checking only on change would miss precisely this bug, where the files are
+current on disk and the served answers are not. Every
+`||name^$dnsrewrite=NOERROR;A;addr` rule in `zones/kiac.txt` is queried and
+compared; a disagreement is printed and exits non-zero.
+
+A restart is still only issued when something actually needs it: it costs the
+whole DNS cache, and there is no `unbound-control reload` equivalent.
+
+By hand, after any zone change:
+
+```bash
+cd ~/Workspace/Schretzi/LocalKubernetes
+ansible-playbook playbooks/dns-update.yml     # re-render conf.d from live IPs
+sudo -n /usr/local/bin/adguardhome_zones_refresh
+```
 
 ---
 
@@ -262,12 +512,13 @@ Worth being honest about before switching, because none of it shows up in a
    become unnecessary: there is no local validation for a split-horizon zone to
    be exempted from.
 
-2. **The kiac VMs are not covered yet.** They take their nameserver from the
-   vmnet gateway `192.168.64.1`, so they follow whatever the active network
-   service points at. While AdGuard Home is bound to `127.0.0.3` only, pointing
-   the system at it works for the host; a real cutover needs `bind_hosts` to
-   include `192.168.64.1` (or `0.0.0.0`), which cannot happen while unbound
-   holds the wildcard.
+2. **The kiac VMs need a moving bind list.** They take their nameserver from
+   the vmnet gateway `192.168.64.1`, which exists only while a container runs.
+   unbound served that address from a single `interface: 0.0.0.0` line and
+   needed nothing further; AdGuard Home cannot (see [Serving the
+   vmnet](#serving-the-vmnet-why-bind_hosts-is-a-list-and-not-0000)), so it
+   takes a script, a LaunchDaemon and two sudo rules to do what one line of
+   unbound config did. That is a real cost of the switch, not a footnote.
 
 3. **A third-party daemon that rotates its own log.** CONVENTIONS.md says
    nothing rotates itself. AdGuard Home holds its log fd open and cannot be
@@ -289,9 +540,19 @@ configured nameserver, so neither needs anything here.
 | path                                       | what                                          |
 | ------------------------------------------ | --------------------------------------------- |
 | `Scripts/MacOS/adguardhome-test-install.sh`| install / update / uninstall                   |
+| `Scripts/MacOS/adguardhome-cutover.sh`     | hand DNS over from unbound, and `--revert`     |
 | `Scripts/MacOS/unbound_to_adguard.py`      | the migration itself                           |
 | `Scripts/MacOS/adguardhome-compare.sh`     | diff the two resolvers                         |
+| `Scripts/MacOS/adguardhome_bind_refresh.sh`| keeps `bind_hosts` following the vmnet gateway |
+| `Scripts/MacOS/adguardhome_bind_hosts.py`  | the config edit, standard library only         |
+| `Scripts/MacOS/adguardhome_zones_refresh.sh`| re-translates `conf.d`, restarts only on a real change |
+| `Ansible/roles/adguardhome/`               | installs the three above, the daemon and the rotation |
 | `Dotfiles/adguardhome/AdGuardHome.yaml.seed`| base config, seeded once then runtime-owned   |
-| `plists/LaunchDaemon/com.schretzi.adguardhome.plist` | the daemon                          |
-| `etc/newsyslog.d/adguardhome.conf`         | rotation for the err log only                  |
-| `/opt/adguardhome/`                        | binary, live config, generated zones (not in git) |
+| `plists/LaunchDaemon/com.schretzi.adguardhome.plist` | the resolver daemon                 |
+| `plists/LaunchDaemon/com.schretzi.adguardhome-bind.plist` | the bind refresh job          |
+| `etc/newsyslog.d/adguardhome.conf`         | rotation for the resolver's err log only       |
+| `etc/newsyslog.d/adguardhome-bind.conf`    | rotation for the bind refresh job              |
+| `/opt/adguardhome/`                        | binary, live config (not in git)               |
+| `/etc/adguardhome/`                        | generated upstreams and zones (not in git)     |
+| System keychain, `adguardhome api`         | the `zonesync` API password (not in git)       |
+| `LocalKubernetes/roles/host_dns/`          | renders `conf.d/kiac.conf` from live IPs, then calls the two refreshes |

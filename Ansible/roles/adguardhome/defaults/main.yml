@@ -1,0 +1,13 @@
+---
+# This role does NOT install AdGuard Home. The install is still
+# Scripts/MacOS/adguardhome-test-install.sh (there is no Homebrew formula, and
+# the trial has not been decided - see BACKLOG.md). What the role owns is the
+# runtime glue that keeps a *already installed* AdGuard Home serving this
+# machine correctly:
+#
+#   adguardhome_bind_refresh    dns.bind_hosts follows the kiac vmnet gateway
+#   adguardhome_zones_refresh   unbound's conf.d -> AdGuard Home's zone files
+#
+# Both are no-ops when /opt/adguardhome is not there, so turning this on before
+# deciding the trial costs nothing.
+adguardhome_enabled: true

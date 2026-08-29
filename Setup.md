@@ -783,22 +783,29 @@ That writes `/etc/resolver/mydomain`, which mDNSResponder consults _before_ the
 configured nameserver — so those names resolve on the host regardless of
 whether the system points at unbound.
 
-**kiac clusters resolve through the host.** kiac is a Go tool of its own
-(`~/Workspace/Schretzi/kiac`); nothing about it is installed from this
-repository. Its node VMs sit on the same `vmnet` network and take their
-nameserver from the vmnet gateway `192.168.64.1` — the Mac's own mDNSResponder
-— so their lookups follow whatever the active network service points at. With
-the system pointed at `127.0.0.2`, `kiac.conf` answers `*.kiac` for the VMs as
-well as for the host. It maps the fixed vmnet addresses: host-side containers
-(gitea, registry, the pull-through mirrors) at `192.168.64.10-15`, and each
-cluster's Gateway LoadBalancer at `.20` (main) and `.30` (test1).
+**kiac clusters and containers resolve through the host.** kiac is a Go tool of
+its own (`~/Workspace/Schretzi/kiac`); nothing about it is installed from this
+repository. Its node VMs — and every `container` the runtime starts — sit on
+the same `vmnet` network and get `nameserver 192.168.64.1` written into their
+`resolv.conf`. That address is the host end of the vmnet bridge, and the
+resolver has to be *listening on it*; it is not mDNSResponder forwarding on
+their behalf. unbound did that with `interface: 0.0.0.0`. AdGuard Home cannot
+use a wildcard here — see `docs/adguardhome-test.md` → Serving the vmnet — so
+`192.168.64.1` is added to and removed from its `bind_hosts` by
+`com.schretzi.adguardhome-bind` as the vmnet comes and goes.
 
-Two consequences follow from going through mDNSResponder:
+The addresses are **not** fixed, despite what an out-of-date reading of
+`kiac.conf` suggests. The vmnet hands them out by DHCP in start order, so they
+move on every reboot. LocalKubernetes' `roles/host_dns` looks up the live ones
+and re-renders `conf.d/kiac.conf`, which is then translated into AdGuard Home's
+zone file — see the same document, "Keeping `.kiac` current".
+
+Two consequences of the VMs asking the host directly:
 
 - A `/etc/resolver` split — the container runtime's, Tailscale's — is host-side
   only. Anything the VMs must resolve needs a real zone here.
-- A VPN client that seizes port 53 stops mDNSResponder answering on the gateway
-  and every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
+- A VPN client that seizes port 53 takes the gateway's resolver with it, and
+  every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
   writes the VM's `resolv.conf` directly and bypasses the gateway, but only at
   creation time.
 
@@ -1111,6 +1118,7 @@ Not automated yet — no wrapper script exists here for
 
   Not yet wired into the `unbound`/`gcloud` roles - a manual, one-time edit
   until the tunnel wrapper script lands.
+
 - **Tunnel connects but the SSH session immediately drops/reconnects** — this
   is almost always a stale or untrusted host key/cert for `localhost:<port>`
   in `~/.ssh/known_hosts`, not a problem with the tunnel itself. Connect

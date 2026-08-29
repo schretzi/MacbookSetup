@@ -212,16 +212,35 @@ if pgrep -qf "sbin/unbound -d"; then
     warn "an unbound process is still alive; AdGuard Home may fail to take the wildcard"
 fi
 
-# 0.0.0.0 mirrors unbound's `interface: 0.0.0.0`. It is not as open as it looks:
-# dns.allowed_clients still restricts answers to loopback and the kiac vmnet,
-# exactly like unbound's access-control did. Binding the wildcard rather than
-# naming addresses is deliberate - 192.168.64.1 only exists while the vmnet is
-# up, and naming an address that is missing is what makes a resolver refuse to
-# start at boot.
-log "binding AdGuard Home to 0.0.0.0 (allowed_clients still restricts who is answered)"
-set_bind_hosts '["0.0.0.0"]'
+# Explicit addresses, NOT the wildcard - this is the one thing about the
+# cutover that was originally wrong and took the machine's containers down.
+#
+# `0.0.0.0` looks like the obvious mirror of unbound's `interface: 0.0.0.0`,
+# and it does bind. But Go turns a wildcard into a single AF_INET6 dual-stack
+# socket, and on Darwin dnsproxy's UDP replies to IPv4-mapped clients off
+# loopback never leave the host: AdGuard Home answered TCP on 192.168.64.1 and
+# dropped every UDP query. Every container and kiac node VM gets
+# `nameserver 192.168.64.1` and asks over UDP, so the whole vmnet lost DNS -
+# see docs/adguardhome-test.md, "Serving the vmnet".
+#
+# 192.168.64.1 is deliberately not added here: it exists only while the vmnet
+# bridge is up, and AdGuard Home refuses to start on an address it cannot bind.
+# adguardhome_bind_refresh owns that half and is called right after.
+log "binding AdGuard Home to the loopback aliases (allowed_clients still restricts who is answered)"
+set_bind_hosts '["127.0.0.1", "127.0.0.2", "127.0.0.3"]'
 
 sudo launchctl kickstart -k "system/${AGH_LABEL}"
+
+# Add the vmnet gateway now if it happens to be up. Installed by the
+# `adguardhome` Ansible role; skipped with a pointer rather than failing, so a
+# cutover on a machine that has not run the play yet still completes.
+if [[ -x /usr/local/bin/adguardhome_bind_refresh ]]; then
+    sudo /usr/local/bin/adguardhome_bind_refresh || true
+else
+    warn "/usr/local/bin/adguardhome_bind_refresh is missing - run
+  ansible-playbook site.yml --tags adguardhome --ask-become-pass
+or the kiac VMs will have no resolver whenever the vmnet is up."
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Verify, or put unbound back
@@ -236,7 +255,7 @@ for _ in $(seq 1 40); do
 done
 
 if [[ ${ok} != true ]]; then
-    warn "AdGuard Home did not come back on the wildcard - rolling back to unbound"
+    warn "AdGuard Home did not come back on the new bind list - rolling back to unbound"
     set_bind_hosts '["127.0.0.3"]'
     sudo launchctl kickstart -k "system/${AGH_LABEL}" || true
     start_unbound
@@ -255,7 +274,7 @@ if ifconfig 2>/dev/null | grep -q "inet 192.168.64.1 "; then
         warn "192.168.64.1 exists but AdGuard Home does not answer there"
     fi
 else
-    log "vmnet is down, so 192.168.64.1 could not be checked - it is covered by the wildcard once kiac starts"
+    log "vmnet is down, so 192.168.64.1 could not be checked - com.schretzi.adguardhome-bind adds it once kiac starts"
 fi
 
 sudo -n /usr/bin/dscacheutil -flushcache 2>/dev/null || true

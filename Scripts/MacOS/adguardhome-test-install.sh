@@ -35,7 +35,10 @@ AGH_PREFIX="/opt/adguardhome"
 AGH_GENERATED="/etc/adguardhome"
 AGH_LABEL="com.schretzi.adguardhome"
 AGH_ADDR="127.0.0.3"
-AGH_WEB_PORT="3000"
+# 3053, not 3000: gitea publishes 0.0.0.0:3000 on the host, and a wildcard
+# bind collides with an already-bound specific address. AdGuard Home is the
+# newcomer here, so it is the one that moves. "53" is the mnemonic.
+AGH_WEB_PORT="3053"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

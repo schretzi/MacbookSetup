@@ -24,6 +24,40 @@ instead of scattering them across chat history.
 
 ## In progress / follow-ups
 
+- [ ] **AdGuard Home as unbound's replacement** — cutover done, unbound is
+      booted out and `launchctl disable`d, `enable_unbound: false`. See
+      `docs/adguardhome-test.md`. Zones/upstreams are still generated from
+      unbound's `conf.d`, which stays the single source of truth.
+
+      Still open before this can be called finished:
+      - Homebrew tap formula + a GitHub workflow tracking upstream releases;
+        the install is still `Scripts/MacOS/adguardhome-test-install.sh` with
+        a pinned version and hardcoded checksums. The `adguardhome` role
+        covers only the runtime glue.
+      - retire the unbound role (see the localhost-alias item below).
+
+      Open question that decides whether to keep it at all: **DNSSEC is no
+      longer validated locally** (AdGuard Home only relays the upstream's AD
+      flag). Is trusting Quad9's validation acceptable in exchange for the
+      ad/tracker/malware filtering?
+
+      Two costs of the switch that only surfaced once the machine ran on it,
+      both now fixed, both worth weighing in that decision:
+      - `bind_hosts: 0.0.0.0` does not serve the vmnet. AdGuard Home answers
+        TCP but silently drops UDP replies to non-loopback IPv4-mapped
+        clients, so every container and kiac node VM lost DNS. unbound did
+        this with one `interface: 0.0.0.0` line; AdGuard Home needs a script,
+        a LaunchDaemon and two sudo rules to follow `192.168.64.1` as the
+        vmnet comes and goes.
+      - the web UI on `127.0.0.3:3053` blocked gitea from publishing
+        `0.0.0.0:3000`. Moved to `3053`.
+- [ ] **Untangle com.schretzi.localhost-alias from the unbound role.** With
+      `enable_unbound: false` the loopback aliases 127.0.0.2-.12 are no longer
+      managed by Ansible — but AdGuard Home's web UI (`127.0.0.3:3053`) and its
+      resolver address still depend on them. The daemon stays loaded and keeps
+      working; it simply stops being reinstalled on a fresh machine. Give it
+      its own role (or fold it into an adguardhome role) before the unbound
+      role is deleted.
 - [ ] **gcloud IAP tunneling wrapper script** — currently only documented
       manually in `Setup.md` (SSH key prereq via `gcloud compute ssh`,
       `/etc/hosts` `kubernetes` alias, stale-host-key workaround). Script
@@ -57,3 +91,4 @@ instead of scattering them across chat history.
   `kiac.conf` seed-once behavior, kitty layout cycling + tab window-count
   indicator, mini.files → neo-tree explorer swap, Tab/Shift-Tab buffer
   cycling, Starship second prompt line (proxy state + kubernetes context).
+

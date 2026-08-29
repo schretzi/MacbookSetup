@@ -22,10 +22,29 @@ sudoers_rules:
   # like unbound-control. Without this rule the switch prompts for a password
   # from a LaunchAgent that has no terminal, i.e. it silently keeps serving the
   # previous network's resolvers.
+  #
+  # Unlike the zone files: those are filter lists, and those AdGuard Home will
+  # re-read on POST /control/filtering/refresh without a restart. upstream_dns_file
+  # is not a filter list and has no such endpoint, so this rule stays.
   - name: adguardhome-restart
     comment: restart the AdGuard Home resolver (macswitcher context switches; AdGuard Home has no reload signal)
     commands:
       - /bin/launchctl kickstart -k system/com.schretzi.adguardhome
+
+  # The vmnet gateway 192.168.64.1 appears when the first container starts, and
+  # AdGuard Home has to be rebound onto it before any container or kiac node VM
+  # can resolve anything. The LaunchDaemon notices within a minute; the
+  # LocalKubernetes playbooks cannot wait that long in the middle of a cluster
+  # create, so they call these directly.
+  - name: adguardhome-bind-refresh
+    comment: re-point AdGuard Home's bind_hosts at the kiac vmnet gateway as it comes and goes (adguardhome role)
+    commands:
+      - /usr/local/bin/adguardhome_bind_refresh
+
+  - name: adguardhome-zones-refresh
+    comment: re-translate unbound's conf.d into AdGuard Home's zone files after LocalKubernetes re-renders kiac.conf
+    commands:
+      - /usr/local/bin/adguardhome_zones_refresh
 
   - name: kanata-restart
     comment: restart the kanata daemon (kanata_restart alias, re-grabs keyboard after cable/Bluetooth switch)

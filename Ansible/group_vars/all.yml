@@ -100,9 +100,22 @@ enable_mail: true
 # them. Deliberately independent of which resolver is switched on below.
 enable_localhost_alias: true
 
-# unbound resolver: _unbound user, configs, LaunchDaemon
-# (needs sudo)
-enable_unbound: true
+# unbound resolver: _unbound user, configs, LaunchDaemon (needs sudo)
+#
+# OFF: DNS has been handed over to AdGuard Home, which now binds the wildcard
+# and serves every address unbound used to - see docs/adguardhome-test.md and
+# Scripts/MacOS/adguardhome-cutover.sh. Leaving this on would reinstall and
+# restart unbound on the next run, and it would fight AdGuard Home for port 53.
+#
+# Being retired, but not yet deletable: unbound's conf.d is still the source
+# of truth that AdGuard Home's zones are generated from. See BACKLOG.md.
+enable_unbound: false
+
+# AdGuard Home's runtime glue: the bind_hosts refresh that follows the kiac
+# vmnet gateway, and the zone refresh that re-translates unbound's conf.d. Not
+# the install - that is still Scripts/MacOS/adguardhome-test-install.sh, and
+# the role is a no-op on a machine where AdGuard Home is not present.
+enable_adguardhome: true
 
 # pf NAT for LocalKubernetes' (kiac) vmnet subnet, kept pointed at whichever
 # interface currently owns the default route (Wi-Fi/Ethernet/VPN switches)

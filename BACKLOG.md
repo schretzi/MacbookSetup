@@ -36,10 +36,17 @@ instead of scattering them across chat history.
         covers only the runtime glue.
       - retire the unbound role (see the localhost-alias item below).
 
-      Open question that decides whether to keep it at all: **DNSSEC is no
-      longer validated locally** (AdGuard Home only relays the upstream's AD
-      flag). Is trusting Quad9's validation acceptable in exchange for the
-      ad/tracker/malware filtering?
+      **Open, deliberately not decided while the base setup is being
+      finished — to understand properly first, then decide:**
+      - **DNSSEC is no longer validated locally.** AdGuard Home only relays
+        the upstream's AD flag, so the machine now trusts Quad9's validation
+        rather than doing its own. What does that actually give up, and
+        against what — the ad/tracker/malware filtering?
+      - **DNS over TLS / DNS over HTTPS.** AdGuard Home can speak both
+        upstream. How they relate to DNSSEC (transport privacy vs. answer
+        authenticity — they solve different problems and do not replace each
+        other), what it costs, and what it means for the upstreams
+        macswitcher rewrites per network context.
 
       Two costs of the switch that only surfaced once the machine ran on it,
       both now fixed, both worth weighing in that decision:
@@ -51,13 +58,11 @@ instead of scattering them across chat history.
         vmnet comes and goes.
       - the web UI on `127.0.0.3:3053` blocked gitea from publishing
         `0.0.0.0:3000`. Moved to `3053`.
-- [ ] **Untangle com.schretzi.localhost-alias from the unbound role.** With
-      `enable_unbound: false` the loopback aliases 127.0.0.2-.12 are no longer
-      managed by Ansible — but AdGuard Home's web UI (`127.0.0.3:3053`) and its
-      resolver address still depend on them. The daemon stays loaded and keeps
-      working; it simply stops being reinstalled on a fresh machine. Give it
-      its own role (or fold it into an adguardhome role) before the unbound
-      role is deleted.
+- [x] **Untangle com.schretzi.localhost-alias from the unbound role.** Done:
+      its own role `localhost_alias`, behind `enable_localhost_alias`, running
+      before every resolver role. The addresses outlive whichever resolver
+      uses them, which is exactly why tying them to unbound broke when unbound
+      was switched off.
 - [ ] **gcloud IAP tunneling wrapper script** — currently only documented
       manually in `Setup.md` (SSH key prereq via `gcloud compute ssh`,
       `/etc/hosts` `kubernetes` alias, stale-host-key workaround). Script

@@ -1,0 +1,12 @@
+---
+# Where the tunneling binary lives.
+#
+# ~/bin, not {{ homebrew_prefix }}/bin, because there is no cask for it yet -
+# it is installed from its own repo with `make install`. Switch this to
+# "{{ homebrew_prefix }}/bin/tunneling" when schretzi/tap/tunneling is
+# published and added to Brewfiles/00_base.brew.
+#
+# Whatever this points at must be a *stable* path: it is written verbatim into
+# the LaunchAgent plist, so a path that changes on upgrade leaves launchd
+# retrying a deleted executable. See CONVENTIONS.md §5.
+tunneling_bin: "{{ ansible_env.HOME }}/bin/tunneling"

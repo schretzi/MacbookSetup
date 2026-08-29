@@ -59,8 +59,15 @@
     name: launchd
     tasks_from: daemon
   vars:
-    launchd_plist: com.kiac.vmnet-nat-refresh.plist
-    launchd_label: com.kiac.vmnet-nat-refresh
+    launchd_plist: com.schretzi.vmnet-nat-refresh.plist
+    launchd_label: com.schretzi.vmnet-nat-refresh
+  when: pf_vmnet_nat_enabled | bool
+
+- name: pf_vmnet_nat | rotate the NAT refresh logs
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: vmnet-nat-refresh.conf
   when: pf_vmnet_nat_enabled | bool
 
 - name: pf_vmnet_nat | reload pf with the new ruleset now

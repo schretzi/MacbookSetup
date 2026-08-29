@@ -16,8 +16,8 @@
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/unbound.out.log</string>
+    <string>/Library/Logs/unbound.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/unbound.err.log</string>
+    <string>/Library/Logs/unbound.err.log</string>
 </dict>
 </plist>

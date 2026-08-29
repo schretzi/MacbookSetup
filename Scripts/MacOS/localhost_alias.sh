@@ -2,12 +2,15 @@
 # Add extra loopback addresses to lo0.
 #
 # macOS ships lo0 with 127.0.0.1 only, and mDNSResponder already owns port 53
-# on it. unbound therefore listens on 127.0.0.2, and the k3d/cluster.local
-# zones in Dotfiles/unbound/ resolve to 127.0.0.3 ... 127.0.0.12 and
-# 127.0.0.100. Those addresses have to exist before anything can bind them.
+# on it. Every local resolver here therefore binds a different loopback
+# address - AdGuard Home 127.0.0.3 for DNS and its web UI, unbound 127.0.0.2
+# while it is still installed - and the cluster zones answer with 127.0.0.3
+# ... 127.0.0.12 and 127.0.0.100. Those addresses have to exist before
+# anything can bind them, and macOS drops them on every reboot.
 #
 # Deployed to /usr/local/bin/localhost_alias (root:wheel 0755) by the Ansible
-# role "unbound" and started by /Library/LaunchDaemons/org.localhost.alias.plist.
+# role "localhost_alias" and started by
+# /Library/LaunchDaemons/com.schretzi.localhost-alias.plist.
 #
 # Usage: localhost_alias <octet|from-to> [...]
 #   localhost_alias 2-12 100   -> 127.0.0.2 .. 127.0.0.12 and 127.0.0.100

@@ -3,15 +3,18 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.kiac.vmnet-nat-refresh</string>
+    <string>com.schretzi.vmnet-nat-refresh</string>
+
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/vmnet_nat_refresh</string>
     </array>
+
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <false/>
+
     <!-- Re-run whenever macOS rewrites its network configuration state
          (Wi-Fi/Ethernet switch, VPN connect/disconnect, DHCP renewal,
          etc.) - both files are touched on essentially any interface or
@@ -21,14 +24,22 @@
         <string>/Library/Preferences/SystemConfiguration/preferences.plist</string>
         <string>/Library/Preferences/SystemConfiguration/NetworkInterfaces.plist</string>
     </array>
+
     <!-- Safety net in case a network change doesn't touch either watched
          file (observed to happen occasionally with fast Wi-Fi roaming) -
          re-check every 5 minutes regardless. -->
     <key>StartInterval</key>
     <integer>300</integer>
+
+    <!-- Exits after each run, so it reopens these on every launch and a
+         newsyslog rename in between is invisible to it. -->
     <key>StandardOutPath</key>
-    <string>/tmp/vmnet_nat_refresh.out.log</string>
+    <string>/Library/Logs/vmnet-nat-refresh.log</string>
+
     <key>StandardErrorPath</key>
-    <string>/tmp/vmnet_nat_refresh.err.log</string>
+    <string>/Library/Logs/vmnet-nat-refresh.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
 </dict>
 </plist>

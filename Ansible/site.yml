@@ -155,9 +155,26 @@
       when: enable_mail | bool
       tags: [mail]
 
+    # the extra 127.0.0.x addresses on lo0. Before every resolver role: both
+    # unbound (127.0.0.2) and AdGuard Home (127.0.0.3, plus its web UI) bind
+    # one, and macOS drops the aliases on every reboot.
+    - role: localhost_alias
+      when: enable_localhost_alias | bool
+      tags: [localhost_alias, dns]
+
     - role: unbound
       when: enable_unbound | bool
       tags: [unbound, dns]
+
+    # AdGuard Home, which replaced unbound as the resolver: installs the
+    # pinned release, seeds its config once, and keeps dns.bind_hosts
+    # following the kiac vmnet gateway. Zones are still re-translated from
+    # unbound's conf.d, which remains the source of truth. After
+    # localhost_alias, whose 127.0.0.3 it binds, and after sudoers, whose
+    # NOPASSWD rules both refresh scripts rely on.
+    - role: adguardhome
+      when: enable_adguardhome | bool
+      tags: [adguardhome, dns]
 
     # after sudoers (uses its NOPASSWD rule for manual on-demand refresh)
     - role: pf_vmnet_nat
@@ -177,9 +194,21 @@
       when: enable_macswitcher | bool
       tags: [macswitcher, proxy]
 
+    # after macswitcher: both are part of the same network/auth stack, and
+    # `macswitcher observe` reports on this agent
+    - role: kerberoskeepalive
+      when: enable_kerberoskeepalive | bool
+      tags: [kerberoskeepalive, kerberos, krb]
+
     - role: gcloud
       when: enable_gcloud | bool
       tags: [gcloud]
+
+    # after gcloud: the `kind: gcp` tunnels authenticate with application
+    # default credentials, which gcloud provides
+    - role: tunneling
+      when: enable_tunneling | bool
+      tags: [tunneling, tunnels, gcp]
 
     - role: ai
       when: enable_ai | bool

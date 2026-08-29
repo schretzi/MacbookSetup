@@ -12,7 +12,7 @@
 #
 # Deployed to /usr/local/bin/vmnet_nat_refresh (root:wheel 0755) by the
 # Ansible role "pf_vmnet_nat" and invoked automatically by
-# /Library/LaunchDaemons/com.kiac.vmnet-nat-refresh.plist, which watches
+# /Library/LaunchDaemons/com.schretzi.vmnet-nat-refresh.plist, which watches
 # for network reconfiguration events (see the plist's WatchPaths on
 # com.apple.networkextension's preference store) and re-runs this on
 # every network change. Safe to re-run manually at any time, e.g. right

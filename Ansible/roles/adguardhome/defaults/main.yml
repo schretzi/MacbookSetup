@@ -1,0 +1,103 @@
+---
+# AdGuard Home: the resolver this machine runs, and the runtime glue that
+# keeps it serving correctly.
+#
+#   the daemon               pinned release, seeded config, LaunchDaemon
+#   adguardhome_bind_refresh dns.bind_hosts follows the kiac vmnet gateway
+#   adguardhome_zones_refresh unbound's conf.d -> AdGuard Home's zone files
+#
+# There is no Homebrew formula - `brew search adguard` only finds an unrelated
+# content-blocker cask - so the release zip comes from GitHub, pinned by
+# version and verified against a checksum before anything is unpacked as root.
+adguardhome_enabled: true
+
+# Bumping the version means bumping the matching checksum. They come from the
+# release's published checksums.txt; a mismatch aborts before the archive is
+# touched, which is the whole point of pinning both.
+adguardhome_version: v0.107.79
+adguardhome_checksums:
+  darwin_arm64: 916f50bcc16b452c63ab8289f523a3c637e84933460a0ae7525fec03e31de867
+  darwin_amd64: a28e30605c306c9002a496e705cffbe8828ef300ba5e85121e9308e623335ffa
+
+# Where the daemon lives. AdGuard Home forces this directory to 0700 at
+# startup and rewrites AdGuardHome.yaml on every change made through the web
+# UI, so anything here is the runtime's, not the repo's.
+adguardhome_prefix: /opt/adguardhome
+
+# Generated inputs live outside the prefix on purpose: 0700 would make them
+# unreadable to anything running as the user, including `macswitcher observe`,
+# which reads the upstream file to report what is being forwarded.
+adguardhome_generated: /etc/adguardhome
+
+adguardhome_label: com.schretzi.adguardhome
+adguardhome_address: 127.0.0.3
+
+# 3053, not 3000: gitea publishes 0.0.0.0:3000 on the host and a wildcard bind
+# collides with an already-bound specific address. AdGuard Home is the
+# newcomer, so it is the one that moves. "53" is the mnemonic.
+adguardhome_web_port: 3053
+
+# ---------------------------------------------------------------------------
+# Zones and upstreams
+# ---------------------------------------------------------------------------
+# Local zones, as native AdGuard Home rule lists installed from
+# <root>/Dotfiles/adguardhome/zones.d/<file>. This repository ships none of its
+# own - every zone here belongs to an overlay or to another tool.
+#
+# Being migrated off unbound one zone at a time: a zone is either still listed
+# in unbound's conf.d and translated by unbound_to_adguard.py, or listed here,
+# never both. The translator prunes only files carrying its own header, so the
+# two coexist while the move is under way.
+#
+# Adding a zone to a machine that already runs needs one manual step: AdGuard
+# Home loads a list because AdGuardHome.yaml's `filters:` block names it with
+# a fixed id, and that file is the runtime's after the first seed.
+adguardhome_zones: []
+# Where unbound's conf.d lives, so the role can refuse to manage a zone that is
+# still being translated from there. Migration machinery only - this and the
+# check that uses it go away with unbound.
+adguardhome_legacy_confd: "{{ homebrew_prefix }}/etc/unbound/conf.d"
+
+
+# Same shape, contributed by the overlays through their overlay.yml, plus
+# `root:` pointing at the checkout the file comes from.
+adguardhome_zones_overlay: []
+
+# Zone files written by something else at runtime, which this role must
+# neither install nor report as unmanaged. kiac.txt is re-rendered by
+# LocalKubernetes' host_dns role whenever the vmnet hands out new addresses.
+adguardhome_zones_runtime:
+  - kiac.txt
+
+# Per-domain upstreams an overlay contributes, in AdGuard Home's syntax:
+#   "[/intranet.example/]10.0.0.1"
+# Ensured line by line in upstreams.conf, whose default block macswitcher
+# rewrites on every network context switch while carrying these over.
+adguardhome_upstreams_overlay: []
+
+# AdGuard Home's accounts. It has no permission model - every entry in
+# `users:` is a full admin - so this is credential isolation, not privilege
+# isolation: the zone sync does not carry the human's password and can be
+# rotated on its own.
+#
+#   admin      the web UI login
+#   zonesync   used by adguardhome_zones_refresh for
+#              POST /control/filtering/refresh, which is what makes AdGuard
+#              Home re-read a changed zone without a restart
+#
+# The passwords are not in this repository. They live in the System keychain,
+# and the role generates a random one and stores it there when an entry is
+# missing, so seeding a fresh machine needs no preparation. Change either of
+# them later with the same command the role uses:
+#
+#   sudo security add-generic-password -U -s "adguardhome admin" -a admin \
+#        -w '<password>' /Library/Keychains/System.keychain
+#
+# A config with *no* users would send the web UI into its first-run wizard,
+# and completing that wizard rewrites the whole file - throwing away
+# everything seeded. Hence both accounts go in while seeding, never after.
+adguardhome_accounts:
+  - name: admin
+    service: adguardhome admin
+  - name: zonesync
+    service: adguardhome api

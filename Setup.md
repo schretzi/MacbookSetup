@@ -8,6 +8,12 @@ environment.
 > **work overlay** together with the DNS zones, work mail account and
 > shell helpers; see [Overlays](#identity-and-the-overlay-repositories).
 
+> **Sharing the networking tools with someone else?**
+> [docs/networking-tools.md](docs/networking-tools.md) covers installing and
+> using macswitcher, kerberoskeepalive and omt **without** this repository —
+> no Ansible, no clone, no overlays. It is the page to send to a colleague.
+> The rest of this file assumes you are rebuilding *my* machine.
+
 ## Software outside Automation
 
 Three things cannot come from `brew bundle` and Ansible: one has to filter the
@@ -88,9 +94,18 @@ Brewfiles/   package lists, numbered by topic
 Dotfiles/    every config file, symlinked into place
 Scripts/     shell scripts (referenced by absolute path, or copied to /usr/local/bin)
 plists/      LaunchAgents + LaunchDaemons, copied into place
-etc/         files that belong under /etc
+etc/         files that belong under /etc (newsyslog rotation configs)
+docs/        standalone guides that do not assume this repo — shareable
 Addons/      dictionaries, markdownlint config
 ```
+
+Two documents sit beside this one:
+
+- [CONVENTIONS.md](CONVENTIONS.md) — the rules every background job follows
+  (labels, log paths, rotation, CLI surface), and why.
+- [docs/networking-tools.md](docs/networking-tools.md) — a self-contained
+  install/use guide for the three networking CLIs, written for someone who
+  does not have this repository.
 
 ## Ansible
 
@@ -142,10 +157,10 @@ This repository is the **public base**: all machinery, no identity. Nothing in
 it names a person, an address or an employer. Two private repositories layer on
 top:
 
-| Repo     | Setting             | Holds                                                          |
-| -------- | ------------------- | -------------------------------------------------------------- |
-| this one | —                   | roles, Brewfiles, scripts, plists, shared dotfiles             |
-| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config, gitlab.com instance |
+| Repo     | Setting             | Holds                                                                                 |
+| -------- | ------------------- | ------------------------------------------------------------------------------------- |
+| this one | —                   | roles, Brewfiles, scripts, plists, shared dotfiles                                    |
+| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config, gitlab.com instance                     |
 | work     | `work_repo_root`    | employer mail account, intranet DNS, work aliases and sessions, work gitlab instances |
 
 Both paths may be empty. **A machine with neither cloned still converges** — it
@@ -363,7 +378,7 @@ A third permission is needed for one specific feature: kanata's `cmd` action
 (e.g. `^`+d opening today's daily note) runs as **root** via the
 `com.kanata.daemon` LaunchDaemon. Without **Full Disk Access** for
 `~/.cargo/bin/kanata` in System Settings → Privacy & Security, root can read
-its *own* files fine but macOS's TCC silently denies reads of the
+its _own_ files fine but macOS's TCC silently denies reads of the
 iCloud-backed Obsidian vault - the daily note still gets created with the
 right filename, just without its template content (the fallback in
 `open-daily-note.sh` swallows the failure instead of erroring). Grant Full
@@ -492,7 +507,7 @@ other two, each through `gitlab_instances` in its `overlay.yml`:
 
 ```yaml
 gitlab_instances:
-  - name: com                       # short name used with `gl`
+  - name: com # short name used with `gl`
     hostname: gitlab.com
     keychain_service: "glab gitlab.com"
   # api_host: only needed when the API endpoint differs from hostname
@@ -721,10 +736,14 @@ Reading mail in the shell, four tools plus a token helper:
 - **msmtp** — sending
 
 The role creates `~/Maildir`, initialises the notmuch database, and installs
-two LaunchAgents: `org.schretzi.omt-daemon` (keeps tokens fresh) and
-`org.schretzi.offlineimap-sync` (syncs every 5 minutes, logging to
-`~/Library/Logs/offlineimap-sync.log`). Both are skipped if
+two LaunchAgents: `com.schretzi.omt` (keeps tokens fresh) and
+`com.schretzi.offlineimap-sync` (syncs every 5 minutes). Both log to
+`~/Library/Logs/<name>.log`, rotated by newsyslog. Both are skipped if
 `/opt/homebrew/bin/omt` is missing, so the agents do not sit in a failure loop.
+
+`com.schretzi.omt` has no plist in this repo: `omt service install` renders and
+loads it from omt's own `internal/service`, the same way macswitcher and
+kerberoskeepalive do. See [CONVENTIONS.md](CONVENTIONS.md).
 
 ### One account list, five rendered configs
 
@@ -790,13 +809,22 @@ instead of rewriting resolver settings per network.
 
 The role runs the full chain:
 
-1. **Loopback aliases.** mDNSResponder owned `127.0.0.1:53` before, so unbound
-   listens on `127.0.0.2`, would not be needed anymore, but still stays for
-   historical reasons. `Scripts/MacOS/localhost_alias.sh` is copied to
-   `/usr/local/bin/localhost_alias` and run at boot by `org.localhost.alias`.
-   This adds additional IPs on loopback which I used for different clusters
-   earlier with k3d, with apple containers not necessary anymore, but cheap and I
-   keep it for maybe future use.
+1. **Loopback aliases** — _its own role now, `localhost_alias`, not part of
+   this one._ mDNSResponder owns `127.0.0.1:53`, so every local resolver binds
+   a different loopback address: AdGuard Home `127.0.0.3` for DNS and its web
+   UI, unbound `127.0.0.2` while it is still installed.
+   `Scripts/MacOS/localhost_alias.sh` is copied to
+   `/usr/local/bin/localhost_alias` and run at boot by
+   `com.schretzi.localhost-alias`, because macOS drops the aliases on every
+   reboot.
+
+   It also adds `.4` to `.12` and `.100`, which I used for separate k3d
+   clusters earlier. Apple containers made that unnecessary, but the aliases
+   are cheap and the cluster zones still answer with them.
+
+   The role is separate precisely because the addresses outlive the resolver
+   that happens to use them — tying them to unbound meant switching unbound
+   off left AdGuard Home's own address unmanaged.
 2. **Service account.** `_unbound`, uid/gid 444 (system range — check
    `/etc/passwd` if 444 is taken), created via `dscl`. Its `RecordName` lists
    both `_unbound` and `unbound` so either name in the config resolves.
@@ -874,22 +902,29 @@ That writes `/etc/resolver/mydomain`, which mDNSResponder consults _before_ the
 configured nameserver — so those names resolve on the host regardless of
 whether the system points at unbound.
 
-**kiac clusters resolve through the host.** kiac is a Go tool of its own
-(`~/Workspace/Schretzi/kiac`); nothing about it is installed from this
-repository. Its node VMs sit on the same `vmnet` network and take their
-nameserver from the vmnet gateway `192.168.64.1` — the Mac's own mDNSResponder
-— so their lookups follow whatever the active network service points at. With
-the system pointed at `127.0.0.2`, `kiac.conf` answers `*.kiac` for the VMs as
-well as for the host. It maps the fixed vmnet addresses: host-side containers
-(gitea, registry, the pull-through mirrors) at `192.168.64.10-15`, and each
-cluster's Gateway LoadBalancer at `.20` (main) and `.30` (test1).
+**kiac clusters and containers resolve through the host.** kiac is a Go tool of
+its own (`~/Workspace/Schretzi/kiac`); nothing about it is installed from this
+repository. Its node VMs — and every `container` the runtime starts — sit on
+the same `vmnet` network and get `nameserver 192.168.64.1` written into their
+`resolv.conf`. That address is the host end of the vmnet bridge, and the
+resolver has to be *listening on it*; it is not mDNSResponder forwarding on
+their behalf. unbound did that with `interface: 0.0.0.0`. AdGuard Home cannot
+use a wildcard here — see `docs/adguardhome-test.md` → Serving the vmnet — so
+`192.168.64.1` is added to and removed from its `bind_hosts` by
+`com.schretzi.adguardhome-bind` as the vmnet comes and goes.
 
-Two consequences follow from going through mDNSResponder:
+The addresses are **not** fixed, despite what an out-of-date reading of
+`kiac.conf` suggests. The vmnet hands them out by DHCP in start order, so they
+move on every reboot. LocalKubernetes' `roles/host_dns` looks up the live ones
+and re-renders `conf.d/kiac.conf`, which is then translated into AdGuard Home's
+zone file — see the same document, "Keeping `.kiac` current".
+
+Two consequences of the VMs asking the host directly:
 
 - A `/etc/resolver` split — the container runtime's, Tailscale's — is host-side
   only. Anything the VMs must resolve needs a real zone here.
-- A VPN client that seizes port 53 stops mDNSResponder answering on the gateway
-  and every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
+- A VPN client that seizes port 53 takes the gateway's resolver with it, and
+  every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
   writes the VM's `resolv.conf` directly and bypasses the gateway, but only at
   creation time.
 
@@ -1202,6 +1237,7 @@ Not automated yet — no wrapper script exists here for
 
   Not yet wired into the `unbound`/`gcloud` roles - a manual, one-time edit
   until the tunnel wrapper script lands.
+
 - **Tunnel connects but the SSH session immediately drops/reconnects** — this
   is almost always a stale or untrusted host key/cert for `localhost:<port>`
   in `~/.ssh/known_hosts`, not a problem with the tunnel itself. Connect
@@ -1280,8 +1316,8 @@ Caveats:
   after that.
 - The policy takes effect on the browser's next restart, not immediately.
 - **macOS's App Management privacy protection (Ventura+) blocks this even as
-  root.** Writing into another app's `.app` bundle needs the *calling
-  process* — the terminal you run `ansible-playbook` from (Terminal, iTerm,
+  root.** Writing into another app's `.app` bundle needs the _calling
+  process_ — the terminal you run `ansible-playbook` from (Terminal, iTerm,
   Kitty, ...) — to be granted access under **System Settings → Privacy &
   Security → App Management**, in addition to `sudo`/`--ask-become-pass`. A
   failure here shows up as `Operation not permitted [Errno 1]` even though
@@ -1342,3 +1378,14 @@ from the macOS Keychain and must not be added to any repository.
 - [YubiKey guide](https://github.com/drduh/YubiKey-Guide)
 - [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice)
 - [DisplayLink macOS driver (Synaptics)](https://www.synaptics.com/products/displaylink-graphics/downloads/macos)
+
+## Improvment Ideas
+
+- [ ] When session-kitty stopped focus goes to finder, I want the last active session to get the focus
+- [ ] Tunneling script modernization
+- [ ] Work configs into overlay and search for repo to push
+- [ ] Regularly vulnerability check and how to keep track of my project status
+- [ ] ssh config - now everything is one big file combined private and work,
+      need to adapt and split
+- [ ] look into checkmate.nvim (https://github.com/bngarren/checkmate.nvim)
+

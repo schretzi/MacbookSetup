@@ -35,6 +35,7 @@ Per-role knobs live in `roles/<role>/defaults/main.yml`:
 | `roles/homebrew/defaults/main.yml` | which Brewfiles are installed |
 | `roles/dotfiles/defaults/main.yml` | the symlink map |
 | `roles/unbound/defaults/main.yml` | which DNS zone profiles are active |
+| `roles/localhost_alias/defaults/main.yml` | which 127.0.0.x aliases exist on lo0, and which of them the play refuses to run without |
 | `roles/sudoers/defaults/main.yml` | every passwordless (NOPASSWD) sudo rule, Touch ID for sudo, the shared credential cache |
 | `roles/kanata/defaults/main.yml` | kanata version, driver version, rebuild |
 | `roles/gcloud/defaults/main.yml` | gcloud components |

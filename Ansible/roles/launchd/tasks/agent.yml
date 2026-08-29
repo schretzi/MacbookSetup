@@ -7,7 +7,11 @@
 # the play after editing it.
 #
 # Caller must set:
-#   launchd_plist: org.schretzi.omt-daemon.plist
+#   launchd_plist: com.schretzi.offlineimap-sync.plist
+# Caller may set:
+#   launchd_plist_root: an overlay's own checkout root (defaults to repo_root)
+#   so a plist containing overlay-only specifics never has to live in the
+#   public base repository.
 
 - name: "Launchd | ensure ~/Library/LaunchAgents exists"
   ansible.builtin.file:
@@ -15,9 +19,15 @@
     state: directory
     mode: "0755"
 
+- name: "Launchd | ensure ~/Library/Logs exists"
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/Library/Logs"
+    state: directory
+    mode: "0755"
+
 - name: "Launchd | copy agent {{ launchd_plist }}"
   ansible.builtin.copy:
-    src: "{{ repo_root }}/plists/LaunchAgents/{{ launchd_plist }}"
+    src: "{{ launchd_plist_root | default(repo_root) }}/plists/LaunchAgents/{{ launchd_plist }}"
     dest: "{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_plist }}"
     mode: "0644"
   register: launchd_agent_copy

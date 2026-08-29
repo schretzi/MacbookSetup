@@ -189,3 +189,35 @@
           macswitcher config validate failed:
           {{ macswitcher_validate.stderr | default(macswitcher_validate.stdout) | trim }}
       when: macswitcher_validate.rc != 0
+
+    # ----------------------------------------------------------------------
+    # LaunchAgent
+    # ----------------------------------------------------------------------
+    # macswitcher renders and loads its own plist from internal/service, so
+    # there is no plist for it in this repo. `service install` is idempotent:
+    # it reinstalls and reloads, which is also how a plist change is applied.
+    # macswitcher has had a `service` command since before the convention, and
+    # the older one installs com.macswitcher.proxy quite happily - it would
+    # report success and leave the machine unmigrated. So check the label the
+    # binary reports, not just that the subcommand exists.
+    - name: Macswitcher | require a macswitcher that implements the current convention
+      ansible.builtin.include_role:
+        name: launchd
+        tasks_from: require_service_cli
+      vars:
+        service_cli_bin: "{{ homebrew_prefix }}/bin/macswitcher"
+        service_cli_label: com.schretzi.macswitcher
+      when: macswitcher_validate.rc == 0
+
+    - name: Macswitcher | install the LaunchAgent
+      ansible.builtin.command:
+        cmd: "{{ homebrew_prefix }}/bin/macswitcher service install"
+      register: macswitcher_service
+      changed_when: "'installed and started' in macswitcher_service.stdout"
+      when: macswitcher_validate.rc == 0
+
+    - name: Macswitcher | rotate its logs
+      ansible.builtin.include_role:
+        name: newsyslog
+      vars:
+        newsyslog_conf: macswitcher.conf

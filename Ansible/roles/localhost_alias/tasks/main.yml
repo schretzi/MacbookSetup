@@ -1,0 +1,57 @@
+---
+# Create the extra 127.0.0.x addresses every local resolver here binds, and
+# keep them coming back after a reboot.
+#
+# Chain: script -> LaunchDaemon (RunAtLoad, exits immediately) -> log rotation.
+# The daemon covers reboots; the explicit run below covers this play, because
+# a machine that has just had the plist installed has not rebooted yet and the
+# roles that follow bind these addresses in the same run.
+
+- name: Localhost alias | install the loopback alias script
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/localhost_alias.sh"
+    dest: /usr/local/bin/localhost_alias
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+
+- name: Localhost alias | install the LaunchDaemon that recreates them at boot
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: daemon
+  vars:
+    launchd_plist: com.schretzi.localhost-alias.plist
+    launchd_label: com.schretzi.localhost-alias
+
+- name: Localhost alias | rotate its logs
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: localhost-alias.conf
+
+- name: Localhost alias | apply the aliases now
+  ansible.builtin.command:
+    cmd: "/usr/local/bin/localhost_alias {{ localhost_alias_addresses | join(' ') }}"
+  become: true
+  changed_when: false
+  check_mode: false
+
+- name: Localhost alias | read the addresses on lo0
+  ansible.builtin.command:
+    cmd: ifconfig lo0
+  register: localhost_alias_lo0
+  changed_when: false
+  check_mode: false
+
+# Without this the failure surfaces much later and much less clearly: the
+# resolver's own log says "Can't assign requested address" and the play blames
+# whichever role tried to start it.
+- name: Localhost alias | verify the addresses something binds are up
+  ansible.builtin.assert:
+    that: item in localhost_alias_lo0.stdout
+    fail_msg: >-
+      {{ item }} is not on lo0, so nothing can bind it. Check
+      /Library/Logs/localhost-alias.err.log and that
+      /usr/local/bin/localhost_alias is executable.
+  loop: "{{ localhost_alias_required }}"

@@ -1,0 +1,53 @@
+---
+# Verify a CLI actually implements the current LaunchAgent convention before a
+# role calls `<bin> service install`.
+#
+# Three of my CLIs render and load their own plist rather than shipping one in
+# this repo, which means the *installed binary* is what decides the label and
+# log paths. That introduces two failure modes, and the second is silent:
+#
+#   - The installed build predates `service` entirely. The call fails with a
+#     cobra usage dump that never mentions the real problem ("accepts 1 arg(s),
+#     received 2").
+#   - The installed build has an *older* `service` that still writes the
+#     pre-convention label and per-project log directory. The call SUCCEEDS and
+#     quietly installs the wrong plist - a green playbook run that leaves the
+#     machine unmigrated.
+#
+# So this asserts on the label the binary actually reports, not merely on
+# whether the subcommand exists.
+#
+# Caller must set:
+#   service_cli_bin:   "{{ homebrew_prefix }}/bin/omt"
+#   service_cli_label: com.schretzi.omt
+
+- name: "Launchd | probe {{ service_cli_bin | basename }} for service support"
+  ansible.builtin.command: "{{ service_cli_bin }} service status"
+  register: service_cli_probe
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: "Launchd | require {{ service_cli_bin | basename }} to implement the current convention"
+  ansible.builtin.assert:
+    that:
+      - service_cli_probe.rc == 0
+      - service_cli_label in (service_cli_probe.stdout | default(''))
+    success_msg: >-
+      {{ service_cli_bin | basename }} implements {{ service_cli_label }}
+    fail_msg: >-
+      {{ service_cli_bin }} does not implement the current LaunchAgent
+      convention: `service status` was expected to report
+      "{{ service_cli_label }}" and did not.
+
+      This is an outdated build. Either it has no `service` command at all, or
+      it has an older one that would still install the pre-convention label -
+      which would look like success and leave the machine unmigrated.
+
+      Upgrade the binary first (`brew upgrade --cask
+      {{ service_cli_bin | basename }}`, or build and install from its repo),
+      then re-run. See MacbookSetup/CONVENTIONS.md.
+
+- name: "Launchd | forget probe variables"
+  ansible.builtin.set_fact:
+    service_cli_probe: null

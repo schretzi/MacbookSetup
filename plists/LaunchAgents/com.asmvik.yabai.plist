@@ -23,9 +23,9 @@
  	     <true/>
     </dict>
     <key>StandardOutPath</key>
-    <string>/tmp/yabai_schretzi.out.log</string>
+    <string>/Users/schretzi/Library/Logs/yabai_schretzi.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/yabai_schretzi.err.log</string>
+    <string>/Users/schretzi/Library/Logs/yabai_schretzi.err.log</string>
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>Nice</key>

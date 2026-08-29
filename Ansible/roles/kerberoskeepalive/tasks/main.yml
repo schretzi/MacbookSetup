@@ -1,0 +1,64 @@
+---
+# kerberoskeepalive - keeps Kerberos tickets refreshed from Keychain-stored
+# passwords.
+#
+# The binary comes from Brewfiles/00_base.brew (cask schretzi/tap/
+# kerberoskeepalive), so this role only owns the parts brew does not: the
+# LaunchAgent and its log rotation.
+#
+# There is no plist for it in this repo. kerberoskeepalive renders and loads
+# its own from internal/service, exactly like macswitcher and omt - see
+# CONVENTIONS.md.
+
+- name: KerberosKeepAlive | check the binary is installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/kerberoskeepalive"
+  register: kka_binary
+  changed_when: false
+  check_mode: false
+
+- name: KerberosKeepAlive | warn when the cask is missing
+  ansible.builtin.debug:
+    msg: >-
+      kerberoskeepalive is not installed at
+      {{ homebrew_prefix }}/bin/kerberoskeepalive - run the homebrew role
+      first (cask schretzi/tap/kerberoskeepalive). Skipping the LaunchAgent.
+  when: not kka_binary.stat.exists
+
+# Fails fast if the installed build predates `service` (it used to be
+# `daemon install`), rather than dying on a cobra usage dump.
+- name: KerberosKeepAlive | require a build that implements the current convention
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: require_service_cli
+  vars:
+    service_cli_bin: "{{ homebrew_prefix }}/bin/kerberoskeepalive"
+    service_cli_label: com.schretzi.kerberoskeepalive
+  when: kka_binary.stat.exists
+
+# `service install` refuses to install when the config does not parse, so a
+# missing or broken config surfaces here rather than as a background
+# crash-loop nobody notices.
+- name: KerberosKeepAlive | install the LaunchAgent
+  ansible.builtin.command:
+    cmd: "{{ homebrew_prefix }}/bin/kerberoskeepalive service install"
+  register: kka_service
+  changed_when: "'installed and started' in kka_service.stdout"
+  failed_when: false
+  when: kka_binary.stat.exists
+
+- name: KerberosKeepAlive | warn when the LaunchAgent could not be installed
+  ansible.builtin.debug:
+    msg: >-
+      kerberoskeepalive service install failed:
+      {{ kka_service.stderr | default(kka_service.stdout) | trim }}
+      (usually a missing ~/.config/kerberoskeepalive/config.yaml - see
+      `kerberoskeepalive init`)
+  when: kka_binary.stat.exists and kka_service.rc != 0
+
+- name: KerberosKeepAlive | rotate its logs
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: kerberoskeepalive.conf
+  when: kka_binary.stat.exists

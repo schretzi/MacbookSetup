@@ -106,9 +106,33 @@ enable_windowmanager: true
 # offlineimap/notmuch/neomutt/msmtp/omt config + sync LaunchAgents
 enable_mail: true
 
-# unbound resolver: loopback aliases, _unbound user, configs, LaunchDaemon
-# (needs sudo)
-enable_unbound: true
+# The extra 127.0.0.x addresses on lo0 (needs sudo). Every local resolver
+# binds one, because mDNSResponder already owns 127.0.0.1:53 - AdGuard Home
+# uses 127.0.0.3 for both DNS and its web UI, and the cluster zones answer
+# with .3 to .12. macOS forgets them on reboot, so a LaunchDaemon recreates
+# them. Deliberately independent of which resolver is switched on below.
+enable_localhost_alias: true
+
+# unbound resolver: _unbound user, configs, LaunchDaemon (needs sudo)
+#
+# OFF: DNS has been handed over to AdGuard Home, which now binds the wildcard
+# and serves every address unbound used to - see docs/adguardhome-test.md and
+# Scripts/MacOS/adguardhome-cutover.sh. Leaving this on would reinstall and
+# restart unbound on the next run, and it would fight AdGuard Home for port 53.
+#
+# Being retired, but not yet deletable: unbound's conf.d is still the source
+# of truth that AdGuard Home's zones are generated from. See BACKLOG.md.
+enable_unbound: false
+
+# AdGuard Home, the resolver this machine runs: the pinned release, the
+# configuration seeded once, both LaunchDaemons, log rotation, and the two
+# refresh scripts that keep bind_hosts and the zones current at runtime.
+#
+# false means "do not manage", not "remove" - tearing it down would take the
+# admin password and every web-UI change with it. A fresh machine converges
+# unattended: the role generates the web UI and zone-sync passwords and stores
+# them in the System keychain. See the role's defaults for where.
+enable_adguardhome: true
 
 # pf NAT for LocalKubernetes' (kiac) vmnet subnet, kept pointed at whichever
 # interface currently owns the default route (Wi-Fi/Ethernet/VPN switches)
@@ -125,6 +149,14 @@ enable_firefox_enterprise_roots: true
 # macswitcher network contexts: ~/.config/macswitcher, the shell proxy
 # variables in ~/.zsh/rcs/proxy - all seeded once, then owned by the runtime
 enable_macswitcher: true
+
+# kerberoskeepalive's LaunchAgent and log rotation (the binary itself comes
+# from the homebrew role)
+enable_kerberoskeepalive: true
+
+# tunneling's LaunchAgent and log rotation. No cask yet - the role warns and
+# skips unless the binary has been installed from its repo (`make install`).
+enable_tunneling: true
 
 # gcloud components
 enable_gcloud: true

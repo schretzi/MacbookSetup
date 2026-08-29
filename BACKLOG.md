@@ -17,6 +17,43 @@ instead of scattering them across chat history.
 
 ## In progress / follow-ups
 
+- [ ] **Touch ID for sudo does not authenticate — blocked on the OS side.**
+      The `/etc/pam.d/sudo_local` the sudoers role writes is correct (see
+      `sudoers_touchid_enabled`), and the full diagnosis is in `Setup.md` →
+      "sudo": `pam_tid` is reached, requests
+      `DeviceOwnerAuthenticationWithBiometrics`, but only ever makes the
+      non-interactive `LACopyResultOfPolicyEvaluation` call, gets
+      `-1004 "User interaction is required"` and returns `24`
+      (`PAM_NO_MODULE_DATA`); authd's `SecurityAgent` password panel appears
+      instead, which no fingerprint can answer. Ruled out by measurement:
+      terminal (Terminal.app behaves like kitty), tmux/`pam_reattach`, MDM
+      (not enrolled), clamshell, remote sessions, enrollment, file modes, PAM
+      ordering, missing module, replaced sudo. Touch ID for *other*
+      authorizations works.
+
+      Not yet tried: external Touch ID keyboard disconnected (the log reports
+      two accessories), and a reboot (`BKDevice::extendedBioLockoutState`
+      returned an odd value at 5 days uptime).
+
+      The PAM file is therefore **not installed** — it is not free: Ansible
+      drops sudo's `-n` as soon as a become password is supplied, so under
+      `--ask-become-pass` every root task runs the interactive PAM stack and
+      authd throws a password panel per task.
+
+      **When it does authenticate, this is the rest of the work:**
+      0. `sudoers_touchid_enabled: true` in `group_vars/all.yml`.
+      1. `sudoers_shared_timestamp: true` in `group_vars/all.yml` — installs
+         `/etc/sudoers.d/00-timestamp` (`timestamp_type=global`), already
+         built and verified to make one `sudo -v` cover a whole play.
+      2. `become_ask_pass = False` in `Ansible/ansible.cfg`.
+      3. Swap the documented invocation to `sudo -v && ansible-playbook
+         site.yml` in `Setup.md`, `Ansible/README.md`,
+         `group_vars/all.yml`, `site.yml`'s assert message, `CONVENTIONS.md`
+         and `Scripts/MacOS/migrate-launchd-conventions.sh`.
+      4. Decide `sudoers_timestamp_timeout`: the window runs from the
+         authentication and is *not* extended by use, and site.yml reaches
+         its first root task only after `homebrew` — 20 minutes may not cover
+         a cold run.
 - [ ] **gcloud IAP tunneling wrapper script** — currently only documented
       manually in `Setup.md` (SSH key prereq via `gcloud compute ssh`,
       `/etc/hosts` `kubernetes` alias, stale-host-key workaround). Script

@@ -73,13 +73,26 @@ enable_gitlab: true
 # touched by this repo - you create and populate them by hand.
 enable_kubeconfig: true
 
-# Passwordless (NOPASSWD) sudo rules - see roles/sudoers/defaults/main.yml
-# for the actual rule list. Set sudoers_passwordless_enabled: false below to
-# refuse passwordless sudo altogether without disabling this role (existing
-# rule files are then removed and every affected command prompts for a
-# password through plain `sudo` instead).
+# How sudo authenticates: Touch ID (/etc/pam.d/sudo_local), a credential
+# cache shared across terminals, and the passwordless (NOPASSWD) rules - see
+# roles/sudoers/defaults/main.yml for the rule list and every knob.
+#
+#   sudoers_passwordless_enabled: false  refuses passwordless sudo altogether
+#     without disabling the role - existing rule files are removed and every
+#     affected command prompts through plain `sudo` instead.
+#   sudoers_touchid_enabled: true        writes /etc/pam.d/sudo_local so the
+#     fingerprint answers sudo. Off: Touch ID never authenticates here, and
+#     the file makes --ask-become-pass runs throw a password panel per root
+#     task. See Setup.md -> "sudo".
+#   sudoers_shared_timestamp: true       one credential cache for all
+#     terminals, which is what would let a single `sudo -v` cover a whole
+#     `ansible-playbook` run instead of --ask-become-pass. Off, because that
+#     is only worth its security cost once Touch ID actually authenticates -
+#     and on this machine it does not yet. See Setup.md -> "sudo".
 enable_sudoers: true
 sudoers_passwordless_enabled: true
+sudoers_touchid_enabled: false
+sudoers_shared_timestamp: false
 
 # Link the Homebrew JDK into /Library/Java/JavaVirtualMachines  (needs sudo)
 enable_java: true

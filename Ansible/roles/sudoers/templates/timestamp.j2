@@ -1,0 +1,13 @@
+# Managed by Ansible (roles/sudoers) - do not edit by hand.
+#
+# One sudo credential cache per user instead of sudo's default of one per
+# terminal. This is what lets a single `sudo -v` - answered with Touch ID -
+# cover a whole `ansible-playbook` run: Ansible escalates from its own
+# tty-less child processes, which under the default per-tty caching each count
+# as a separate terminal and would authenticate one by one.
+#
+# The trade-off: for {{ sudoers_timestamp_timeout }} minutes after an authentication, any process
+# running as this user can sudo without authenticating - not just the terminal
+# that did. `sudo -k` drops the cache immediately, everywhere.
+Defaults timestamp_type=global
+Defaults timestamp_timeout={{ sudoers_timestamp_timeout }}

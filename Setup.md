@@ -108,26 +108,30 @@ ansible-playbook site.yml --tags unbound -e enable_unbound=true   # force a disa
 ```
 
 `--ask-become-pass` is only needed for the roles that touch root-owned
-locations: `unbound`, `java`, `kanata`.
+locations: `sudoers`, `unbound`, `java`, `kanata`,
+`firefox_enterprise_roots`. There is a way to authenticate once up front
+instead — see [sudo](#sudo) below — but it is switched off until Touch ID for
+sudo works.
 
-| Role / tag      | Switch                 | What it does                                                     |
-| --------------- | ---------------------- | ---------------------------------------------------------------- |
-| `base_dirs`     | `enable_base_dirs`     | `~/bin`, `~/tmp`, `~/Workspace`                                  |
-| `homebrew`      | `enable_homebrew`      | `brew bundle` per Brewfile, each file individually toggleable    |
-| `dotfiles`      | `enable_dotfiles`      | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`    |
-| `git`           | `enable_git`           | links the shared git ignore file, checks the signing key         |
-| `ssh`           | `enable_ssh`           | links `~/.ssh/config`, fixes permissions                         |
+| Role / tag      | Switch                 | What it does                                                      |
+| --------------- | ---------------------- | ----------------------------------------------------------------- |
+| `base_dirs`     | `enable_base_dirs`     | `~/bin`, `~/tmp`, `~/Workspace`                                   |
+| `homebrew`      | `enable_homebrew`      | `brew bundle` per Brewfile, each file individually toggleable     |
+| `dotfiles`      | `enable_dotfiles`      | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`     |
+| `git`           | `enable_git`           | links the shared git ignore file, checks the signing key          |
+| `ssh`           | `enable_ssh`           | links `~/.ssh/config`, fixes permissions                          |
 | `gitlab`        | `enable_gitlab`        | renders instance list for `gl`, checks tokens are in the keychain |
 | `kubeconfig`    | `enable_kubeconfig`    | creates `~/.kube/configs` for `kubeconfig-add`/`kubeconfig-merge` |
-| `java`          | `enable_java`          | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines` |
-| `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation   |
-| `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                        |
-| `mail`          | `enable_mail`          | maildir, notmuch index, offlineimap/omt agents, mail dotfiles    |
-| `unbound`       | `enable_unbound`       | loopback aliases, `_unbound` account, configs, resolver daemon   |
-| `macswitcher`   | `enable_macswitcher`   | seeds `~/.config/macswitcher` and the shell proxy variables      |
-| `gcloud`        | `enable_gcloud`        | gcloud components                                                |
-| `ai`            | `enable_ai`            | links `schretzi-skills` into every assistant, assistant configs  |
-| `work`          | `enable_work`          | employer profile, supplied by the work overlay                   |
+| `sudoers`       | `enable_sudoers`       | Touch ID for sudo, the shared credential cache, NOPASSWD rules    |
+| `java`          | `enable_java`          | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines`  |
+| `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation    |
+| `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                         |
+| `mail`          | `enable_mail`          | maildir, notmuch index, offlineimap/omt agents, mail dotfiles     |
+| `unbound`       | `enable_unbound`       | loopback aliases, `_unbound` account, configs, resolver daemon    |
+| `macswitcher`   | `enable_macswitcher`   | seeds `~/.config/macswitcher` and the shell proxy variables       |
+| `gcloud`        | `enable_gcloud`        | gcloud components                                                 |
+| `ai`            | `enable_ai`            | links `schretzi-skills` into every assistant, assistant configs   |
+| `work`          | `enable_work`          | employer profile, supplied by the work overlay                    |
 
 Two helper roles are never run directly: `link` (backup-then-symlink) and
 `launchd` (copy or render plist + `bootout`/`bootstrap`).
@@ -578,6 +582,121 @@ GKE clusters are the exception: they have no cert to extract, and `kubectl`
 authenticates live through `gke-gcloud-auth-plugin`, which needs Application
 Default Credentials rather than a kubeconfig entry - see Google Cloud ->
 "Application Default Credentials" below.
+
+## sudo
+
+Three separate things, all owned by one role so that everything this machine
+lets happen as root is auditable in one directory.
+
+### Touch ID
+
+`/etc/pam.d/sudo` opens with `auth include sudo_local`, and on a stock system
+that include simply does not exist — Apple ships `sudo_local.template` next to
+it as the invitation. The role writes the real file:
+
+```
+auth       sufficient     pam_tid.so
+```
+
+That is the whole feature. `sufficient` means a fingerprint ends
+authentication; every other outcome — no sensor, lid closed, three bad reads,
+a caller that cannot prompt — falls through to `pam_opendirectory`, i.e. the
+password prompt that was there before. The file cannot lock sudo out, and
+being `sudo_local` rather than `sudo` it survives system updates.
+
+**Status on this machine (2026-08-29): it does not actually authenticate.**
+The configuration above is correct and is reached — the unified log shows sudo
+creating an `LAContext`, requesting `DeviceOwnerAuthenticationWithBiometrics`,
+with `BiometryType=1` and `MechanismTouchId` present. But `pam_tid` only ever
+makes the *non-interactive* call (`LACopyResultOfPolicyEvaluation`), gets
+`-1004 "User interaction is required"`, and returns **24**
+(`PAM_NO_MODULE_DATA`) — a value openpam itself logs as an unexpected return
+for `pam_sm_authenticate()`. It never presents a biometric prompt. What
+appears instead is authd's `SecurityAgent` panel for
+`authenticate-session-owner`, a password field that no fingerprint can answer.
+
+Ruled out by measurement, so nobody repeats it: the terminal (Terminal.app
+behaves identically to kitty), tmux/`pam_reattach`, MDM (the machine is not
+enrolled), clamshell, remote sessions, enrollment (`bioutil -r` reports
+effective), file modes, PAM ordering, a missing module, and a replaced sudo
+(`/usr/bin/sudo` sits on the sealed system volume with SIP enabled). Touch ID
+for *other* authorizations works — a System Settings padlock offers it, and
+notably does so without ever spawning `SecurityAgent`.
+
+**So the file is not installed** (`sudoers_touchid_enabled: false`). It cannot
+lock sudo out — that part holds — but "harmless" was wrong, and measurably so:
+Ansible drops sudo's `-n` flag as soon as a become password is supplied, so
+under `--ask-become-pass` every `become: true` task runs the full interactive
+PAM stack. `pam_tid` engages, fails as described, and authd puts a password
+panel on screen — one per root task, dozens in a full `site.yml` run, each
+answering nothing because Ansible feeds the real password on stdin anyway.
+With `-n` (no become password) `pam_tid` never engages, which is why this
+stayed invisible until the first `--ask-become-pass` run.
+
+Everything below still applies and the switch is one line, so this comes back
+the day the OS side authenticates.
+
+_Only when it does not work:_ inside tmux or screen the PAM session is
+detached from the GUI login session, so `pam_tid` has nowhere to draw its
+dialog and Touch ID silently does nothing. `brew install pam-reattach` and
+`sudoers_touchid_pam_reattach: true` fixes that. Off by default — kitty is the
+only terminal here. It also does not work over SSH, and never will.
+
+### One credential cache, not one per terminal — built, verified, switched off
+
+**This is the piece that would replace `--ask-become-pass`, and it is off
+(`sudoers_shared_timestamp: false`) until Touch ID works.** It is documented
+here in full because it was built and measured, not guessed at, and turning it
+on is a one-line change the day the Touch ID side authenticates.
+
+The obstacle it removes: sudo caches an authentication **per tty** by default,
+and Ansible escalates from child processes that have no tty at all. Under that
+default, a `sudo -v` typed in a shell does nothing for Ansible, and every
+`become: true` task authenticates on its own.
+
+`/etc/sudoers.d/00-timestamp` switches that to one cache per user:
+
+```sudoers
+Defaults timestamp_type=global
+Defaults timestamp_timeout=20
+```
+
+which makes this work:
+
+```bash
+sudo -v && ansible-playbook site.yml
+```
+
+Verified on this machine: with the rule installed, a credential created in a
+terminal was usable from a tty-less process. Ansible's own `sudo` calls carry
+`-n` and never prompt — they only ever consume the cache, they cannot fill it,
+which is why the priming `sudo -v` is not optional. Without a valid credential
+the become tasks fail with `sudo: a password is required` rather than hanging.
+
+Two things measured while getting there, both worth keeping:
+
+- The 20 minutes run from the **authentication**, and a `sudo` that consumes
+  the cache does *not* push the deadline back. So the window has to cover the
+  whole stretch from `sudo -v` to the last root task — and site.yml reaches
+  its first root task (the `sudoers` role itself) only after `homebrew`, so on
+  a cold machine the credential can be gone before Ansible ever needs it.
+- The cost is real: for those 20 minutes any process running as this user can
+  sudo without authenticating, not just the terminal that did. `sudo -k` drops
+  it immediately, everywhere.
+
+That cost buys one Touch ID instead of a typed password. With Touch ID not
+authenticating, it would buy one *typed password* instead of one typed
+password — nothing. Hence off.
+
+### Passwordless rules
+
+Individual commands that need no password at all — the ones shell aliases and
+runtime tools shell out to — are declared in `roles/sudoers/defaults/main.yml`
+as `sudoers_rules`, one file per entry under `/etc/sudoers.d/`, each carrying
+the comment that says why it exists. Absolute paths only, no wildcards.
+`sudoers_passwordless_enabled: false` removes all of them again.
+
+_Role: `sudoers`_ — needs sudo
 
 ## Java
 

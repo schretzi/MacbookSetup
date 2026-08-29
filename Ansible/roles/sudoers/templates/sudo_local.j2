@@ -1,0 +1,21 @@
+# Managed by Ansible (roles/sudoers) - do not edit by hand.
+#
+# Touch ID for sudo. /etc/pam.d/sudo pulls this file in as its very first
+# rule (`auth include sudo_local`), and unlike /etc/pam.d/sudo itself it is
+# not replaced by a system update - that is exactly why Apple ships
+# sudo_local.template next to it instead of expecting an edit to sudo.
+#
+# `sufficient` means a successful fingerprint ends authentication right here.
+# Everything else - no sensor, a Mac woken with the lid shut, three bad reads,
+# or a caller that cannot prompt at all (Ansible's `sudo -n`) - simply falls
+# through to pam_smartcard/pam_opendirectory, i.e. the normal password prompt.
+# There is no way for this file to lock sudo out.
+{% if sudoers_touchid_pam_reattach | bool %}
+#
+# pam_reattach re-attaches the PAM session to the GUI login session. Without
+# it pam_tid has no session to draw its dialog in, so Touch ID silently does
+# nothing inside tmux/screen. It has to come first, and stays `optional` so a
+# missing or broken module never blocks authentication.
+auth       optional       {{ homebrew_prefix }}/lib/pam/pam_reattach.so
+{% endif %}
+auth       sufficient     pam_tid.so

@@ -1,4 +1,8 @@
 ---
+# Everything about how sudo authenticates on this machine lives here: the
+# passwordless (NOPASSWD) rules, how sudo caches credentials, and whether
+# Touch ID answers the prompt.
+#
 # One rule file per entry in sudoers_rules (see defaults/main.yml) - the
 # single place every passwordless (NOPASSWD) sudo rule is declared and
 # audited, instead of scattered across whichever role happens to need one.
@@ -52,3 +56,77 @@
     mode: "0440"
     validate: "/usr/sbin/visudo -cf %s"
   become: true
+
+# ---------------------------------------------------------------------------
+# Credential cache
+# ---------------------------------------------------------------------------
+# sudo caches an authentication per terminal by default. Ansible escalates
+# from child processes that have no tty at all, so under that default each
+# `become: true` task authenticates on its own - and no amount of Touch ID in
+# the shell beforehand helps. A shared cache makes one `sudo -v` cover the run.
+
+- name: Sudoers | share one credential cache across terminals
+  ansible.builtin.template:
+    src: timestamp.j2
+    dest: /etc/sudoers.d/00-timestamp
+    owner: root
+    group: wheel
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+  become: true
+  when: sudoers_shared_timestamp | bool
+
+- name: Sudoers | restore sudo's per-terminal credential cache
+  ansible.builtin.file:
+    path: /etc/sudoers.d/00-timestamp
+    state: absent
+  become: true
+  when: not (sudoers_shared_timestamp | bool)
+
+# ---------------------------------------------------------------------------
+# Touch ID
+# ---------------------------------------------------------------------------
+# /etc/pam.d/sudo already ends its first line with `auth include sudo_local`;
+# the file it includes is simply absent on a stock system. Writing it is the
+# supported way to change how sudo authenticates, and survives system updates.
+
+- name: Sudoers | look for the pam_reattach module
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/lib/pam/pam_reattach.so"
+  register: sudoers_reattach_module
+  changed_when: false
+  check_mode: false
+  when:
+    - sudoers_touchid_enabled | bool
+    - sudoers_touchid_pam_reattach | bool
+
+# A PAM line pointing at a module that is not there is `optional`, so it would
+# not break sudo - it would just quietly never work. Say so instead.
+- name: Sudoers | fail when pam_reattach is requested but not installed
+  ansible.builtin.assert:
+    that: sudoers_reattach_module.stat.exists | default(false)
+    fail_msg: >-
+      sudoers_touchid_pam_reattach is on, but
+      {{ homebrew_prefix }}/lib/pam/pam_reattach.so does not exist.
+      Run `brew install pam-reattach`, or turn the flag off - it is only
+      needed for Touch ID inside tmux/screen.
+  when:
+    - sudoers_touchid_enabled | bool
+    - sudoers_touchid_pam_reattach | bool
+
+- name: Sudoers | enable Touch ID for sudo
+  ansible.builtin.template:
+    src: sudo_local.j2
+    dest: /etc/pam.d/sudo_local
+    owner: root
+    group: wheel
+    mode: "0444"
+  become: true
+  when: sudoers_touchid_enabled | bool
+
+- name: Sudoers | remove the Touch ID PAM include when disabled
+  ansible.builtin.file:
+    path: /etc/pam.d/sudo_local
+    state: absent
+  become: true
+  when: not (sudoers_touchid_enabled | bool)

@@ -30,11 +30,16 @@ instead of scattering them across chat history.
       unbound's `conf.d`, which stays the single source of truth.
 
       Still open before this can be called finished:
-      - Homebrew tap formula + a GitHub workflow tracking upstream releases;
-        the install is still `Scripts/MacOS/adguardhome-test-install.sh` with
-        a pinned version and hardcoded checksums. The `adguardhome` role
-        covers only the runtime glue.
-      - retire the unbound role (see the localhost-alias item below).
+      - retire the unbound role. Its `conf.d` is still the source of truth
+        that AdGuard Home's zones are generated from, so the zones have to
+        move to native AdGuard Home rule files first — which also means
+        changing what LocalKubernetes' `host_dns` renders, and rewriting the
+        two overlay zone files.
+      - a Homebrew tap formula + a GitHub workflow tracking upstream
+        releases, so the version stops being pinned by hand. The `adguardhome`
+        role installs the release itself now (verified against a checksum
+        before it is unpacked), but bumping it is still editing two lines in
+        `roles/adguardhome/defaults/main.yml`.
 
       **Open, deliberately not decided while the base setup is being
       finished — to understand properly first, then decide:**

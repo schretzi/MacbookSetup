@@ -1,0 +1,107 @@
+---
+# roles/adguardhome — the resolver itself and the glue around it.
+#
+# Chain: pinned binary -> config seeded once -> LaunchDaemon -> the two
+# refresh scripts that keep bind_hosts and the zones current at runtime.
+#
+# What this role does NOT own is anything AdGuard Home writes itself:
+# AdGuardHome.yaml after the first seed, its data directory, its filter cache.
+# The web UI rewrites the config on every change, so the repo seeds it and
+# then keeps its hands off - same reasoning as macswitcher's config.yaml.
+#
+# adguardhome_enabled: false means "do not manage", not "remove". Tearing the
+# daemon down would take the admin password and every web-UI change with it,
+# which is not something a switched-off flag should do silently.
+
+# --------------------------------------------------------------------------
+# 1. The daemon
+# --------------------------------------------------------------------------
+- name: AdGuardHome | select the release for this architecture
+  ansible.builtin.set_fact:
+    adguardhome_arch: >-
+      {{ 'darwin_arm64' if ansible_facts.architecture == 'arm64' else 'darwin_amd64' }}
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | fail on an architecture with no pinned checksum
+  ansible.builtin.assert:
+    that: adguardhome_arch in adguardhome_checksums
+    fail_msg: >-
+      No pinned checksum for {{ adguardhome_arch }}. Add it to
+      adguardhome_checksums from the release's checksums.txt.
+  when: adguardhome_enabled | bool
+
+# `become`, not a plain stat: AdGuard Home chmods its prefix to 0700 at
+# startup, so an unprivileged check cannot even traverse the directory and
+# would report a binary that is plainly there as missing.
+- name: AdGuardHome | read the installed version
+  ansible.builtin.command:
+    cmd: "{{ adguardhome_prefix }}/AdGuardHome --version"
+  become: true
+  register: adguardhome_installed
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | install the pinned release
+  when:
+    - adguardhome_enabled | bool
+    - adguardhome_version not in (adguardhome_installed.stdout | default(''))
+  become: true
+  block:
+    - name: AdGuardHome | download the release archive
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/AdguardTeam/AdGuardHome/releases/download/{{
+          adguardhome_version }}/AdGuardHome_{{ adguardhome_arch }}.zip
+        dest: "/tmp/AdGuardHome_{{ adguardhome_arch }}_{{ adguardhome_version }}.zip"
+        checksum: "sha256:{{ adguardhome_checksums[adguardhome_arch] }}"
+        mode: "0644"
+      register: adguardhome_archive
+
+    - name: AdGuardHome | unpack it
+      ansible.builtin.unarchive:
+        src: "{{ adguardhome_archive.dest }}"
+        dest: /tmp
+        remote_src: true
+        creates: "/tmp/AdGuardHome/AdGuardHome"
+
+    - name: AdGuardHome | put the binary in place
+      ansible.builtin.copy:
+        src: /tmp/AdGuardHome/AdGuardHome
+        dest: "{{ adguardhome_prefix }}/AdGuardHome"
+        remote_src: true
+        owner: root
+        group: wheel
+        mode: "0755"
+
+    - name: AdGuardHome | drop the unpacked archive
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/AdGuardHome
+        - "{{ adguardhome_archive.dest }}"
+
+- name: AdGuardHome | ensure the data directory exists
+  ansible.builtin.file:
+    path: "{{ adguardhome_prefix }}/data"
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: adguardhome_enabled | bool
+
+- name: AdGuardHome | ensure the generated inputs directory exists
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  loop:
+    - "{{ adguardhome_generated }}"
+    - "{{ adguardhome_generated }}/zones"
+  when: adguardhome_enabled | bool

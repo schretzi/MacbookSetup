@@ -166,11 +166,11 @@
       when: enable_unbound | bool
       tags: [unbound, dns]
 
-    # the glue around AdGuard Home, which replaced unbound as the resolver:
-    # keeps dns.bind_hosts following the kiac vmnet gateway, and re-translates
-    # unbound's conf.d (still the source of truth for zones) into AdGuard
-    # Home's generated inputs. Does not install AdGuard Home itself - that is
-    # still Scripts/MacOS/adguardhome-test-install.sh. After sudoers, whose
+    # AdGuard Home, which replaced unbound as the resolver: installs the
+    # pinned release, seeds its config once, and keeps dns.bind_hosts
+    # following the kiac vmnet gateway. Zones are still re-translated from
+    # unbound's conf.d, which remains the source of truth. After
+    # localhost_alias, whose 127.0.0.3 it binds, and after sudoers, whose
     # NOPASSWD rules both refresh scripts rely on.
     - role: adguardhome
       when: enable_adguardhome | bool

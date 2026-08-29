@@ -1,10 +1,31 @@
 ---
-# roles/adguardhome — the glue around an installed AdGuard Home, not the
-# install itself (see defaults/main.yml).
+# roles/adguardhome — the resolver this machine runs, and the glue around it.
 #
-# Chain: bind refresh script -> LaunchDaemon that re-runs it as the vmnet comes
-# and goes -> sudoers rules so the LocalKubernetes playbooks can trigger both
-# refreshes without a password.
+# Chain: pinned binary -> configuration seeded once -> the refresh scripts ->
+# LaunchDaemons -> rotation -> a proof that it answers.
+#
+# Split across three files because they fail for different reasons and are
+# worth reading separately:
+#
+#   install.yml    the pinned release, verified before it is unpacked as root
+#   configure.yml  AdGuardHome.yaml, seeded exactly once, with its web account
+#   (here)         scripts, daemons, rotation, verification
+#
+# What this role does NOT own is anything AdGuard Home writes itself: the
+# config after the first seed, its data directory, its filter cache. The web
+# UI rewrites the config on every change, so the repo seeds it and then keeps
+# its hands off - the same arrangement as macswitcher's config.yaml.
+#
+# adguardhome_enabled: false means "do not manage", not "remove". Tearing the
+# daemon down would take the admin password and every web-UI change with it,
+# which is not something a switched-off flag should do silently.
+
+- name: AdGuardHome | install the daemon
+  ansible.builtin.include_tasks: install.yml
+
+- name: AdGuardHome | seed its configuration
+  ansible.builtin.include_tasks: configure.yml
+  when: adguardhome_enabled | bool
 
 - name: AdGuardHome | install the bind_hosts refresh script
   ansible.builtin.copy:
@@ -89,9 +110,90 @@
     newsyslog_conf: adguardhome.conf
   when: adguardhome_enabled | bool
 
+# --------------------------------------------------------------------------
+# The resolver itself
+# --------------------------------------------------------------------------
+# After the binary and the config: launchd starts it immediately, and
+# KeepAlive would otherwise respawn it into a crash loop against a config that
+# is not there yet.
+- name: AdGuardHome | install the resolver daemon
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: daemon
+  vars:
+    launchd_plist: "{{ adguardhome_label }}.plist"
+    launchd_label: "{{ adguardhome_label }}"
+  when: adguardhome_enabled | bool
+
+# After the daemon is loaded, not before: this rewrites dns.bind_hosts and
+# kickstarts the label, and on a fresh machine there is nothing to kickstart
+# until the LaunchDaemon above exists.
 - name: AdGuardHome | put the bind list right now rather than at the next tick
   ansible.builtin.command: /usr/local/bin/adguardhome_bind_refresh
   become: true
   when: adguardhome_enabled | bool
   register: adguardhome_bind_run
   changed_when: "'bind_hosts:' in adguardhome_bind_run.stdout"
+
+- name: AdGuardHome | wait for it to bind
+  ansible.builtin.wait_for:
+    host: "{{ adguardhome_address }}"
+    port: 53
+    timeout: 30
+  when: adguardhome_enabled | bool
+  register: adguardhome_listening
+  failed_when: false
+
+- name: AdGuardHome | resolve a name through it
+  ansible.builtin.command:
+    cmd: "dig +short +time=3 +tries=1 @{{ adguardhome_address }} example.com A"
+  register: adguardhome_dig
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: adguardhome_enabled | bool
+
+# The reason a resolver will not start is always in its log and never in the
+# Ansible output. Surface it here rather than pointing at it.
+- name: AdGuardHome | read the log after a failed start
+  ansible.builtin.command:
+    cmd: "tail -n 20 {{ item }}"
+  become: true
+  loop:
+    - /Library/Logs/adguardhome.err.log
+    - /Library/Logs/adguardhome.log
+  register: adguardhome_errlog
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - adguardhome_enabled | bool
+    - adguardhome_dig.stdout | default('') | length == 0
+
+- name: AdGuardHome | fail with the reason it is not answering
+  ansible.builtin.fail:
+    msg: |-
+      AdGuard Home is not answering on {{ adguardhome_address }}:53.
+
+      {{ adguardhome_errlog.results | default([])
+         | map(attribute='stdout') | select('truthy') | join('\n\n')
+         | default('(logs empty - the daemon may not have started at all)', true) }}
+
+      Common causes:
+        * {{ adguardhome_address }} is not on lo0 - the localhost_alias role
+          creates it and runs before this one; check it did.
+        * something else holds port 53 on that address. unbound bound
+          0.0.0.0:53 and would take it: sudo lsof -nP -iUDP:53 -iTCP:53
+  when:
+    - adguardhome_enabled | bool
+    - adguardhome_dig.stdout | default('') | length == 0
+
+- name: AdGuardHome | report success
+  ansible.builtin.debug:
+    msg: >-
+      AdGuard Home answers on {{ adguardhome_address }}:53
+      (example.com -> {{ adguardhome_dig.stdout_lines | first | default('?') }}),
+      web UI on http://{{ adguardhome_address }}:{{ adguardhome_web_port }}
+  when:
+    - adguardhome_enabled | bool
+    - adguardhome_dig.stdout | default('') | length > 0

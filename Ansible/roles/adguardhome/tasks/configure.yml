@@ -1,0 +1,99 @@
+---
+# Seed AdGuardHome.yaml exactly once, complete with its accounts.
+#
+# Everything here is guarded on the file not existing yet. AdGuard Home
+# rewrites it on every change made through the web UI, so a second seed would
+# discard the password hashes and every setting made since - which is
+# precisely what a `[[ -f ]]` check run as the wrong user caused once already:
+# the prefix is 0700, the unprivileged test reported the file as missing, and
+# the else branch re-seeded over the live config on every run.
+#
+# The credentials are therefore only ever touched on the seeding path. On a
+# machine that already has a config, a missing keychain entry is NOT invented:
+# a generated password would not be the one AdGuard Home actually accepts, and
+# a credential that silently does not work is worse than an absent one.
+
+- name: AdGuardHome | is the configuration already there?
+  ansible.builtin.stat:
+    path: "{{ adguardhome_prefix }}/AdGuardHome.yaml"
+  become: true
+  register: adguardhome_conf
+  changed_when: false
+  check_mode: false
+
+- name: AdGuardHome | seed the configuration
+  when: not adguardhome_conf.stat.exists
+  become: true
+  block:
+    # Read-or-create in one step. Generating a random password rather than
+    # asking for one is what lets a fresh machine converge unattended; both
+    # are changeable afterwards, and where they live is documented in the
+    # role's defaults.
+    - name: AdGuardHome | make sure every account has a credential
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          pw=$(security find-generic-password -s {{ item.service | quote }} \
+                 -a {{ item.name | quote }} \
+                 -w /Library/Keychains/System.keychain 2>/dev/null || true)
+          if [ -z "$pw" ]; then
+              pw=$(openssl rand -base64 24)
+              security add-generic-password -U -s {{ item.service | quote }} \
+                  -a {{ item.name | quote }} -w "$pw" \
+                  /Library/Keychains/System.keychain
+          fi
+          printf '%s' "$pw"
+      loop: "{{ adguardhome_accounts }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: adguardhome_creds
+      changed_when: false
+      no_log: true
+
+    # AdGuard Home stores bcrypt hashes; macOS ships htpasswd, which produces
+    # exactly that.
+    - name: AdGuardHome | hash them
+      ansible.builtin.command:
+        cmd: >-
+          /usr/sbin/htpasswd -nbB {{ item.item.name | quote }}
+          {{ item.stdout | quote }}
+      loop: "{{ adguardhome_creds.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      register: adguardhome_hashes
+      changed_when: false
+      no_log: true
+
+    - name: AdGuardHome | install the seed
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/Dotfiles/adguardhome/AdGuardHome.yaml.seed"
+        dest: "{{ adguardhome_prefix }}/AdGuardHome.yaml"
+        owner: root
+        group: wheel
+        mode: "0640"
+        force: false
+
+    # A line rewrite rather than a YAML round-trip, deliberately: safe_dump
+    # would reformat the file and strip every comment in the seed, and those
+    # comments are the only place the reasoning behind bind_hosts and the web
+    # port is written down.
+    - name: AdGuardHome | give it its accounts
+      ansible.builtin.replace:
+        path: "{{ adguardhome_prefix }}/AdGuardHome.yaml"
+        regexp: '^users: \[\]$'
+        replace: |-
+          users:
+          {% for h in adguardhome_hashes.results %}
+            - name: {{ h.item.item.name }}
+              password: {{ h.stdout | trim | split(':') | last }}
+          {% endfor %}
+      no_log: true
+
+    - name: AdGuardHome | say where the passwords are
+      ansible.builtin.debug:
+        msg: >-
+          Seeded with accounts {{ adguardhome_accounts | map(attribute='name') | join(', ') }}.
+          Their passwords are in the System keychain
+          ({{ adguardhome_accounts | map(attribute='service') | join(', ') }});
+          read one with: sudo security find-generic-password -s "<service>"
+          -a "<account>" -w /Library/Keychains/System.keychain

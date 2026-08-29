@@ -111,10 +111,14 @@ enable_localhost_alias: true
 # of truth that AdGuard Home's zones are generated from. See BACKLOG.md.
 enable_unbound: false
 
-# AdGuard Home's runtime glue: the bind_hosts refresh that follows the kiac
-# vmnet gateway, and the zone refresh that re-translates unbound's conf.d. Not
-# the install - that is still Scripts/MacOS/adguardhome-test-install.sh, and
-# the role is a no-op on a machine where AdGuard Home is not present.
+# AdGuard Home, the resolver this machine runs: the pinned release, the
+# configuration seeded once, both LaunchDaemons, log rotation, and the two
+# refresh scripts that keep bind_hosts and the zones current at runtime.
+#
+# false means "do not manage", not "remove" - tearing it down would take the
+# admin password and every web-UI change with it. A fresh machine converges
+# unattended: the role generates the web UI and zone-sync passwords and stores
+# them in the System keychain. See the role's defaults for where.
 enable_adguardhome: true
 
 # pf NAT for LocalKubernetes' (kiac) vmnet subnet, kept pointed at whichever

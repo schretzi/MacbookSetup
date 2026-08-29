@@ -2,11 +2,11 @@
 # ============================================================================
 # Install AdGuard Home locally, next to the running unbound, for evaluation.
 # ============================================================================
-# This is deliberately a script and not an Ansible role. AdGuard Home is on
-# trial: if it wins, the install moves into a Homebrew tap of its own (with a
-# GitHub workflow tracking upstream releases) and the wiring becomes a role
-# like every other daemon here. Until then nothing in site.yml knows about it,
-# so a normal `ansible-playbook site.yml` neither installs nor removes it.
+# SUPERSEDED - the install lives in the `adguardhome` Ansible role now
+# (roles/adguardhome/tasks/install.yml + configure.yml), so a normal
+# `ansible-playbook site.yml` installs and configures it. This script is kept
+# only for `--uninstall` and for the side-by-side comparison against unbound,
+# and goes away with unbound itself.
 #
 # There is no Homebrew formula for AdGuard Home - `brew search adguard` only
 # finds the unrelated content-blocker cask - so the release zip is fetched from

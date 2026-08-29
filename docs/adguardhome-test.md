@@ -12,8 +12,8 @@ comparison is what the decision rests on — but the trial is over.
 | serving DNS | AdGuard Home, on `127.0.0.1/.2/.3` and, while the vmnet is up, `192.168.64.1` |
 | unbound | `bootout` + `launchctl disable`, `enable_unbound: false` |
 | unbound's `conf.d` | still the single source of truth for zones, *translated* into AdGuard Home's inputs |
-| in `site.yml` | the `adguardhome` role — the runtime glue only, **not** the install |
-| the install | still `Scripts/MacOS/adguardhome-test-install.sh`; there is no Homebrew formula |
+| in `site.yml` | the `adguardhome` role — install, configuration and runtime glue |
+| the install | the role, from the pinned GitHub release; there is no Homebrew formula |
 | rollback | `Scripts/MacOS/adguardhome-cutover.sh --revert` |
 
 The reason to make the switch was the half unbound does not do: ad and tracker
@@ -33,14 +33,42 @@ it](#pointing-something-at-it).
 ## Install
 
 ```bash
-Scripts/MacOS/adguardhome-test-install.sh
+ansible-playbook site.yml --tags adguardhome --ask-become-pass
 ```
 
-It downloads the pinned release (v0.107.79, SHA-256 checked against the
-published `checksums.txt` — there is **no Homebrew formula** for AdGuard Home;
-`brew search adguard` only finds the unrelated content-blocker cask), seeds the
-config, translates unbound's zones, loads the LaunchDaemon and proves it
-answers.
+The `adguardhome` role downloads the pinned release (SHA-256 checked against
+the published `checksums.txt` before anything is unpacked as root — there is
+**no Homebrew formula** for AdGuard Home; `brew search adguard` only finds the
+unrelated content-blocker cask), seeds the config once, loads both
+LaunchDaemons and proves it answers.
+
+Seeding needs no preparation. AdGuard Home has no permission model — every
+entry in `users:` is a full admin — so it gets two accounts, and the role
+generates a random password for either one that has no System keychain entry
+yet and stores it there:
+
+| account | keychain service | used for |
+| --- | --- | --- |
+| `admin` | `adguardhome admin` | the web UI login |
+| `zonesync` | `adguardhome api` | `POST /control/filtering/refresh`, which is what makes AdGuard Home re-read a changed zone without a restart |
+
+Read or change one:
+
+```bash
+sudo security find-generic-password -s "adguardhome admin" -a admin -w \
+     /Library/Keychains/System.keychain
+sudo security add-generic-password -U -s "adguardhome admin" -a admin \
+     -w '<new password>' /Library/Keychains/System.keychain
+```
+
+Changing it in the keychain does **not** change it in AdGuard Home — set it in
+the web UI too, or delete `AdGuardHome.yaml` and let the role re-seed. The
+credentials are only ever touched while seeding: on a machine that already has
+a config, a missing entry is not invented, because a generated password would
+not be the one AdGuard Home accepts.
+
+`Scripts/MacOS/adguardhome-test-install.sh` did all of this before and is kept
+only for `--uninstall` and the comparison against unbound.
 
 Remove it again, completely:
 

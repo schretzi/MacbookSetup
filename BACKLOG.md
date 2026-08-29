@@ -5,6 +5,13 @@ Open topics collected from past working sessions and `Setup.md`. Check items
 off (or remove them) as they get resolved; keep new open threads added here
 instead of scattering them across chat history.
 
+## My Notes
+
+- refactor tunneling
+- make docs-check reports "docs out of date" locally right now. That's it working — it diffs against git HEAD, and the regenerated docs are uncommitted. Docs are current and idempotent (verified by regenerating twice).
+- Add littlesnitch and tailscale to observe
+-
+
 ## Open decisions
 
 - [ ] `kubeconfig-add` / `kubeconfig-merge`: keep as zsh functions

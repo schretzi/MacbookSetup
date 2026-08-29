@@ -17,6 +17,15 @@
   ansible.builtin.set_fact:
     launchd_daemon_dest: "{{ launchd_plist | regex_replace('\\.j2$', '') }}"
 
+- name: "Launchd | ensure /Library/Logs exists"
+  ansible.builtin.file:
+    path: /Library/Logs
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0775"
+  become: true
+
 - name: "Launchd | copy daemon {{ launchd_daemon_dest }}"
   ansible.builtin.copy:
     src: "{{ repo_root }}/plists/LaunchDaemon/{{ launchd_plist }}"

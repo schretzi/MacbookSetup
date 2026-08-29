@@ -7,7 +7,7 @@
 # 127.0.0.100. Those addresses have to exist before anything can bind them.
 #
 # Deployed to /usr/local/bin/localhost_alias (root:wheel 0755) by the Ansible
-# role "unbound" and started by /Library/LaunchDaemons/org.localhost.alias.plist.
+# role "unbound" and started by /Library/LaunchDaemons/com.schretzi.localhost-alias.plist.
 #
 # Usage: localhost_alias <octet|from-to> [...]
 #   localhost_alias 2-12 100   -> 127.0.0.2 .. 127.0.0.12 and 127.0.0.100

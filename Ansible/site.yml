@@ -177,9 +177,21 @@
       when: enable_macswitcher | bool
       tags: [macswitcher, proxy]
 
+    # after macswitcher: both are part of the same network/auth stack, and
+    # `macswitcher observe` reports on this agent
+    - role: kerberoskeepalive
+      when: enable_kerberoskeepalive | bool
+      tags: [kerberoskeepalive, kerberos, krb]
+
     - role: gcloud
       when: enable_gcloud | bool
       tags: [gcloud]
+
+    # after gcloud: the `kind: gcp` tunnels authenticate with application
+    # default credentials, which gcloud provides
+    - role: tunneling
+      when: enable_tunneling | bool
+      tags: [tunneling, tunnels, gcp]
 
     - role: ai
       when: enable_ai | bool

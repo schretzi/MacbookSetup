@@ -13,8 +13,8 @@
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/karabiner-daemon.out.log</string>
+    <string>/Library/Logs/karabiner-daemon.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/karabiner-daemon.err.log</string>
+    <string>/Library/Logs/karabiner-daemon.err.log</string>
 </dict>
 </plist>

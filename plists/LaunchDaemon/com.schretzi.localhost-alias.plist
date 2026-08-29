@@ -3,20 +3,29 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>org.localhost.alias</string>
+    <string>com.schretzi.localhost-alias</string>
+
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/localhost_alias</string>
         <string>2-12</string>
         <string>100</string>
     </array>
+
+    <!-- Runs once at boot and exits, so it reopens the log on every launch
+         and a newsyslog rename in between is invisible to it. -->
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <false/>
+
     <key>StandardOutPath</key>
-    <string>/tmp/localhost_alias.out.log</string>
+    <string>/Library/Logs/localhost-alias.log</string>
+
     <key>StandardErrorPath</key>
-    <string>/tmp/localhost_alias.err.log</string>
+    <string>/Library/Logs/localhost-alias.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
 </dict>
 </plist>

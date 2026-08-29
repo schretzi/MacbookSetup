@@ -8,6 +8,12 @@ environment.
 > **work overlay** together with the DNS zones, work mail account and
 > shell helpers; see [Overlays](#identity-and-the-overlay-repositories).
 
+> **Sharing the networking tools with someone else?**
+> [docs/networking-tools.md](docs/networking-tools.md) covers installing and
+> using macswitcher, kerberoskeepalive and omt **without** this repository —
+> no Ansible, no clone, no overlays. It is the page to send to a colleague.
+> The rest of this file assumes you are rebuilding *my* machine.
+
 ## Software outside Automation
 
 Three things cannot come from `brew bundle` and Ansible: one has to filter the
@@ -88,9 +94,18 @@ Brewfiles/   package lists, numbered by topic
 Dotfiles/    every config file, symlinked into place
 Scripts/     shell scripts (referenced by absolute path, or copied to /usr/local/bin)
 plists/      LaunchAgents + LaunchDaemons, copied into place
-etc/         files that belong under /etc
+etc/         files that belong under /etc (newsyslog rotation configs)
+docs/        standalone guides that do not assume this repo — shareable
 Addons/      dictionaries, markdownlint config
 ```
+
+Two documents sit beside this one:
+
+- [CONVENTIONS.md](CONVENTIONS.md) — the rules every background job follows
+  (labels, log paths, rotation, CLI surface), and why.
+- [docs/networking-tools.md](docs/networking-tools.md) — a self-contained
+  install/use guide for the three networking CLIs, written for someone who
+  does not have this repository.
 
 ## Ansible
 
@@ -138,10 +153,10 @@ This repository is the **public base**: all machinery, no identity. Nothing in
 it names a person, an address or an employer. Two private repositories layer on
 top:
 
-| Repo     | Setting             | Holds                                                          |
-| -------- | ------------------- | -------------------------------------------------------------- |
-| this one | —                   | roles, Brewfiles, scripts, plists, shared dotfiles             |
-| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config, gitlab.com instance |
+| Repo     | Setting             | Holds                                                                                 |
+| -------- | ------------------- | ------------------------------------------------------------------------------------- |
+| this one | —                   | roles, Brewfiles, scripts, plists, shared dotfiles                                    |
+| private  | `private_repo_root` | `identity.yml`, personal git/ssh/mail config, gitlab.com instance                     |
 | work     | `work_repo_root`    | employer mail account, intranet DNS, work aliases and sessions, work gitlab instances |
 
 Both paths may be empty. **A machine with neither cloned still converges** — it
@@ -359,7 +374,7 @@ A third permission is needed for one specific feature: kanata's `cmd` action
 (e.g. `^`+d opening today's daily note) runs as **root** via the
 `com.kanata.daemon` LaunchDaemon. Without **Full Disk Access** for
 `~/.cargo/bin/kanata` in System Settings → Privacy & Security, root can read
-its *own* files fine but macOS's TCC silently denies reads of the
+its _own_ files fine but macOS's TCC silently denies reads of the
 iCloud-backed Obsidian vault - the daily note still gets created with the
 right filename, just without its template content (the fallback in
 `open-daily-note.sh` swallows the failure instead of erroring). Grant Full
@@ -488,7 +503,7 @@ other two, each through `gitlab_instances` in its `overlay.yml`:
 
 ```yaml
 gitlab_instances:
-  - name: com                       # short name used with `gl`
+  - name: com # short name used with `gl`
     hostname: gitlab.com
     keychain_service: "glab gitlab.com"
   # api_host: only needed when the API endpoint differs from hostname
@@ -602,10 +617,14 @@ Reading mail in the shell, four tools plus a token helper:
 - **msmtp** — sending
 
 The role creates `~/Maildir`, initialises the notmuch database, and installs
-two LaunchAgents: `org.schretzi.omt-daemon` (keeps tokens fresh) and
-`org.schretzi.offlineimap-sync` (syncs every 5 minutes, logging to
-`~/Library/Logs/offlineimap-sync.log`). Both are skipped if
+two LaunchAgents: `com.schretzi.omt` (keeps tokens fresh) and
+`com.schretzi.offlineimap-sync` (syncs every 5 minutes). Both log to
+`~/Library/Logs/<name>.log`, rotated by newsyslog. Both are skipped if
 `/opt/homebrew/bin/omt` is missing, so the agents do not sit in a failure loop.
+
+`com.schretzi.omt` has no plist in this repo: `omt service install` renders and
+loads it from omt's own `internal/service`, the same way macswitcher and
+kerberoskeepalive do. See [CONVENTIONS.md](CONVENTIONS.md).
 
 ### One account list, five rendered configs
 
@@ -1161,8 +1180,8 @@ Caveats:
   after that.
 - The policy takes effect on the browser's next restart, not immediately.
 - **macOS's App Management privacy protection (Ventura+) blocks this even as
-  root.** Writing into another app's `.app` bundle needs the *calling
-  process* — the terminal you run `ansible-playbook` from (Terminal, iTerm,
+  root.** Writing into another app's `.app` bundle needs the _calling
+  process_ — the terminal you run `ansible-playbook` from (Terminal, iTerm,
   Kitty, ...) — to be granted access under **System Settings → Privacy &
   Security → App Management**, in addition to `sudo`/`--ask-become-pass`. A
   failure here shows up as `Operation not permitted [Errno 1]` even though
@@ -1223,3 +1242,14 @@ from the macOS Keychain and must not be added to any repository.
 - [YubiKey guide](https://github.com/drduh/YubiKey-Guide)
 - [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice)
 - [DisplayLink macOS driver (Synaptics)](https://www.synaptics.com/products/displaylink-graphics/downloads/macos)
+
+## Improvment Ideas
+
+- [ ] When session-kitty stopped focus goes to finder, I want the last active session to get the focus
+- [ ] Tunneling script modernization
+- [ ] Work configs into overlay and search for repo to push
+- [ ] Regularly vulnerability check and how to keep track of my project status
+- [ ] ssh config - now everything is one big file combined private and work,
+      need to adapt and split
+- [ ] look into checkmate.nvim (https://github.com/bngarren/checkmate.nvim)
+

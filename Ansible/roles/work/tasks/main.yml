@@ -57,13 +57,43 @@
   check_mode: false
   failed_when: false
 
+# LaunchAgent, not LaunchDaemon: openconnect needs root, but the AD password
+# and certificate key password only come out of the *user's* unlocked login
+# Keychain, which a root LaunchDaemon never has access to. The agent
+# escalates just the openconnect process via the "openconnect" NOPASSWD
+# sudoers rule. See corp-vpn-agent.sh in the work overlay for the full
+# reasoning, including how it forwards SIGTERM/SIGINT into the sudo'd
+# openconnect so `launchctl bootout` actually tears the VPN down.
+#
+# The plist and script are work-overlay-only (server hostname, AD username,
+# cert pin) and therefore not committed to this public repository -
+# work_overlay confirms the overlay checkout (and its plist) actually exists
+# before we try to install it.
+- name: Work | install the Corp VPN LaunchAgent
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: agent
+  vars:
+    launchd_plist: com.schretzi.corp-vpn.plist
+    launchd_label: com.schretzi.corp-vpn
+    launchd_plist_root: "{{ work_repo_root }}"
+  when: work_overlay | default(false)
+
+- name: Work | rotate the Corp VPN logs
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: corp-vpn.conf
+    newsyslog_conf_root: "{{ work_repo_root }}"
+  when: work_overlay | default(false)
+
 - name: Work | remaining manual steps
   ansible.builtin.debug:
     msg: >-
       {{ [
         (work_cert.rc != 0)
           | ternary("User certificate not found in the login keychain - follow the setup notes in the work overlay (needs an office network and Safari).", ""),
-        "VPN: the client is installed, but the profile and connect script come from the work overlay.",
+        "VPN: com.schretzi.corp-vpn LaunchAgent is installed and connects at login; run `launchctl bootout gui/$(id -u)/com.schretzi.corp-vpn` to stop it (KeepAlive restarts it otherwise) - see the work overlay's Work_Setup.md.",
         "Vendor installers (docking station, endpoint security) are manual downloads - see the work overlay notes.",
         "Intranet unbound zones are active because enable_work is true; they forward to internal resolvers that only answer on VPN or the intranet."
       ] | reject('equalto', '') | list }}

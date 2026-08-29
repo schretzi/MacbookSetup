@@ -50,4 +50,4 @@ brew "wget"
 cask "schretzi/tap/macswitcher"
 cask "schretzi/tap/omt"
 cask "schretzi/tap/gittree"
-
+cask "schretzi/tap/kerberoskeepalive"

@@ -113,6 +113,14 @@ enable_firefox_enterprise_roots: true
 # variables in ~/.zsh/rcs/proxy - all seeded once, then owned by the runtime
 enable_macswitcher: true
 
+# kerberoskeepalive's LaunchAgent and log rotation (the binary itself comes
+# from the homebrew role)
+enable_kerberoskeepalive: true
+
+# tunneling's LaunchAgent and log rotation. No cask yet - the role warns and
+# skips unless the binary has been installed from its repo (`make install`).
+enable_tunneling: true
+
 # gcloud components
 enable_gcloud: true
 

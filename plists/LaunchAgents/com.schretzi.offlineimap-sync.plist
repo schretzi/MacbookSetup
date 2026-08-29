@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.offlineimap-sync</string>
+
+    <!-- Called directly rather than through `bash -lc 'offlineimap >> log'`.
+         A shell redirect owns the append fd itself, so newsyslog can never
+         rotate it: the log grew to 6.5 MB before this changed. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/offlineimap</string>
+    </array>
+
+    <!-- launchd starts jobs with a minimal PATH, and offlineimap shells out
+         to the keychain helper and to omt for its OAuth2 token. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Exits between runs, so it picks up a fresh fd on every launch and a
+         newsyslog rename in between is invisible to it. This is the shape
+         where plain StandardOutPath is safe. -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/schretzi</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/schretzi/Library/Logs/offlineimap-sync.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/schretzi/Library/Logs/offlineimap-sync.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

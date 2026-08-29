@@ -315,13 +315,34 @@
       changed_when: "'Added' in mail_notmuch_new.stdout and 'Added 0 ' not in mail_notmuch_new.stdout"
       failed_when: false
 
-    - name: Mail | install the omt token daemon
+    # omt owns its own LaunchAgent now: `omt service install` renders the
+    # plist from internal/service and loads it. There is no plist for it in
+    # this repo any more - a hand-maintained copy here is exactly how it
+    # drifted (an org.* label, a `bash -lc` redirect for logging, and no
+    # rotation at all).
+    # Fails fast if the installed omt is too old, rather than letting the
+    # install call die on a cobra usage dump (or, worse, succeed against an
+    # older `service` and write the pre-convention label).
+    - name: Mail | require an omt that implements the current convention
       ansible.builtin.include_role:
         name: launchd
-        tasks_from: agent
+        tasks_from: require_service_cli
       vars:
-        launchd_plist: org.schretzi.omt-daemon.plist
-        launchd_label: org.schretzi.omt-daemon
+        service_cli_bin: "{{ homebrew_prefix }}/bin/omt"
+        service_cli_label: com.schretzi.omt
+      when: mail_omt.stat.exists
+
+    - name: Mail | install the omt LaunchAgent
+      ansible.builtin.command: "{{ homebrew_prefix }}/bin/omt service install"
+      register: mail_omt_service
+      changed_when: "'installed and started' in mail_omt_service.stdout"
+      when: mail_omt.stat.exists
+
+    - name: Mail | rotate omt's logs
+      ansible.builtin.include_role:
+        name: newsyslog
+      vars:
+        newsyslog_conf: omt.conf
       when: mail_omt.stat.exists
 
     - name: Mail | install the offlineimap sync agent
@@ -329,6 +350,13 @@
         name: launchd
         tasks_from: agent
       vars:
-        launchd_plist: org.schretzi.offlineimap-sync.plist
-        launchd_label: org.schretzi.offlineimap-sync
+        launchd_plist: com.schretzi.offlineimap-sync.plist
+        launchd_label: com.schretzi.offlineimap-sync
+      when: mail_omt.stat.exists
+
+    - name: Mail | rotate offlineimap's logs
+      ansible.builtin.include_role:
+        name: newsyslog
+      vars:
+        newsyslog_conf: offlineimap-sync.conf
       when: mail_omt.stat.exists

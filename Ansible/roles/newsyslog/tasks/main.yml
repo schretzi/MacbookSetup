@@ -1,0 +1,49 @@
+---
+# Install one newsyslog rotation config.
+#
+# macOS's built-in com.apple.newsyslog LaunchDaemon reads every
+# /etc/newsyslog.d/*.conf hourly and rotates whatever has grown past the size
+# in the file. This role is the only rotation mechanism in the setup: nothing
+# rotates itself, and there is no logrotate and no cron truncation.
+#
+# The confs are *copied*, not symlinked: newsyslog reads them as root, and a
+# link into a user-owned repo checkout is both a trust problem and something
+# it will not follow. The file in etc/newsyslog.d/ stays the source of truth -
+# re-run the play after editing it.
+#
+# See CONVENTIONS.md for the rules these files implement, and in particular
+# for why a long-running job needs to reopen its own log rather than relying
+# on launchd's StandardOutPath.
+#
+# Caller must set:
+#   newsyslog_conf: kerberoskeepalive.conf
+# Caller may set:
+#   newsyslog_conf_root: an overlay's own checkout root (defaults to
+#   repo_root), so an overlay-only job's conf never has to live in the public
+#   base repository.
+
+- name: "Newsyslog | install {{ newsyslog_conf }}"
+  ansible.builtin.copy:
+    src: "{{ newsyslog_conf_root | default(repo_root) }}/etc/newsyslog.d/{{ newsyslog_conf }}"
+    dest: "/etc/newsyslog.d/{{ newsyslog_conf }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  register: newsyslog_copy
+
+# newsyslog silently ignores a malformed line, so a typo costs you rotation
+# without ever saying so. -n is a dry run: it parses the file, explains what
+# it would do to each log, and exits non-zero if it cannot read the config.
+- name: "Newsyslog | verify {{ newsyslog_conf }} parses"
+  ansible.builtin.command: "newsyslog -n -f /etc/newsyslog.d/{{ newsyslog_conf }}"
+  become: true
+  register: newsyslog_check
+  changed_when: false
+  failed_when: newsyslog_check.rc != 0
+  when: newsyslog_copy.changed
+
+- name: "Newsyslog | forget variables"
+  ansible.builtin.set_fact:
+    newsyslog_copy: null
+    newsyslog_check: null

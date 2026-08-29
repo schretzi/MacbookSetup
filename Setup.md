@@ -690,13 +690,22 @@ instead of rewriting resolver settings per network.
 
 The role runs the full chain:
 
-1. **Loopback aliases.** mDNSResponder owned `127.0.0.1:53` before, so unbound
-   listens on `127.0.0.2`, would not be needed anymore, but still stays for
-   historical reasons. `Scripts/MacOS/localhost_alias.sh` is copied to
-   `/usr/local/bin/localhost_alias` and run at boot by `org.localhost.alias`.
-   This adds additional IPs on loopback which I used for different clusters
-   earlier with k3d, with apple containers not necessary anymore, but cheap and I
-   keep it for maybe future use.
+1. **Loopback aliases** — _its own role now, `localhost_alias`, not part of
+   this one._ mDNSResponder owns `127.0.0.1:53`, so every local resolver binds
+   a different loopback address: AdGuard Home `127.0.0.3` for DNS and its web
+   UI, unbound `127.0.0.2` while it is still installed.
+   `Scripts/MacOS/localhost_alias.sh` is copied to
+   `/usr/local/bin/localhost_alias` and run at boot by
+   `com.schretzi.localhost-alias`, because macOS drops the aliases on every
+   reboot.
+
+   It also adds `.4` to `.12` and `.100`, which I used for separate k3d
+   clusters earlier. Apple containers made that unnecessary, but the aliases
+   are cheap and the cluster zones still answer with them.
+
+   The role is separate precisely because the addresses outlive the resolver
+   that happens to use them — tying them to unbound meant switching unbound
+   off left AdGuard Home's own address unmanaged.
 2. **Service account.** `_unbound`, uid/gid 444 (system range — check
    `/etc/passwd` if 444 is taken), created via `dscl`. Its `RecordName` lists
    both `_unbound` and `unbound` so either name in the config resolves.

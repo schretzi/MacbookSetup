@@ -38,7 +38,7 @@ theme: auto
 dns:
   # 127.0.0.3, because unbound has 127.0.0.2 and mDNSResponder has 127.0.0.1.
   # The alias itself is created at boot by com.schretzi.localhost-alias (the
-  # unbound role installs it; localhost_alias 2-12 100).
+  # localhost_alias role installs it; localhost_alias 2-12 100).
   #
   # NOTE: this is the *trial* value. While unbound is running it holds the
   # wildcard, so AdGuard Home can only have a specific address.

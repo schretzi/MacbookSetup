@@ -5,8 +5,12 @@
 # an employer intranet all resolve at the same time, without editing
 # /etc/resolv.conf every time the network changes.
 #
-# Chain: loopback aliases -> _unbound system account -> configs -> DNSSEC
-# anchor + control certs -> LaunchDaemon.
+# Chain: _unbound system account -> configs -> DNSSEC anchor + control certs
+# -> LaunchDaemon.
+#
+# The 127.0.0.x aliases unbound binds are NOT created here. They belong to the
+# localhost_alias role, which runs before this one - they outlive unbound
+# (AdGuard Home binds 127.0.0.3, the cluster zones answer .3 to .12).
 
 - name: Unbound | check the binary is installed
   ansible.builtin.stat:
@@ -19,50 +23,7 @@
   when: not unbound_bin.stat.exists
 
 # --------------------------------------------------------------------------
-# 1. Loopback aliases
-# --------------------------------------------------------------------------
-- name: Unbound | install the loopback alias script
-  ansible.builtin.copy:
-    src: "{{ repo_root }}/Scripts/MacOS/localhost_alias.sh"
-    dest: /usr/local/bin/localhost_alias
-    owner: root
-    group: wheel
-    mode: "0755"
-  become: true
-
-- name: Unbound | install the loopback alias daemon
-  ansible.builtin.include_role:
-    name: launchd
-    tasks_from: daemon
-  vars:
-    launchd_plist: org.localhost.alias.plist
-    launchd_label: org.localhost.alias
-
-- name: Unbound | apply the aliases now (they are lost on reboot otherwise)
-  ansible.builtin.command:
-    cmd: "/usr/local/bin/localhost_alias {{ unbound_loopback_aliases | join(' ') }}"
-  become: true
-  register: unbound_alias_run
-  changed_when: false
-  check_mode: false
-
-- name: Unbound | read the addresses on lo0
-  ansible.builtin.command:
-    cmd: ifconfig lo0
-  register: unbound_alias_check
-  changed_when: false
-  check_mode: false
-
-- name: Unbound | verify 127.0.0.2 exists on lo0
-  ansible.builtin.assert:
-    that: "'127.0.0.2' in unbound_alias_check.stdout"
-    fail_msg: >-
-      127.0.0.2 is not on lo0, so unbound has nothing to bind to. Check
-      /tmp/localhost_alias.err.log and that /usr/local/bin/localhost_alias is
-      executable.
-
-# --------------------------------------------------------------------------
-# 2. System account
+# 1. System account
 # --------------------------------------------------------------------------
 - name: Unbound | does the service account already exist?
   ansible.builtin.command:
@@ -102,7 +63,7 @@
       changed_when: true
 
 # --------------------------------------------------------------------------
-# 3. Configuration - repo is the truth, brew's etc dir gets symlinks
+# 2. Configuration - repo is the truth, brew's etc dir gets symlinks
 # --------------------------------------------------------------------------
 # unbound_etc needs group-write for {{ unbound_user }}: unbound periodically
 # rewrites its auto-trust-anchor-file (root.key) in place there (a
@@ -279,7 +240,7 @@
        | difference(unbound_confd_seed_files) }}
 
 # --------------------------------------------------------------------------
-# 4. DNSSEC anchor + remote-control certificates
+# 3. DNSSEC anchor + remote-control certificates
 # --------------------------------------------------------------------------
 - name: Unbound | fetch the DNSSEC root trust anchor
   ansible.builtin.command:
@@ -343,7 +304,7 @@
   failed_when: false
 
 # --------------------------------------------------------------------------
-# 5. Validate, then start
+# 4. Validate, then start
 # --------------------------------------------------------------------------
 - name: Unbound | check the configuration for errors
   ansible.builtin.command:

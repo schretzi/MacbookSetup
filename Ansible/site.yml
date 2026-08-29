@@ -155,6 +155,13 @@
       when: enable_mail | bool
       tags: [mail]
 
+    # the extra 127.0.0.x addresses on lo0. Before every resolver role: both
+    # unbound (127.0.0.2) and AdGuard Home (127.0.0.3, plus its web UI) bind
+    # one, and macOS drops the aliases on every reboot.
+    - role: localhost_alias
+      when: enable_localhost_alias | bool
+      tags: [localhost_alias, dns]
+
     - role: unbound
       when: enable_unbound | bool
       tags: [unbound, dns]

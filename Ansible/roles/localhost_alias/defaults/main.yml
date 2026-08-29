@@ -1,0 +1,28 @@
+---
+# Extra loopback addresses on lo0.
+#
+# macOS ships lo0 with 127.0.0.1 only, and mDNSResponder already owns port 53
+# there - which is why every local resolver on this machine binds a different
+# loopback address instead. Those addresses do not exist until something
+# creates them, and they are gone again after a reboot.
+#
+# This used to live inside the unbound role. It is its own role because the
+# addresses outlive whichever resolver happens to use them: AdGuard Home binds
+# 127.0.0.3 and serves its web UI there, and the cluster zones answer with
+# 127.0.0.3 ... 127.0.0.12 and 127.0.0.100.
+
+# Arguments for localhost_alias: single octets or from-to ranges, all under
+# 127.0.0.x. "2-12" -> 127.0.0.2 through 127.0.0.12.
+localhost_alias_addresses:
+  - "2-12"
+  - "100"
+
+# Addresses the play refuses to continue without. Not the full set above -
+# only the ones something actually binds, where a missing alias means a daemon
+# that cannot start rather than a name that fails to resolve.
+#
+#   127.0.0.2   unbound, while it is still installed
+#   127.0.0.3   AdGuard Home: resolver and web UI
+localhost_alias_required:
+  - 127.0.0.2
+  - 127.0.0.3

@@ -27,10 +27,8 @@ unbound_confd_seed_files:
   - kiac.conf
 
 # mDNSResponder already owns 127.0.0.1:53, so unbound listens on 127.0.0.2.
-# .3 to .12 and .100 are used as target addresses by the k3d/cluster zones.
-unbound_loopback_aliases:
-  - "2-12"
-  - "100"
+# That alias, and the .3 to .12 / .100 the cluster zones answer with, are
+# created by the localhost_alias role - see its defaults for the full list.
 
 # System account unbound drops privileges to. 444 is inside the macOS system
 # account range; check /etc/passwd if it turns out to be taken.

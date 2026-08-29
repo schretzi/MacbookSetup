@@ -93,7 +93,14 @@ enable_windowmanager: true
 # offlineimap/notmuch/neomutt/msmtp/omt config + sync LaunchAgents
 enable_mail: true
 
-# unbound resolver: loopback aliases, _unbound user, configs, LaunchDaemon
+# The extra 127.0.0.x addresses on lo0 (needs sudo). Every local resolver
+# binds one, because mDNSResponder already owns 127.0.0.1:53 - AdGuard Home
+# uses 127.0.0.3 for both DNS and its web UI, and the cluster zones answer
+# with .3 to .12. macOS forgets them on reboot, so a LaunchDaemon recreates
+# them. Deliberately independent of which resolver is switched on below.
+enable_localhost_alias: true
+
+# unbound resolver: _unbound user, configs, LaunchDaemon
 # (needs sudo)
 enable_unbound: true
 

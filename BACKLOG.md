@@ -68,29 +68,16 @@ instead of scattering them across chat history.
       - Writing a zone file changes nothing on its own — AdGuard Home serves
         its own cached copy. Everything that changes a zone has to end in
         `adguardhome_zones_refresh`.
-- [ ] **unbound is still installed on this machine.** The repository no longer
-      knows about it, but the machine does. None of it is served - the daemon
-      is booted out and `launchctl disable`d - so this is tidying, not repair,
-      and it needs root:
+- [x] **unbound removed from this machine.** Done: the LaunchDaemon plist, the
+      Homebrew formula, `/opt/homebrew/etc/unbound`, the installed translator,
+      the `unbound-restart` sudoers file and the `_unbound` account are all
+      gone. Verified afterwards rather than assumed.
 
-      ```bash
-      brew uninstall unbound
-      sudo rm -rf /opt/homebrew/etc/unbound
-      sudo rm -f /usr/local/libexec/unbound_to_adguard.py
-      sudo rm -f /etc/sudoers.d/unbound-restart
-      sudo dscl . -delete /Users/_unbound
-      sudo dscl . -delete /Groups/_unbound
-      ```
-
-      Deliberately not done by Ansible: a role that has been deleted cannot
-      clean up after itself, and a play that deletes system accounts as a side
-      effect of a removed feature is not something to leave lying around.
-
-      The sudoers file is worth noticing on its own: the role only removes rule
+      One thing it surfaced, still open: the sudoers role only removes rule
       files while `sudoers_passwordless_enabled` is false, so a rule dropped
-      from `sudoers_rules` stays on disk unmanaged. Harmless here - it grants
-      NOPASSWD for a launchctl label that no longer exists - but the same gap
-      applies to any future rule that is removed.
+      from `sudoers_rules` stays on disk unmanaged. It was harmless here - a
+      NOPASSWD grant for a launchctl label that no longer exists - but the gap
+      applies to any rule removed in future.
 - [x] **Untangle com.schretzi.localhost-alias from the unbound role.** Done:
       its own role `localhost_alias`, behind `enable_localhost_alias`, running
       before every resolver role. The addresses outlive whichever resolver

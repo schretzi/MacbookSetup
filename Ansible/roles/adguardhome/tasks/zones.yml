@@ -41,13 +41,19 @@
 
 # Seeded once, then owned by macswitcher, which rewrites the default block on
 # every network context switch - the reason this is `force: false`.
+#
+# group-writable by admin for the same reason zones/ is: macswitcher rewrites
+# this file as the login user, from a context switch, with no chance to ask for
+# a password. root:wheel 0644 makes every switch fail with "permission denied"
+# - and since a switch that cannot set its upstreams is aborted rather than
+# warned about, that breaks switching entirely.
 - name: AdGuardHome | seed the default upstreams
   ansible.builtin.copy:
     src: "{{ repo_root }}/Dotfiles/adguardhome/upstreams.conf"
     dest: "{{ adguardhome_generated }}/upstreams.conf"
     owner: root
-    group: wheel
-    mode: "0644"
+    group: admin
+    mode: "0664"
     force: false
   become: true
 

@@ -82,7 +82,7 @@ forgotten. Two mechanisms keep it that way:
 
 | Mechanism   | Used for                                                                    | Why                                                                                                                                             |
 | ----------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Symlink** | `~/.config/*`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`, unbound configs | Editing the live file edits the repo file. Nothing to sync.                                                                                     |
+| **Symlink** | `~/.config/*`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config` | Editing the live file edits the repo file. Nothing to sync.                                                                                     |
 | **Copy**    | LaunchAgents, LaunchDaemons, `/etc/newsyslog.d`, `/usr/local/bin`           | launchd and root-owned locations refuse to follow links into a user checkout. The repo copy is still the truth — re-run the play after editing. |
 
 If a config is not in this repo, it is not managed, and rebuilding the machine
@@ -118,12 +118,12 @@ cd ~/Workspace/Schretzi/MacbookSetup/Ansible
 ansible-playbook site.yml --ask-become-pass          # everything enabled in all.yml
 ansible-playbook site.yml --check                    # dry run, changes nothing
 ansible-playbook site.yml --tags dotfiles            # one topic
-ansible-playbook site.yml --skip-tags mail,unbound   # everything except these
-ansible-playbook site.yml --tags unbound -e enable_unbound=true   # force a disabled topic
+ansible-playbook site.yml --skip-tags mail,adguardhome   # everything except these
+ansible-playbook site.yml --tags mail -e enable_mail=true   # force a disabled topic
 ```
 
 `--ask-become-pass` is only needed for the roles that touch root-owned
-locations: `sudoers`, `unbound`, `java`, `kanata`,
+locations: `sudoers`, `localhost_alias`, `adguardhome`, `java`, `kanata`,
 `firefox_enterprise_roots`. There is a way to authenticate once up front
 instead — see [sudo](#sudo) below — but it is switched off until Touch ID for
 sudo works.
@@ -142,7 +142,8 @@ sudo works.
 | `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation    |
 | `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                         |
 | `mail`          | `enable_mail`          | maildir, notmuch index, offlineimap/omt agents, mail dotfiles     |
-| `unbound`       | `enable_unbound`       | loopback aliases, `_unbound` account, configs, resolver daemon    |
+| `localhost_alias` | `enable_localhost_alias` | the extra 127.0.0.x addresses on lo0                           |
+| `adguardhome`   | `enable_adguardhome`   | the resolver: pinned release, seeded config, zones, daemons       |
 | `macswitcher`   | `enable_macswitcher`   | seeds `~/.config/macswitcher` and the shell proxy variables       |
 | `gcloud`        | `enable_gcloud`        | gcloud components                                                 |
 | `ai`            | `enable_ai`            | links `schretzi-skills` into every assistant, assistant configs   |
@@ -168,7 +169,7 @@ simply has nothing personal configured, and the mail role reports that it found
 no accounts rather than failing.
 
 An overlay mirrors this repo's layout and contributes through an `overlay.yml`
-at its root — extra dotfile links, Brewfiles, unbound zone profiles, mail
+at its root — extra dotfile links, Brewfiles, AdGuard Home zones, mail
 accounts — each entry carrying `root:` so links resolve into that checkout.
 Identity comes from the private overlay's `identity.yml`; this repo ships only
 `Ansible/local/identity.example.yml`. See
@@ -256,7 +257,7 @@ From here on, run the playbook.
 
 ## User directories
 
-`~/bin` (personal binaries), `~/tmp` (Scratch, And the unbound control socket),
+`~/bin` (personal binaries), `~/tmp` (scratch),
 `~/Workspace` (all checkouts). Already on the PATH via `.zshrc`.
 
 _Role: `base_dirs`_
@@ -801,19 +802,20 @@ Set `enable_mail: false` to skip the whole stack, including the mail dotfiles.
 
 _Role: `mail`_
 
-## DNS — local unbound resolver
+## DNS — AdGuard Home
 
-I need different DNS routing depending on where I am: home network, local kubernetes
-clusters, VMs, VPN. A local unbound instance resolves all of them at once
-instead of rewriting resolver settings per network.
+I need different DNS routing depending on where I am: home network, local
+kubernetes clusters, VMs, VPN. A local resolver answers all of them at once
+instead of rewriting resolver settings per network. unbound did that job for
+years; AdGuard Home replaced it because it does the same and adds the half
+unbound never had — ad, tracker and malware filtering, a query log, per-client
+stats.
 
 The role runs the full chain:
 
-1. **Loopback aliases** — _its own role now, `localhost_alias`, not part of
-   this one._ mDNSResponder owns `127.0.0.1:53`, so every local resolver binds
-   a different loopback address: AdGuard Home `127.0.0.3` for DNS and its web
-   UI, unbound `127.0.0.2` while it is still installed.
-   `Scripts/MacOS/localhost_alias.sh` is copied to
+1. **Loopback aliases** — _its own role, `localhost_alias`._ mDNSResponder owns
+   `127.0.0.1:53`, so the resolver binds another loopback alias: `127.0.0.3`,
+   for both DNS and the web UI. `Scripts/MacOS/localhost_alias.sh` is copied to
    `/usr/local/bin/localhost_alias` and run at boot by
    `com.schretzi.localhost-alias`, because macOS drops the aliases on every
    reboot.
@@ -822,73 +824,176 @@ The role runs the full chain:
    clusters earlier. Apple containers made that unnecessary, but the aliases
    are cheap and the cluster zones still answer with them.
 
-   The role is separate precisely because the addresses outlive the resolver
-   that happens to use them — tying them to unbound meant switching unbound
-   off left AdGuard Home's own address unmanaged.
-2. **Service account.** `_unbound`, uid/gid 444 (system range — check
-   `/etc/passwd` if 444 is taken), created via `dscl`. Its `RecordName` lists
-   both `_unbound` and `unbound` so either name in the config resolves.
-3. **Configuration.** `Dotfiles/unbound/` is symlinked into
-   `/opt/homebrew/etc/unbound/`. Brew's untouched default is preserved once as
-   `unbound.conf.brew-default`.
-4. **DNSSEC + control certs.** `unbound-anchor` and `unbound-control-setup`.
-5. **Validation, then start.** `unbound-checkconf` must pass before
-   `net.unbound` is loaded. Afterwards the role resolves a name through
-   `127.0.0.2` and reports the result.
+   Separate from the resolver role on purpose: the addresses outlive whichever
+   resolver uses them. While they belonged to the unbound role, switching
+   unbound off left AdGuard Home's own address unmanaged.
+2. **The daemon.** There is no Homebrew formula — `brew search adguard` finds
+   only an unrelated content-blocker cask — so the role downloads the pinned
+   GitHub release and verifies its SHA-256 **before** anything is unpacked as
+   root. Bumping `adguardhome_version` means bumping the matching checksum.
+3. **Configuration, seeded once.** `Dotfiles/adguardhome/AdGuardHome.yaml.seed`
+   is copied to `/opt/adguardhome/AdGuardHome.yaml` the first time and never
+   again — AdGuard Home rewrites that file on every change made through the web
+   UI, so the repository seeds it and then keeps its hands off.
+4. **Zones and upstreams**, below.
+5. **Verification.** The role waits for the port, resolves a name through
+   `127.0.0.3`, and on failure prints the last lines of both logs rather than
+   pointing at them.
 
-### Zone profiles
+### The two accounts
 
-`unbound.conf` names no zone file. It includes `conf.d/*.conf`, and
-`unbound_profiles` (`Ansible/roles/unbound/defaults/main.yml`) decides which
-profiles get symlinked in — plus `unbound_profiles_overlay` from each overlay.
-That is what lets a zone set be switched off without editing `unbound.conf`;
-naming a disabled file directly would make unbound refuse to start.
+AdGuard Home has no permission model — every entry in `users:` is a full admin
+— so the two accounts are credential isolation, not privilege isolation:
 
-| Profile           | From            | Default               | Notes                                                                                      |
-| ----------------- | --------------- | --------------------- | ------------------------------------------------------------------------------------------ |
-| `forwarders.conf` | base            | on                    | upstream resolvers — runtime-managed at `/opt/homebrew/etc/unbound/conf.d/forwarders.conf` |
-| `kiac.conf`       | base            | on                    | local kubernetes hosts on the vmnet (`192.168.64.0/24`)                                    |
-| `schretzi.conf`   | private overlay | on                    | home LAN and private domains                                                               |
-| intranet zones    | work overlay    | follows `enable_work` | employer forward zones                                                                     |
+| account | keychain service | for |
+| --- | --- | --- |
+| `admin` | `adguardhome admin` | the web UI at <http://127.0.0.3:3053> |
+| `zonesync` | `adguardhome api` | `POST /control/filtering/refresh`, so a zone change needs no restart |
 
-The role warns about any `.conf` in `conf.d/` it does not know about — unbound
-loads those too — and **deletes links whose target no longer exists**. A profile
-file removed from a repo otherwise leaves a dangling include, and unbound
-refuses to start on an include it cannot open, which only surfaces at the next
-reload or reboot.
-
-### Changing upstream resolvers
-
-Everything unbound cannot answer locally goes to `forwarders.conf`. It is a
-separate profile precisely so that adapting to a different network is one file:
+Neither password is in this repository. The role generates a random one for
+whichever has no System keychain entry yet, so a fresh machine converges
+unattended:
 
 ```bash
-$EDITOR ~/Workspace/Schretzi/MacbookSetup/Dotfiles/unbound/forwarders.conf
-unbound-checkconf /opt/homebrew/etc/unbound/unbound.conf
-unbound-control reload
+sudo security find-generic-password -s "adguardhome admin" -a admin -w \
+     /Library/Keychains/System.keychain
 ```
 
-Default is Quad9 then Google. On an office LAN that resolves internal names,
-point the root zone at the LAN gateway instead.
+Changing it there does **not** change it in AdGuard Home — set it in the web UI
+too, or delete `AdGuardHome.yaml` and let the role re-seed. On a machine that
+already has a config the role never invents a missing entry: a generated
+password would not be the one AdGuard Home accepts, and a credential that
+silently does not work is worse than an absent one.
 
-To restart the daemon without a sudo password, the sudoers role installs this
-restricted rule (see `roles/sudoers/defaults/main.yml` for every rule and how
-to add more, or to switch passwordless sudo off entirely):
+### Zones — one rule list per repository
 
-```sudoers
-schretzi ALL=(root) NOPASSWD: /bin/launchctl kickstart -k system/net.unbound
+A "zone" here is an AdGuard Home **filtering rule list**, not a zone file in the
+DNS sense. Three of them, each owned by whoever owns the names:
+
+| file | from | holds |
+| --- | --- | --- |
+| `kiac.txt` | LocalKubernetes, at runtime | cluster and container addresses on the vmnet |
+| `schretzi.txt` | private overlay | home LAN and private domains |
+| `work.txt` | work overlay | the one intranet name that needs a fixed answer |
+
+The overlays declare theirs in `overlay.yml`, and the role installs them from
+`<root>/Dotfiles/adguardhome/zones.d/<file>` into `/etc/adguardhome/zones/`:
+
+```yaml
+adguardhome_zones_overlay:
+  - { file: schretzi.txt, enabled: true, root: "{{ private_repo_root }}" }
 ```
 
-The zsh function `unbound_restart` uses that exact command.
+The syntax is worth three lines:
 
-`macswitcher` manages the runtime file at
-`/opt/homebrew/etc/unbound/conf.d/forwarders.conf`. On a fresh installation
-Ansible links that path to the repository default
-`Dotfiles/unbound/forwarders.conf`. When macswitcher changes contexts, it
-removes only the destination symlink and writes a real file, leaving the
-repository source untouched. Later Ansible runs preserve that real file; if
-the link is recreated deliberately, the next context switch will replace it
-again.
+```
+||name^$dnsrewrite=NOERROR;A;10.0.0.1   answer name with that address
+||name^                                 matches the name AND everything under it
+@@||name^$dnsrewrite=NXDOMAIN           an exception to a rule above
+```
+
+Because `||name^` covers subdomains, one line does what unbound needed a
+`redirect` zone for. A name that is simply not listed is not answered locally
+at all and goes to the upstreams — unbound called that a `transparent` zone.
+
+`.kiac` is the exception: it is owned entirely, so `||kiac^$dnsrewrite=NXDOMAIN`
+answers everything under it locally and nothing leaks upstream. Every defined
+name then needs an `@@` exception to escape that. **A name with an address but
+no exception is not "missing" — it is actively answered NXDOMAIN, and nothing
+in any log says so.** LocalKubernetes' template generates both lists from one
+loop for exactly that reason, and asserts the property afterwards anyway.
+
+**Adding a zone to a running machine needs one manual step.** AdGuard Home
+loads a list because `AdGuardHome.yaml`'s `filters:` block names it with a
+fixed id, and that file belongs to the runtime after the first seed. Add the
+entry in the web UI, or delete the config and let the role re-seed.
+
+### Adding private domains
+
+Private names belong in the **private overlay**, not here — that is what keeps
+this repository publishable. Add them to
+`MacbookSetup-Private/Dotfiles/adguardhome/zones.d/schretzi.txt`:
+
+```
+||nas.home.internal^$dnsrewrite=NOERROR;A;192.168.1.10
+||printer.home.internal^$dnsrewrite=NOERROR;A;192.168.1.11
+
+! covers apps.home.internal and everything under it
+||apps.home.internal^$dnsrewrite=NOERROR;A;192.168.1.20
+```
+
+Then `ansible-playbook site.yml --tags adguardhome --ask-become-pass`. Editing
+the file alone changes nothing — see the next section.
+
+### Upstreams, and why macswitcher owns them
+
+Everything not answered locally goes to `/etc/adguardhome/upstreams.conf`, which
+has two kinds of line:
+
+```
+9.9.9.9                            default upstreams - macswitcher rewrites
+                                   these on every network context switch
+[/intranet.example/]10.0.0.1       per-domain - an overlay contributes these,
+                                   macswitcher carries them over untouched
+```
+
+Dropping the per-domain lines on a context switch would silently take the
+intranet off the air, which is the kind of failure that shows up an hour later;
+macswitcher preserves any line starting with `[`. The role seeds the file from
+`Dotfiles/adguardhome/upstreams.conf` once and ensures each overlay line is
+present, so an overlay can add one and have it arrive on the next play.
+
+Comments must be on their own line. AdGuard Home parses a trailing
+`9.9.9.9 # note` as a *second* upstream address and rejects it.
+
+### Two traps, both measured
+
+**Writing a zone file changes nothing.** AdGuard Home keeps its own copy of
+every rule list under `data/filters/<id>.txt` and does not re-read the path at
+startup. "Write the file, restart the daemon" leaves it serving the previous
+addresses, with nothing in any log to say so — measured: gitea moved from
+`192.168.64.2` to `.10`, the file on disk said `.10`, the daemon was restarted
+twelve seconds later, and `dig @127.0.0.3 gitea.kiac` still answered `.2`.
+Eleven of nineteen names were wrong that way.
+
+`sudo -n /usr/local/bin/adguardhome_zones_refresh` is what closes it: it asks
+AdGuard Home to re-read its lists over the API (no restart, cache kept), falls
+back to rewriting the cached copies and restarting when that is not usable, and
+verifies the served answers against the rules afterwards rather than trusting
+them. Everything that changes a zone ends there.
+
+**`bind_hosts: 0.0.0.0` does not serve the vmnet.** Go turns a wildcard into a
+single dual-stack `AF_INET6` socket, and on Darwin dnsproxy's UDP replies to
+IPv4-mapped clients off loopback never leave the host — so every container and
+kiac node VM got silence over UDP while TCP worked. The addresses are named
+explicitly instead, one `AF_INET` socket each, and
+`com.schretzi.adguardhome-bind` adds and removes `192.168.64.1` as the vmnet
+comes and goes. unbound did this with one `interface: 0.0.0.0` line; this is
+the price of the switch.
+
+### kiac clusters and containers resolve through the host
+
+kiac is a Go tool of its own (`~/Workspace/Schretzi/kiac`); nothing about it is
+installed from this repository. Its node VMs — and every `container` the runtime
+starts — sit on the `vmnet` network and get `nameserver 192.168.64.1` written
+into their `resolv.conf`. That address is the host end of the vmnet bridge, and
+the resolver has to be *listening on it*; mDNSResponder does not forward on
+their behalf.
+
+The addresses are **not** fixed. The vmnet hands them out by DHCP in start
+order, so they move on every reboot. LocalKubernetes' `roles/host_dns` looks up
+the live ones, renders `/etc/adguardhome/zones/kiac.txt` and calls the refresh
+above. `/etc/adguardhome/zones` is group-writable by `admin` precisely so that
+play can do it without `become`.
+
+Two consequences of the VMs asking the host directly:
+
+- A `/etc/resolver` split — the container runtime's, Tailscale's — is host-side
+  only. Anything the VMs must resolve needs a real rule here.
+- A VPN client that seizes port 53 takes the gateway's resolver with it, and
+  every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
+  writes the VM's `resolv.conf` directly and bypasses the gateway, but only at
+  creation time.
 
 **Container DNS needs nothing here.** Apple's `container` runtime registers a
 macOS split-DNS domain of its own:
@@ -899,164 +1004,32 @@ container system dns list
 ```
 
 That writes `/etc/resolver/mydomain`, which mDNSResponder consults _before_ the
-configured nameserver — so those names resolve on the host regardless of
-whether the system points at unbound.
+configured nameserver — so those names resolve on the host regardless of which
+resolver the system points at.
 
-**kiac clusters and containers resolve through the host.** kiac is a Go tool of
-its own (`~/Workspace/Schretzi/kiac`); nothing about it is installed from this
-repository. Its node VMs — and every `container` the runtime starts — sit on
-the same `vmnet` network and get `nameserver 192.168.64.1` written into their
-`resolv.conf`. That address is the host end of the vmnet bridge, and the
-resolver has to be *listening on it*; it is not mDNSResponder forwarding on
-their behalf. unbound did that with `interface: 0.0.0.0`. AdGuard Home cannot
-use a wildcard here — see `docs/adguardhome-test.md` → Serving the vmnet — so
-`192.168.64.1` is added to and removed from its `bind_hosts` by
-`com.schretzi.adguardhome-bind` as the vmnet comes and goes.
+### DNSSEC — not validated here any more
 
-The addresses are **not** fixed, despite what an out-of-date reading of
-`kiac.conf` suggests. The vmnet hands them out by DHCP in start order, so they
-move on every reboot. LocalKubernetes' `roles/host_dns` looks up the live ones
-and re-renders `conf.d/kiac.conf`, which is then translated into AdGuard Home's
-zone file — see the same document, "Keeping `.kiac` current".
-
-Two consequences of the VMs asking the host directly:
-
-- A `/etc/resolver` split — the container runtime's, Tailscale's — is host-side
-  only. Anything the VMs must resolve needs a real zone here.
-- A VPN client that seizes port 53 takes the gateway's resolver with it, and
-  every lookup from the VMs is refused. `kiac create cluster --dns 1.1.1.1`
-  writes the VM's `resolv.conf` directly and bypasses the gateway, but only at
-  creation time.
-
-### Adding private domains
-
-Private names belong in the **private overlay**, not here — that is what keeps
-this repository publishable. Add them to
-`MacbookSetup-Private/Dotfiles/unbound/schretzi.conf`:
-
-```
-server:
-  # transparent: names not listed fall through to the forwarders
-  local-zone: "home.internal" transparent
-  local-data: "nas.home.internal      A 192.168.1.10"
-  local-data: "printer.home.internal  A 192.168.1.11"
-
-  # redirect: every name under the zone resolves to one address
-  local-zone: "apps.home.internal" redirect
-  local-data: "apps.home.internal     A 192.168.1.20"
-```
-
-To add a whole new profile file rather than extend the existing one, drop it in
-that overlay's `Dotfiles/unbound/` and register it in its `overlay.yml`:
-
-```yaml
-unbound_profiles_overlay:
-  - { file: schretzi.conf, enabled: true, root: "{{ private_repo_root }}" }
-  - { file: lab.conf, enabled: true, root: "{{ private_repo_root }}" }
-```
-
-Then `ansible-playbook site.yml --tags unbound --ask-become-pass`, or just
-symlink it into `conf.d/` and reload — the Homebrew prefix is user-writable, so
-that needs no sudo either.
-
-Zone-type cheat sheet: **`transparent`** answers what you list and forwards the
-rest, **`redirect`** answers _every_ name under the zone with the listed data,
-**`static`** answers what you list and returns NXDOMAIN for the rest.
-
-### Reloading without sudo
-
-`unbound-control` talks to the daemon over **TCP on `127.0.0.1:8953` with a
-client certificate**, not over a unix socket:
+Be clear about what `enable_dnssec: true` does: AdGuard Home sets the DO/AD bits
+towards the upstream and reports whatever AD flag comes back. It does **not**
+validate locally the way unbound did with its own trust anchor.
 
 ```bash
-unbound-control reload      # no sudo
-unbound-control status
-unbound-control lookup nas.home.internal
+dig +dnssec @127.0.0.3 cloudflare.com A | grep 'flags:'
+#  ... flags: qr rd ra ad;   <- "ad" is Quad9's verdict now, not ours
 ```
 
-unbound creates its unix socket owned by the account it drops privileges to
-(`_unbound`, mode `0660`) and offers no option to change that, so socket-based
-control always needs root. Over TCP the client authenticates with
-`unbound_control.{key,pem}` instead, and the Ansible role hands the key to your
-user (`0600`) while leaving the server key to `_unbound`. Access is still
-loopback-only and still certificate-gated.
+Quad9 validates, so a bogus domain still fails — but the validation happens
+there rather than here. That is a real regression against the previous setup and
+is deliberately **still an open question**, together with DNS over TLS/HTTPS:
+they solve different problems (transport privacy versus answer authenticity) and
+neither replaces the other. See `BACKLOG.md`.
 
-**Do not use `unbound-control start`.** It exists, but it launches a _new_
-daemon as whoever runs it — and an unprivileged process cannot bind
-`127.0.0.2:53`, so it fails with:
-
-```
-error: can't bind socket: Permission denied for 127.0.0.2 port 53
-fatal error: could not open ports
-```
-
-The daemon is owned by launchd, which starts it as root and lets it drop
-privileges to `_unbound` _after_ binding. Start, stop and restart it there:
-
-```bash
-sudo launchctl kickstart -k system/net.unbound   # restart
-sudo launchctl print system/net.unbound          # status
-```
-
-`unbound-control` is for talking to a daemon that is already running —
-`reload`, `status`, `lookup`, `stats`. Note `reload` re-reads the config but
-cannot rebind sockets, so a change to `unbound.conf` itself (interfaces, ports,
-remote-control) needs the restart above; zone files under `conf.d/` only need a
-reload. The Ansible role picks the right one automatically based on what
-changed.
-
-### DNSSEC
-
-Validation happens **here**, not at the upstream resolver. `unbound.conf` sets:
-
-```
-auto-trust-anchor-file: "/opt/homebrew/etc/unbound/root.key"
-val-log-level: 1
-```
-
-Without that line the role still fetches `root.key` via `unbound-anchor` and
-unbound then ignores it — a state that is easy to miss, because a broken domain
-still fails. Quad9 validates too, so `dnssec-failed.org` returns SERVFAIL either
-way. The honest test is the **AD flag** on a good domain:
-
-```bash
-dig +dnssec @127.0.0.2 cloudflare.com A | grep 'flags:'
-#  ... flags: qr rd ra ad;   <- "ad" present means we validated it
-```
-
-The role checks exactly this after starting and says so either way.
-
-`root.key` is owned by `_unbound` and mode `0644`: it must stay **writable** by
-unbound (RFC 5011 rewrites it in place as the root KSK rolls) and **readable**
-by you, or `unbound-checkconf` fails with the unhelpful
-`validator: could not apply configuration settings`. The anchor is published
-IANA data, not a secret.
-
-#### Split-horizon zones need `domain-insecure`
-
-Any zone forwarded to an internal resolver has to be exempted, or validation
-rejects the answer:
-
-```
-server:
-  domain-insecure: "example.internal"
-```
-
-Two cases make this mandatory rather than cosmetic:
-
-- **`.internal`, `.intranet`, `.local`** and similar are not real TLDs, so the
-  signed root proves they do not exist while your internal resolver answers
-  anyway — the answer is bogus by definition.
-- Anything forwarded that sits under a **signed public parent**. The old
-  `docker.arpa` entry was the example: `.arpa` is signed, so the root proves
-  `docker.arpa` does not exist. That entry has since been removed entirely, but
-  is a good example for such use-cases.
-
-Zones answered by `local-zone`/`local-data` (`kiac.`, the private overlay's
-LAN zone) need nothing — local data is returned without validation. It is only
-_forwarding_ that has to be exempted. The work overlay marks all of its
-forwarded zones insecure for consistency, so adding one there does not silently
-require hunting down a matching entry.
+One thing the switch removed for free: the `domain-insecure` exemptions. unbound
+validated, so every zone forwarded to an internal resolver had to be marked
+insecure — `.internal`/`.intranet`/`.local` are not real TLDs, so the signed root
+proves they do not exist while the internal resolver answers anyway. With no
+local validation there is nothing to exempt, and the work overlay's thirteen
+duplicate entries went with it.
 
 ### Tailscale
 
@@ -1065,7 +1038,7 @@ Tailscale is installed by the `homebrew` role — `tailscale-app` in
 `Scripts/verify-casks.sh` exists to catch: cancel its installer prompt and the
 receipt is written anyway. Signing in stays manual, once per machine.
 
-**It needs no unbound profile, even with the system pointed at `127.0.0.2`.**
+**It needs no rule here, even with the system pointed at `127.0.0.3`.**
 Tailscale registers a split-DNS resolver for the tailnet domain, and
 mDNSResponder consults that _before_ the configured nameserver — the same
 mechanism as `/etc/resolver`:
@@ -1078,49 +1051,46 @@ scutil --dns | grep -A3 ts.net
 dscacheutil -q host -a name <host>.<tailnet>.ts.net
 ```
 
-The catch: that split lives in mDNSResponder, not in unbound. Anything that
-talks to a resolver directly — `dig`, `host`, the kiac VMs — never sees it. So
-test MagicDNS with `dscacheutil` or `ping`, not with `dig @127.0.0.2`, which
-correctly returns nothing. If a tailnet name really has to come out of unbound,
-forward the zone from the private overlay rather than adding local data:
-
-```
-forward-zone:
-  name: "ts.net"
-  forward-addr: 100.100.100.100
-```
+The catch: that split lives in mDNSResponder, not in AdGuard Home. Anything
+talking to a resolver directly — `dig`, `host`, the kiac VMs — never sees it. So
+test MagicDNS with `dscacheutil` or `ping`, not with `dig @127.0.0.3`, which
+correctly returns nothing. If a tailnet name really has to come out of the local
+resolver, add `[/ts.net/]100.100.100.100` as a per-domain upstream from the
+private overlay rather than a rule.
 
 ### Pointing the system at it
 
-unbound only listens on `127.0.0.2`, so nothing reaches it until a network
-service's DNS server is set to that address. **macswitcher does that on every
-context switch**: it runs `networksetup -setdnsservers` against every active
-service, using `dns.local_resolver` from `~/.config/macswitcher/config.yaml`
-(`127.0.0.2` here) unless the context overrides it with its own
-`dns.resolvers`. One switch therefore repoints the machine and rewrites
-`conf.d/forwarders.conf` together, which is the point — the resolver and its
-upstreams always match the network you are on.
+AdGuard Home only listens on its own addresses, so nothing reaches it until a
+network service's DNS server is set to `127.0.0.3`. **macswitcher does that on
+every context switch**: it runs `networksetup -setdnsservers` against every
+active service, using `dns.local_resolver` from
+`~/.config/macswitcher/config.yaml` unless the context overrides it with its own
+`dns.resolvers`. One switch therefore repoints the machine and rewrites the
+default upstreams together, which is the point — the resolver and its upstreams
+always match the network you are on.
 
 ```bash
 macswitcher switch home
 macswitcher status
-networksetup -getdnsservers Wi-Fi     # 127.0.0.2
+networksetup -getdnsservers Wi-Fi     # 127.0.0.3
 ```
 
-**Ansible never sets this**, on purpose: it is the one step that breaks all
-name resolution when the resolver is not healthy, and unbound has to be
-verified running first. Without macswitcher, or to back out, do it by hand —
-System Settings → Network → Details → DNS, or:
+**Ansible never sets this**, on purpose: it is the one step that breaks all name
+resolution when the resolver is not healthy, and the daemon has to be verified
+running first. Without macswitcher, or to back out, do it by hand — System
+Settings → Network → Details → DNS, or:
 
 ```bash
-networksetup -setdnsservers Wi-Fi 127.0.0.2   # point at unbound
+networksetup -setdnsservers Wi-Fi 127.0.0.3   # point at AdGuard Home
 networksetup -setdnsservers Wi-Fi empty       # back to whatever DHCP hands out
 ```
 
-Logs: `/tmp/unbound.err.log`, `/tmp/unbound.out.log`.
+Logs: `/Library/Logs/adguardhome.log` (written by AdGuard Home itself, which
+keeps its own rotation because it holds the fd open) and
+`/Library/Logs/adguardhome.err.log` (launchd, rotated by newsyslog). The
+documented exception in [CONVENTIONS.md](CONVENTIONS.md).
 
-_Role: `unbound`_ — needs sudo
-
+_Role: `adguardhome`_ — needs sudo
 ## AI tooling — one set of skills, every assistant
 
 Skills are `SKILL.md` directories on disk.
@@ -1235,7 +1205,7 @@ Not automated yet — no wrapper script exists here for
   echo "127.0.0.1 kubernetes" | sudo tee -a /etc/hosts
   ```
 
-  Not yet wired into the `unbound`/`gcloud` roles - a manual, one-time edit
+  Not yet wired into the `adguardhome`/`gcloud` roles - a manual, one-time edit
   until the tunnel wrapper script lands.
 
 - **Tunnel connects but the SSH session immediately drops/reconnects** — this
@@ -1336,7 +1306,7 @@ _Role: `macswitcher`_ — `enable_macswitcher`
 rewrites `config.yaml`, the context files and `state.json` in place on every
 switch. Linking any of them back into a repository means the runtime writes its
 live values into the source tree — the same trap `dotfiles_real_dirs` documents
-and the same one the unbound role avoids for `forwarders.conf`. So the role
+and the same one the adguardhome role avoids for `upstreams.conf`. So the role
 _seeds_ each file once (`copy` with `force: false`) and never touches it again.
 
 Where each file comes from:
@@ -1374,7 +1344,6 @@ from the macOS Keychain and must not be added to any repository.
 - [Mutt / notmuch / offlineimap introduction](https://bascht.com/blog/2014/05/28/einstieg-in-mutt-notmuch-offlineimap/)
 - [Mutt password management](https://wiki.archlinux.org/title/Mutt#Passwords_management)
 - [offlineimap config examples](https://www.offlineimap.org/doc/conf_examples.html)
-- [unbound on macOS](https://sizeof.cat/post/unbound-on-macos/)
 - [YubiKey guide](https://github.com/drduh/YubiKey-Guide)
 - [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice)
 - [DisplayLink macOS driver (Synaptics)](https://www.synaptics.com/products/displaylink-graphics/downloads/macos)

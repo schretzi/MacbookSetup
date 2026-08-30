@@ -2,7 +2,7 @@
 # Each Brewfile can be switched off on its own. Order matters - the list is
 # processed top to bottom, and 35_python.brew is what installs ansible itself.
 homebrew_brewfiles:
-  - { file: 00_base.brew, enabled: true }   # kitty, yabai, skhd, kanata, nvim, raycast, shell tools, fonts, unbound
+  - { file: 00_base.brew, enabled: true }   # kitty, yabai, skhd, kanata, nvim, raycast, shell tools, fonts
   - { file: 10_apps.brew, enabled: true }   # zen, bitwarden, obsidian, pandoc, gimp
   - { file: 11_mail.brew, enabled: true }   # neomutt, msmtp, offlineimap, notmuch
   - { file: 12_microsoft.brew, enabled: false }  # office/teams - work machines only

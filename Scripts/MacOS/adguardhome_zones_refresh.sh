@@ -1,23 +1,16 @@
 #!/bin/sh
-# Re-translate unbound's conf.d into AdGuard Home's generated inputs, make
-# AdGuard Home actually pick them up, and prove that it did.
+# Make AdGuard Home pick up a changed zone file, and prove that it did.
 #
-# unbound no longer runs, but its conf.d is still the single source of truth
-# for local zones and upstreams - that was the whole point of migrating by
-# translation rather than by copying (docs/adguardhome-test.md). Everything
-# that used to end with `launchctl kickstart -k system/net.unbound` has to end
-# here instead, or the change is written and never served.
+# Zone files under /etc/adguardhome/zones are written by whoever owns the zone:
+# the `adguardhome` Ansible role installs the ones that come from a repository,
+# and LocalKubernetes' host_dns re-renders kiac.txt whenever the vmnet hands
+# out new addresses. Writing the file is not the hard part - making AdGuard
+# Home serve it is, and that is what this script exists for.
 #
-# The one that matters in practice is the kiac zone. Container and node-VM
-# addresses on the vmnet are handed out by DHCP in start order, so they drift
-# on every reboot; LocalKubernetes' host_dns role looks the live ones up and
-# re-renders /opt/homebrew/etc/unbound/conf.d/kiac.conf. Without this script
-# that render reaches nothing:
-#
-#   host_dns  ->  conf.d/kiac.conf  ->  [this]  ->  /etc/adguardhome/zones/kiac.txt
+#   host_dns  ->  /etc/adguardhome/zones/kiac.txt  ->  [this]
 #
 # Deployed to /usr/local/bin/adguardhome_zones_refresh (root:wheel 0755) by the
-# Ansible role "adguardhome", together with the generator it calls.
+# Ansible role "adguardhome".
 #   sudo -n /usr/local/bin/adguardhome_zones_refresh
 #
 # ---------------------------------------------------------------------------
@@ -54,7 +47,6 @@
 
 set -eu
 
-GENERATOR="${ADGUARDHOME_GENERATOR:-/usr/local/libexec/unbound_to_adguard.py}"
 OUT_DIR=/etc/adguardhome
 FILTER_CACHE=/opt/adguardhome/data/filters
 LABEL=com.schretzi.adguardhome
@@ -64,38 +56,14 @@ RESOLVER=127.0.0.3
 # AdGuard Home has no permission model - every account in `users:` is a full
 # admin - so this is credential isolation, not privilege isolation: the script
 # does not carry the human's password and can be rotated on its own.
-# Created once, by hand; see docs/adguardhome-test.md.
+# Created once, by hand; see Setup.md -> DNS.
 API_USER=zonesync
 API_KEYCHAIN_SERVICE="adguardhome api"
 
-[ -f "$GENERATOR" ] || {
-    echo "adguardhome_zones_refresh: $GENERATOR is missing" >&2
-    exit 1
-}
-
-# The generator is stdlib-only, so any python3 will do - but it must not be
-# reached through its `#!/usr/bin/env python3` shebang. Run from a LaunchDaemon
-# or from Ansible's become environment there may be no python3 on PATH at all.
-PYTHON=""
-for candidate in /usr/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
-    [ -x "$candidate" ] && { PYTHON="$candidate"; break; }
-done
-[ -n "$PYTHON" ] || {
-    echo "adguardhome_zones_refresh: no python3 found" >&2
-    exit 1
-}
-
-before=$(find "$OUT_DIR" -type f -exec shasum {} + 2>/dev/null | shasum || true)
-
-mkdir -p "$OUT_DIR/zones"
-chmod 0755 "$OUT_DIR" "$OUT_DIR/zones"
-"$PYTHON" "$GENERATOR" --out-dir "$OUT_DIR" >/dev/null
 # Readable by an unprivileged process on purpose: `macswitcher observe` reads
 # upstreams.conf as the user to report what is being forwarded.
 chmod 0644 "$OUT_DIR/upstreams.conf" 2>/dev/null || true
 chmod 0644 "$OUT_DIR"/zones/*.txt 2>/dev/null || true
-
-after=$(find "$OUT_DIR" -type f -exec shasum {} + 2>/dev/null | shasum || true)
 
 zone="$OUT_DIR/zones/kiac.txt"
 
@@ -255,11 +223,11 @@ verify() {
     return 0
 }
 
-# Verification is the main event, not an afterthought. Checking only when the
-# generated files changed would have missed exactly the bug this guards
-# against: the files can be current on disk while AdGuard Home serves the
-# previous ones out of its filter cache, and nothing says so. So verify
-# unconditionally, and escalate only as far as needed:
+# Verification is the main event, not an afterthought, and it runs
+# unconditionally. Checking only when the zone file had changed would have
+# missed exactly the bug this guards against: the file can be current on disk
+# while AdGuard Home serves the previous one out of its filter cache, and
+# nothing says so. Escalate only as far as needed:
 #
 #   1. API refresh    no restart, cache kept - the normal path
 #   2. write + restart the fallback when there is no credential or the API is
@@ -267,11 +235,6 @@ verify() {
 #
 # Anything still disagreeing after both is a real failure: put the previous
 # cached lists back rather than leave a half-applied zone.
-if [ "$before" != "$after" ]; then
-    echo "adguardhome_zones_refresh: zones changed"
-    refresh_via_api || reload || true
-fi
-
 if verify; then
     discard
     exit 0

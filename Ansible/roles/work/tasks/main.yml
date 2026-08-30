@@ -93,7 +93,9 @@
       {{ [
         (work_cert.rc != 0)
           | ternary("User certificate not found in the login keychain - follow the setup notes in the work overlay (needs an office network and Safari).", ""),
-        "VPN: com.schretzi.corp-vpn LaunchAgent is installed and connects at login; run `launchctl bootout gui/$(id -u)/com.schretzi.corp-vpn` to stop it (KeepAlive restarts it otherwise) - see the work overlay's Work_Setup.md.",
+        "VPN: com.schretzi.corp-vpn LaunchAgent is installed and connects at login; "
+        "run `launchctl bootout gui/$(id -u)/com.schretzi.corp-vpn` to stop it "
+        "(KeepAlive restarts it otherwise) - see the work overlay's Work_Setup.md.",
         "Vendor installers (docking station, endpoint security) are manual downloads - see the work overlay notes.",
-        "Intranet unbound zones are active because enable_work is true; they forward to internal resolvers that only answer on VPN or the intranet."
+        "Intranet upstreams are active because enable_work is true; they forward to internal resolvers that only answer on VPN or the intranet."
       ] | reject('equalto', '') | list }}

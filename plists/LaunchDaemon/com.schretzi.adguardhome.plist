@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-    AdGuard Home, on trial next to unbound (see docs/adguardhome-test.md).
+    AdGuard Home, the resolver this machine runs (see Setup.md -> DNS).
 
     A LaunchDaemon rather than an agent because port 53 is privileged: launchd
-    starts it as root so it can bind, exactly as net.unbound is started.
+    starts it as root so it can bind port 53.
 
     Logging follows CONVENTIONS.md only halfway, on purpose. AdGuard Home
     writes adguardhome.log itself (log.file in AdGuardHome.yaml) because it

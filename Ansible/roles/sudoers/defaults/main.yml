@@ -12,14 +12,9 @@
 #   - comment: why this rule exists (rendered into the file for auditing)
 #   - commands: absolute paths only - sudoers wildcards are not supported
 sudoers_rules:
-  - name: unbound-restart
-    comment: restart the unbound resolver (unbound role, flush_dns/DNS profile switches)
-    commands:
-      - /bin/launchctl kickstart -k system/net.unbound
-
   # macswitcher rewrites AdGuard Home's upstream file on every context switch,
   # and AdGuard Home reads that file at startup only - it has no reload signal
-  # like unbound-control. Without this rule the switch prompts for a password
+  # of its own. Without this rule the switch prompts for a password
   # from a LaunchAgent that has no terminal, i.e. it silently keeps serving the
   # previous network's resolvers.
   #
@@ -42,7 +37,7 @@ sudoers_rules:
       - /usr/local/bin/adguardhome_bind_refresh
 
   - name: adguardhome-zones-refresh
-    comment: re-translate unbound's conf.d into AdGuard Home's zone files after LocalKubernetes re-renders kiac.conf
+    comment: make AdGuard Home re-read its zone files after LocalKubernetes re-renders kiac.txt
     commands:
       - /usr/local/bin/adguardhome_zones_refresh
 

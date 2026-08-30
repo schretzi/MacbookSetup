@@ -75,7 +75,7 @@ it. From then on the local proxy starts at login.
 ```sh
 macswitcher switch office        # apply a context
 macswitcher status               # what is active right now
-macswitcher observe              # TUI: this agent plus unbound, kerberos, omt, vpn
+macswitcher observe              # TUI: this agent plus the resolver, kerberos, omt, vpn
 ```
 
 ---
@@ -340,7 +340,7 @@ removes the config too.
 
 ## Not covered here
 
-- **DNS / unbound**, network locations and the pf NAT rules — machine-specific,
+- **DNS**, network locations and the pf NAT rules — machine-specific,
   see [Setup.md](../Setup.md).
 - **The script-based launch agents** (mail sync, VPN). Those have no CLI to
   install them; their plists live in `plists/` in this repository and are

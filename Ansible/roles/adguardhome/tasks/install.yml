@@ -107,9 +107,8 @@
 # rendered by whoever owns the zone, and one of them comes from another
 # repository: LocalKubernetes' host_dns re-renders kiac.txt whenever the vmnet
 # hands out new addresses, from a play that deliberately runs without become
-# and reaches for `sudo -n` only where it has a NOPASSWD rule. unbound's conf.d
-# was user-writable and this is the same arrangement - on a single-user machine
-# the admin group is the same trust level as the login user.
+# and reaches for `sudo -n` only where it has a NOPASSWD rule. On a single-user
+# machine the admin group is the same trust level as the login user.
 - name: AdGuardHome | ensure the zones directory is writable by its renderers
   ansible.builtin.file:
     path: "{{ adguardhome_generated }}/zones"

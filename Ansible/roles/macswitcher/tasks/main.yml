@@ -7,7 +7,7 @@
 # config.yaml, the context files and ~/.zsh/rcs/proxy in place whenever it
 # switches context. Ansible therefore SEEDS them (copy, force: false) instead
 # of linking them. This is the same lesson as dotfiles_real_dirs and as the
-# unbound role's forwarders.conf: a symlink here means the runtime writes its
+# AdGuard Home's upstreams.conf: a symlink here means the runtime writes its
 # values straight back into the source tree.
 
 - name: Macswitcher | check the binary is present

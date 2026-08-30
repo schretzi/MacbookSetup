@@ -43,7 +43,6 @@ cask "font-fira-code-nerd-font"
 
 # Network
 brew "telnet"
-brew "unbound"
 brew "wget"
 
 # My own tools

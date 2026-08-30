@@ -8,9 +8,9 @@
 #   Run everything that is enabled here:
 #       ansible-playbook site.yml --ask-become-pass
 #   Run one topic ad-hoc (still honours the flag):
-#       ansible-playbook site.yml --tags unbound
+#       ansible-playbook site.yml --tags adguardhome
 #   Force a topic that is disabled here:
-#       ansible-playbook site.yml --tags unbound -e enable_unbound=true
+#       ansible-playbook site.yml --tags mail -e enable_mail=true
 #   Run everything except one topic:
 #       ansible-playbook site.yml --skip-tags mail
 # ============================================================================
@@ -30,7 +30,7 @@ repo_root: "{{ playbook_dir | dirname }}"
 # Set a path to enable an overlay; leave it empty and the overlay is simply
 # absent. An overlay may provide:
 #   <root>/identity.yml   personal identity (private overlay only)
-#   <root>/overlay.yml    extra dotfile links, Brewfiles, unbound profiles,
+#   <root>/overlay.yml    extra dotfile links, Brewfiles, AdGuard Home zones,
 #                         mail accounts
 # Anything it ships lives under <root>/Dotfiles, <root>/Brewfiles and so on,
 # mirroring this repository's layout.
@@ -112,17 +112,6 @@ enable_mail: true
 # with .3 to .12. macOS forgets them on reboot, so a LaunchDaemon recreates
 # them. Deliberately independent of which resolver is switched on below.
 enable_localhost_alias: true
-
-# unbound resolver: _unbound user, configs, LaunchDaemon (needs sudo)
-#
-# OFF: DNS has been handed over to AdGuard Home, which now binds the wildcard
-# and serves every address unbound used to - see docs/adguardhome-test.md and
-# Scripts/MacOS/adguardhome-cutover.sh. Leaving this on would reinstall and
-# restart unbound on the next run, and it would fight AdGuard Home for port 53.
-#
-# Being retired, but not yet deletable: unbound's conf.d is still the source
-# of truth that AdGuard Home's zones are generated from. See BACKLOG.md.
-enable_unbound: false
 
 # AdGuard Home, the resolver this machine runs: the pinned release, the
 # configuration seeded once, both LaunchDaemons, log rotation, and the two

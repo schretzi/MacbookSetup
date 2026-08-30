@@ -11,7 +11,7 @@
 # is /var/root rather than the owning user's home.
 #
 # Caller must set:
-#   launchd_plist: net.unbound.plist   (or com.kanata.daemon.plist.j2)
+#   launchd_plist: com.schretzi.adguardhome.plist   (or com.kanata.daemon.plist.j2)
 
 - name: "Launchd | resolve installed name for {{ launchd_plist }}"
   ansible.builtin.set_fact:

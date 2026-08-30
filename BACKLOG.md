@@ -24,89 +24,73 @@ instead of scattering them across chat history.
 
 ## In progress / follow-ups
 
-- [ ] **AdGuard Home as unbound's replacement** — cutover done, unbound is
-      booted out and `launchctl disable`d, `enable_unbound: false`. See
-      `docs/adguardhome-test.md`. Zones/upstreams are still generated from
-      unbound's `conf.d`, which stays the single source of truth.
+- [x] **AdGuard Home replaces unbound.** Done. unbound is gone from the
+      repository and from the machine; AdGuard Home installs, configures and
+      verifies itself from the `adguardhome` role, the zones are native rule
+      lists owned by whoever owns the names (private overlay, work overlay,
+      LocalKubernetes for `.kiac`), and macswitcher writes the upstreams. The
+      whole picture is `Setup.md` -> DNS; the trial document it replaced is
+      gone with it.
 
-      Still open before this can be called finished — in this order, because
-      each step keeps DNS answering while the next is prepared:
-
-      1. **`work.txt` — work overlay.** Same move as `schretzi.txt` already
-         did: write `Dotfiles/adguardhome/zones.d/work.txt` in the work
-         overlay by hand (start from the current generated file, the rule set
-         must come out identical), swap `unbound_profiles_overlay` for
-         `adguardhome_zones_overlay` in its `overlay.yml`, then
-         `rm /opt/homebrew/etc/unbound/conf.d/corp.conf`. The role refuses to
-         manage a zone whose unbound source still exists, and says so with the
-         exact `rm`.
-         Also move its per-domain forwarders (`[/corp.example/]10.0.0.106`
-         and friends) into `adguardhome_upstreams_overlay`, or they vanish
-         from `upstreams.conf` the first time it is re-seeded.
-      2. **`kiac.txt` — LocalKubernetes.** `roles/host_dns` there renders
-         unbound config into `conf.d/kiac.conf`. It has to render AdGuard Home
-         rules into `/etc/adguardhome/zones/kiac.txt` instead and then call
-         `sudo -n /usr/local/bin/adguardhome_zones_refresh`. Until that lands,
-         `kiac.conf` must stay in `conf.d` and keep being translated — this is
-         the one zone that cannot simply be hand-written, because the vmnet
-         hands out new addresses on every reboot.
-      3. **macswitcher.** Drop `Unbound.ForwardersFile` and the writer behind
-         it (`internal/app/config.go`, `internal/app/network.go`). It already
-         writes `upstreams.conf` natively and preserves the `[/domain/]addr`
-         lines, so this is a removal, not a rewrite.
-      4. **Retire unbound.** Only once 1–3 are done and nothing reads
-         `conf.d` any more: the `unbound` role, `Dotfiles/unbound/`,
-         `net.unbound.plist`, the formula in `00_base.brew`, the
-         `unbound-restart` sudoers rule, `enable_unbound`,
-         `unbound_to_adguard.py`, `adguardhome-compare.sh`,
-         `adguardhome-cutover.sh`, `adguardhome-test-install.sh`, and
-         `adguardhome_legacy_confd` plus the migration guard in the
-         `adguardhome` role. On the machine: `launchctl bootout`,
-         `brew uninstall unbound`, remove the `_unbound` account and
-         `/opt/homebrew/etc/unbound`. Then rewrite `Setup.md` → DNS, which
-         still describes unbound as the resolver, and dissolve
-         `docs/adguardhome-test.md` into it — the trial is over.
-      - a Homebrew tap formula + a GitHub workflow tracking upstream
-        releases, so the version stops being pinned by hand. The `adguardhome`
-        role installs the release itself now (verified against a checksum
-        before it is unpacked), but bumping it is still editing two lines in
-        `roles/adguardhome/defaults/main.yml`.
-
-      Two smaller things noticed on the way:
-      - **The `zonesync` account does not exist on this machine.** The zone
-        refresh therefore never takes the API path (`POST
-        /control/filtering/refresh`, no restart, cache kept) and always falls
-        back to rewriting the filter cache and restarting. Create the account
-        in the web UI with the password the role put in the System keychain
-        under `adguardhome api`.
-      - **Adding a zone to a running machine needs a manual step.** AdGuard
-        Home loads a rule list because `AdGuardHome.yaml`'s `filters:` block
-        names it with a fixed id, and that file belongs to the runtime after
-        the first seed. Either add the entry in the web UI, or delete the
-        config and let the role re-seed.
-
-      **Open, deliberately not decided while the base setup is being
-      finished — to understand properly first, then decide:**
-      - **DNSSEC is no longer validated locally.** AdGuard Home only relays
-        the upstream's AD flag, so the machine now trusts Quad9's validation
-        rather than doing its own. What does that actually give up, and
-        against what — the ad/tracker/malware filtering?
+      Still open, and deliberately not decided while the base setup was being
+      finished — to understand properly first, then decide:
+      - **DNSSEC is no longer validated locally.** AdGuard Home sets the DO/AD
+        bits towards the upstream and reports whatever comes back, so the
+        machine trusts Quad9's validation rather than doing its own. What does
+        that actually give up, and against what — the ad/tracker/malware
+        filtering?
       - **DNS over TLS / DNS over HTTPS.** AdGuard Home can speak both
         upstream. How they relate to DNSSEC (transport privacy vs. answer
         authenticity — they solve different problems and do not replace each
-        other), what it costs, and what it means for the upstreams
-        macswitcher rewrites per network context.
+        other), what it costs, and what it means for the upstreams macswitcher
+        rewrites per network context.
+      - **A Homebrew tap formula + a GitHub workflow tracking upstream
+        releases**, so the version stops being pinned by hand. The role
+        verifies the release against a checksum before unpacking it, but
+        bumping it is still editing two lines in
+        `roles/adguardhome/defaults/main.yml`.
+      - **The `zonesync` account does not exist on this machine.** The zone
+        refresh therefore never takes the API path (no restart, cache kept) and
+        always falls back to rewriting the filter cache and restarting. Create
+        it in the web UI with the password the role put in the System keychain
+        under `adguardhome api`.
+      - **Adding a zone to a running machine needs a manual step**, because
+        `AdGuardHome.yaml`'s `filters:` block names each list with a fixed id
+        and belongs to the runtime after the first seed.
 
-      Two costs of the switch that only surfaced once the machine ran on it,
-      both now fixed, both worth weighing in that decision:
+      Two costs of the switch, both now handled, both worth remembering:
       - `bind_hosts: 0.0.0.0` does not serve the vmnet. AdGuard Home answers
-        TCP but silently drops UDP replies to non-loopback IPv4-mapped
-        clients, so every container and kiac node VM lost DNS. unbound did
-        this with one `interface: 0.0.0.0` line; AdGuard Home needs a script,
-        a LaunchDaemon and two sudo rules to follow `192.168.64.1` as the
-        vmnet comes and goes.
-      - the web UI on `127.0.0.3:3053` blocked gitea from publishing
-        `0.0.0.0:3000`. Moved to `3053`.
+        TCP but silently drops UDP replies to non-loopback IPv4-mapped clients,
+        so every container and kiac node VM lost DNS. unbound did this with one
+        `interface: 0.0.0.0` line; AdGuard Home needs a script, a LaunchDaemon
+        and two sudo rules to follow `192.168.64.1` as the vmnet comes and
+        goes.
+      - Writing a zone file changes nothing on its own — AdGuard Home serves
+        its own cached copy. Everything that changes a zone has to end in
+        `adguardhome_zones_refresh`.
+- [ ] **unbound is still installed on this machine.** The repository no longer
+      knows about it, but the machine does. None of it is served - the daemon
+      is booted out and `launchctl disable`d - so this is tidying, not repair,
+      and it needs root:
+
+      ```bash
+      brew uninstall unbound
+      sudo rm -rf /opt/homebrew/etc/unbound
+      sudo rm -f /usr/local/libexec/unbound_to_adguard.py
+      sudo rm -f /etc/sudoers.d/unbound-restart
+      sudo dscl . -delete /Users/_unbound
+      sudo dscl . -delete /Groups/_unbound
+      ```
+
+      Deliberately not done by Ansible: a role that has been deleted cannot
+      clean up after itself, and a play that deletes system accounts as a side
+      effect of a removed feature is not something to leave lying around.
+
+      The sudoers file is worth noticing on its own: the role only removes rule
+      files while `sudoers_passwordless_enabled` is false, so a rule dropped
+      from `sudoers_rules` stays on disk unmanaged. Harmless here - it grants
+      NOPASSWD for a launchctl label that no longer exists - but the same gap
+      applies to any future rule that is removed.
 - [x] **Untangle com.schretzi.localhost-alias from the unbound role.** Done:
       its own role `localhost_alias`, behind `enable_localhost_alias`, running
       before every resolver role. The addresses outlive whichever resolver

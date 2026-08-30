@@ -3,10 +3,6 @@ alias "lli=eza -lia"
 alias "vi=NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
 alias "vim=NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
 
-unbound_restart() {
-  sudo -n /bin/launchctl kickstart -k system/net.unbound
-}
-
 # Re-grabs the keyboard after it reconnects on a different transport (e.g.
 # cable -> Bluetooth), which kanata otherwise doesn't notice - see Setup.md.
 kanata_restart() {

@@ -3,7 +3,7 @@
 #
 # ~/bin      personal binaries - already on PATH via .zshrc; currently empty,
 #            everything that used to live here now comes from Homebrew
-# ~/tmp      scratch; also holds the unbound control socket
+# ~/tmp      scratch
 # ~/Workspace  all git checkouts
 
 - name: Base dirs | create user directories

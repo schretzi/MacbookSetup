@@ -61,20 +61,6 @@
   become: true
   when: adguardhome_enabled | bool
 
-# The generator is installed rather than called out of the repo checkout: the
-# zone refresh runs as root from a LaunchDaemon and from LocalKubernetes'
-# playbooks, and neither should depend on where this repository happens to be
-# cloned, or on it being readable at all. The repo copy stays the source.
-- name: AdGuardHome | install the unbound -> AdGuard Home translator
-  ansible.builtin.copy:
-    src: "{{ repo_root }}/Scripts/MacOS/unbound_to_adguard.py"
-    dest: /usr/local/libexec/unbound_to_adguard.py
-    owner: root
-    group: wheel
-    mode: "0755"
-  become: true
-  when: adguardhome_enabled | bool
-
 - name: AdGuardHome | install the zone refresh script
   ansible.builtin.copy:
     src: "{{ repo_root }}/Scripts/MacOS/adguardhome_zones_refresh.sh"
@@ -131,7 +117,7 @@
 # daemon and restarts it if the API is not reachable. Both the scripts it needs
 # and the LaunchDaemon it drives have to exist first - putting this before them
 # meant the refresh ran the *previously installed* translator, and the old one
-# pruned every zone file it had no unbound source for, including the one the
+# pruned every zone file it had no source for, including the one the
 # play had just installed. The zone then came back as "changed" on the next
 # run, for ever.
 - name: AdGuardHome | install its zones and upstreams
@@ -195,8 +181,8 @@
       Common causes:
         * {{ adguardhome_address }} is not on lo0 - the localhost_alias role
           creates it and runs before this one; check it did.
-        * something else holds port 53 on that address. unbound bound
-          0.0.0.0:53 and would take it: sudo lsof -nP -iUDP:53 -iTCP:53
+        * something else holds port 53 on that address:
+          sudo lsof -nP -iUDP:53 -iTCP:53
   when:
     - adguardhome_enabled | bool
     - adguardhome_dig.stdout | default('') | length == 0

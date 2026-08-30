@@ -4,7 +4,7 @@
 #
 #   the daemon               pinned release, seeded config, LaunchDaemon
 #   adguardhome_bind_refresh dns.bind_hosts follows the kiac vmnet gateway
-#   adguardhome_zones_refresh unbound's conf.d -> AdGuard Home's zone files
+#   adguardhome_zones_refresh make it re-read a changed zone file
 #
 # There is no Homebrew formula - `brew search adguard` only finds an unrelated
 # content-blocker cask - so the release zip comes from GitHub, pinned by
@@ -44,20 +44,10 @@ adguardhome_web_port: 3053
 # <root>/Dotfiles/adguardhome/zones.d/<file>. This repository ships none of its
 # own - every zone here belongs to an overlay or to another tool.
 #
-# Being migrated off unbound one zone at a time: a zone is either still listed
-# in unbound's conf.d and translated by unbound_to_adguard.py, or listed here,
-# never both. The translator prunes only files carrying its own header, so the
-# two coexist while the move is under way.
-#
 # Adding a zone to a machine that already runs needs one manual step: AdGuard
 # Home loads a list because AdGuardHome.yaml's `filters:` block names it with
 # a fixed id, and that file is the runtime's after the first seed.
 adguardhome_zones: []
-# Where unbound's conf.d lives, so the role can refuse to manage a zone that is
-# still being translated from there. Migration machinery only - this and the
-# check that uses it go away with unbound.
-adguardhome_legacy_confd: "{{ homebrew_prefix }}/etc/unbound/conf.d"
-
 
 # Same shape, contributed by the overlays through their overlay.yml, plus
 # `root:` pointing at the checkout the file comes from.

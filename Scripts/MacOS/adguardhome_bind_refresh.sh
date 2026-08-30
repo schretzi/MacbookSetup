@@ -29,7 +29,8 @@
 # and it restarts AdGuard Home only when the list actually changes. Loopback
 # always comes first so that a boot with no containers still has a resolver.
 # 127.0.0.1/.2 are in the list because the wildcard used to cover them:
-# .2 is the address unbound served for years and things still point at it.
+# .2 is the address the previous resolver served for years and things still
+# point at it.
 #
 # Deployed to /usr/local/bin/adguardhome_bind_refresh (root:wheel 0755) by the
 # Ansible role "adguardhome" and run by

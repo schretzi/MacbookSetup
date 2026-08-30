@@ -70,8 +70,8 @@
                + [identity_file, playbook_dir ~ '/local/identity.example.yml'] }}
       tags: always
 
-    # Each overlay may contribute extra dotfile links, Brewfiles, unbound zone
-    # profiles and mail accounts through an overlay.yml at its root.
+    # Each overlay may contribute extra dotfile links, Brewfiles, AdGuard Home
+    # zones and mail accounts through an overlay.yml at its root.
     #
     # They are loaded into separate namespaces and merged, NOT applied directly:
     # include_vars *replaces* a variable rather than extending it, so two
@@ -134,7 +134,7 @@
       tags: [kubeconfig, kube, kubernetes]
 
     # central switchboard for passwordless (NOPASSWD) sudo rules; runs before
-    # any role that relies on one (unbound's flush_dns/restart aliases)
+    # any role that relies on one (the AdGuard Home refresh scripts)
     - role: sudoers
       when: enable_sudoers | bool
       tags: [sudoers, sudo]
@@ -155,23 +155,19 @@
       when: enable_mail | bool
       tags: [mail]
 
-    # the extra 127.0.0.x addresses on lo0. Before every resolver role: both
-    # unbound (127.0.0.2) and AdGuard Home (127.0.0.3, plus its web UI) bind
-    # one, and macOS drops the aliases on every reboot.
+    # the extra 127.0.0.x addresses on lo0. Before AdGuard Home, which binds
+    # 127.0.0.3 for both DNS and its web UI - and macOS drops the aliases on
+    # every reboot.
     - role: localhost_alias
       when: enable_localhost_alias | bool
       tags: [localhost_alias, dns]
 
-    - role: unbound
-      when: enable_unbound | bool
-      tags: [unbound, dns]
 
-    # AdGuard Home, which replaced unbound as the resolver: installs the
-    # pinned release, seeds its config once, and keeps dns.bind_hosts
-    # following the kiac vmnet gateway. Zones are still re-translated from
-    # unbound's conf.d, which remains the source of truth. After
-    # localhost_alias, whose 127.0.0.3 it binds, and after sudoers, whose
-    # NOPASSWD rules both refresh scripts rely on.
+    # AdGuard Home, the resolver: installs the pinned release, seeds its
+    # config once, installs the local zones, and keeps dns.bind_hosts
+    # following the kiac vmnet gateway. After localhost_alias, whose 127.0.0.3
+    # it binds, and after sudoers, whose NOPASSWD rules the refresh scripts
+    # rely on.
     - role: adguardhome
       when: enable_adguardhome | bool
       tags: [adguardhome, dns]
@@ -189,7 +185,7 @@
       when: enable_firefox_enterprise_roots | bool
       tags: [firefox_enterprise_roots, certs, firefox]
 
-    # after unbound: it seeds contexts that reload the resolver
+    # after adguardhome: it seeds contexts that rewrite its upstreams
     - role: macswitcher
       when: enable_macswitcher | bool
       tags: [macswitcher, proxy]

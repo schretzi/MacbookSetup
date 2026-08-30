@@ -9,4 +9,4 @@
 # Whatever this points at must be a *stable* path: it is written verbatim into
 # the LaunchAgent plist, so a path that changes on upgrade leaves launchd
 # retrying a deleted executable. See CONVENTIONS.md §5.
-tunneling_bin: "{{ ansible_env.HOME }}/bin/tunneling"
+tunneling_bin: "{{ ansible_facts.env.HOME }}/bin/tunneling"

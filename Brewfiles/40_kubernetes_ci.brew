@@ -9,6 +9,8 @@ brew "kubeconform"
 # Container images
 brew "hadolint"       # Dockerfile linter; `container build` has no --check like docker does
 brew "ko"             # Dockerfile-free OCI images for Go services: distroless + nonroot by default
+brew "trivy"          # image CVE scanner; run it with --ignore-unfixed or the output is noise
+brew "syft"           # SBOM generator; `container build` has no --sbom, so this is the substitute
 
 # Local CI
 brew "go-task"

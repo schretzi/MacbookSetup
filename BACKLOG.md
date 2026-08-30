@@ -164,6 +164,28 @@ instead of scattering them across chat history.
       Cheap to test: put a block in the project-local file, remove it from the
       machine-level one, trigger a regeneration, see where it lands.
 
+      **The same question, one layer up: symlinked dotfiles are a write target
+      for every installer.** `~/.zshrc` is a symlink into this repository, so
+      anything that "adds itself to your shell profile" edits the source tree
+      unasked. It has now happened twice in one day - Claude Code's autoMode
+      block, and the Antigravity CLI installer appending
+
+      ```sh
+      # Added by Antigravity CLI installer
+      export PATH="/Users/schretzi/.local/bin:$PATH"
+      ```
+
+      which was both redundant (`$HOME/.local/bin` is already in the PATH line
+      at the top) and wrong for this repository (a hardcoded `/Users/schretzi`
+      in the publishable base, where every other line uses `$HOME`). Removed.
+
+      Unlike the Claude settings, `.zshrc` *should* stay versioned and
+      symlinked - so the answer here is different: give installers a target
+      that hurts nobody. A `~/.zshrc.local`, sourced at the end of `.zshrc`,
+      not in the repository, is the usual shape. Worth deciding together with
+      the settings question, because both are "who owns this file, the repo or
+      the runtime".
+
       Then decide between: seeding `~/.claude/settings.json` as a real file
       (copy, `force: false`) so the runtime owns it and only the machinery
       stays versioned; splitting by layer and leaving the symlink; or keeping

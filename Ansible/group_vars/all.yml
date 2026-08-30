@@ -144,6 +144,30 @@ enable_pf_vmnet_proxy: true
 # (needs sudo)
 enable_firefox_enterprise_roots: true
 
+# The machine's own CA: the root in ~/.local/share/localca, its trust in the
+# System keychain, and the intermediates issued from it. It used to live in
+# LocalKubernetes' roles/host_ca, which meant a machine without that checkout
+# could not create one - and privoxy needs one too. (needs sudo, once, to
+# trust anything new)
+enable_local_ca: true
+
+# Intermediates beyond the per-cluster ones LocalKubernetes issues.
+#
+# privoxy signs its on-the-fly site certificates with this one, and never
+# touches the root key. trust_as_root is required rather than cosmetic:
+# privoxy sends only the leaf, so the issuer must already be an anchor on the
+# client - see Setup.md -> "Filtering proxy".
+local_ca_intermediates:
+  - name: privoxy
+    common_name: Privoxy HTTPS Inspection CA
+    trust_as_root: true
+
+# privoxy, the filtering HTTP proxy alpaca forwards to in direct contexts:
+# ~/.config/privoxy, the LaunchAgent, log rotation and the PAC that puts it
+# in alpaca's path. The CA it needs is created by
+# Scripts/MacOS/privoxy_ca_init.sh, not by the play.
+enable_privoxy: true
+
 # macswitcher network contexts: ~/.config/macswitcher, the shell proxy
 # variables in ~/.zsh/rcs/proxy - all seeded once, then owned by the runtime
 enable_macswitcher: true

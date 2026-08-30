@@ -1,0 +1,70 @@
+---
+# privoxy - the filtering HTTP proxy alpaca forwards to in direct contexts.
+#
+# Unlike macswitcher's own files, none of these are runtime-owned: privoxy
+# never rewrites its config or its action files, so this repository stays the
+# source of truth and the role templates them with force (the default).
+#
+# The two exceptions are the CA and the generated leaf certificates, which are
+# machine state and deliberately not in git - see privoxy_ca_dir below.
+
+privoxy_config_dir: "{{ ansible_facts.env.HOME }}/.config/privoxy"
+privoxy_state_dir: "{{ ansible_facts.env.HOME }}/.local/state/privoxy"
+
+# Where privoxy listens. macswitcher's alpaca is pointed here by
+# privoxy_pac_dest; nothing else should talk to it directly.
+privoxy_listen_address: 127.0.0.1
+privoxy_listen_port: 8118
+
+# confdir - privoxy's own templates/, default.action and default.filter, owned
+# by the formula. Only user.action and user.filter come from this repository.
+privoxy_confdir: "{{ homebrew_prefix }}/etc/privoxy"
+
+# What privoxy signs its on-the-fly site certificates with: an intermediate
+# from the machine's own CA (the local_ca role), not a private root of its
+# own. One trust anchor on the machine, and privoxy never holds the root key.
+#
+# It is an intermediate, but it is trusted in the System keychain as an anchor
+# in its own right, because privoxy sends only the leaf and never the chain
+# (openssl.c:788). Both halves of that live in local_ca.
+privoxy_ca_dir: "{{ local_ca_dir }}"
+privoxy_ca_name: privoxy
+privoxy_ca_cert_file: "{{ privoxy_ca_name }}_intermediate.crt"
+privoxy_ca_key_file: "{{ privoxy_ca_name }}_intermediate.key"
+
+# Root store privoxy verifies *upstream* servers against. It is the TLS client
+# once inspection is on, and it does not consult the macOS keychain - with no
+# trusted-cas-file at all, SSL_CTX_load_verify_locations(NULL, NULL) fails and
+# every HTTPS connection dies (openssl.c:1036). The role therefore builds a
+# bundle from Homebrew's ca-certificates plus the roots this machine has been
+# told to trust locally, so a site signed by e.g. LocalKubernetes' host CA
+# keeps working through the proxy.
+privoxy_trusted_cas_file: "{{ privoxy_state_dir }}/trusted-cas.pem"
+privoxy_ca_certificates_bundle: "{{ homebrew_prefix }}/etc/ca-certificates/cert.pem"
+privoxy_system_keychains:
+  - /System/Library/Keychains/SystemRootCertificates.keychain
+  - /Library/Keychains/System.keychain
+
+# debug levels privoxy logs at. 1024 is the crunches - blocks and redirects,
+# the only thing a filtering proxy is really asked to account for - and 4096
+# and 8192 are startup messages and errors. Deliberately NOT 1, which logs the
+# destination of every single request: that turns ~/Library/Logs/privoxy.log
+# into a complete browsing history on disk.
+privoxy_debug_levels: [1024, 4096, 8192]
+
+privoxy_label: com.schretzi.privoxy
+privoxy_plist: com.schretzi.privoxy.plist
+privoxy_pid_file: "{{ privoxy_state_dir }}/privoxy.pid"
+
+# PAC that alpaca is started with in direct contexts: everything public goes
+# to privoxy, everything local stays direct.
+#
+# TRANSITIONAL. macswitcher now has a `filter_proxy` block that generates this
+# file itself (into ~/.local/state/macswitcher/filter.pac) from the same
+# no_proxy list it already owns, which is where it belongs - two hand-kept
+# copies of the local-network exceptions drift apart. This copy, and the
+# per-context alpaca.command overrides that point at it, stay only until a
+# macswitcher carrying filter_proxy is installed from the tap. Then both go,
+# and the contexts lose their overrides.
+privoxy_pac_src: Ansible/roles/privoxy/files/alpaca-direct.pac
+privoxy_pac_dest: "{{ ansible_facts.env.HOME }}/.config/macswitcher/privoxy.pac"

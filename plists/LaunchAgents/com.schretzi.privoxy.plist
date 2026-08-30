@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    privoxy, the filtering HTTP proxy alpaca forwards to in macswitcher's
+    direct contexts (Setup.md -> "Filtering proxy").
+
+    An agent, not a daemon: it binds 8118 on loopback, which needs no
+    privilege, and it filters this user's traffic only.
+
+    Logging deviates from CONVENTIONS.md 2 in one visible way: there is no
+    separate privoxy.err.log, and privoxy.log is written through
+    StandardErrorPath rather than by the job itself.
+
+    privoxy writes everything - startup, blocks, errors - to stderr, and its
+    own `logfile` directive is honoured only when it daemonises
+    (loadcfg.c:1508 gates it on daemon_mode). Under launchd it must stay in
+    the foreground, so that directive is unavailable and stderr *is* the log.
+    Splitting it in two would mean an empty privoxy.log next to an err.log
+    holding everything, which is worse than saying so here.
+
+    That leaves the rename problem (CONVENTIONS.md 3): privoxy holds the fd
+    launchd handed it and cannot be told to reopen, because the reopen path
+    (jcc.c:6259) is also gated on config->logfile being set. So rotation
+    restarts it instead - etc/newsyslog.d/privoxy.conf signals the pid from
+    --pidfile below with SIGTERM, and KeepAlive brings it straight back with
+    a fresh fd on the new file. The cost is dropped connections at the moment
+    of rotation, which at 5 MB of block-only logging is rare and cheap.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.privoxy</string>
+
+    <!-- --no-daemon keeps it in the foreground so launchd owns the process;
+         privoxy still writes the pidfile, which is what newsyslog signals. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/sbin/privoxy</string>
+        <string>--no-daemon</string>
+        <string>--pidfile</string>
+        <string>/Users/schretzi/.local/state/privoxy/privoxy.pid</string>
+        <string>/Users/schretzi/.config/privoxy/config</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- privoxy writes nothing to stdout. -->
+    <key>StandardOutPath</key>
+    <string>/dev/null</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/schretzi/Library/Logs/privoxy.log</string>
+</dict>
+</plist>

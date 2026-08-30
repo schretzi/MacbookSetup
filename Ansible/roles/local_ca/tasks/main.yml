@@ -1,0 +1,190 @@
+---
+# local_ca - root CA, its trust in the System keychain, and the intermediates
+# issued from it. See defaults/main.yml for why this is not in LocalKubernetes.
+
+- name: Local CA | check step is present
+  ansible.builtin.stat:
+    path: "{{ local_ca_step_bin }}"
+  register: local_ca_step
+
+- name: Local CA | warn when step is missing
+  ansible.builtin.debug:
+    msg: >-
+      {{ local_ca_step_bin }} not found. Install it with `brew install step` -
+      skipping this role.
+  when: not local_ca_step.stat.exists
+
+- name: Local CA | manage
+  when: local_ca_step.stat.exists
+  block:
+    - name: Local CA | create the CA directory
+      ansible.builtin.file:
+        path: "{{ local_ca_dir }}"
+        state: directory
+        mode: "0700"
+
+    # ----------------------------------------------------------------------
+    # One-time migration out of LocalKubernetes' data directory
+    # ----------------------------------------------------------------------
+    # The keys and certificates are moved, not re-created: re-creating the
+    # root would mean re-trusting it and re-issuing everything under it,
+    # including certificates inside running clusters.
+    - name: Local CA | look for a root in the old LocalKubernetes location
+      ansible.builtin.stat:
+        path: "{{ local_ca_legacy_dir }}/root_ca.crt"
+      register: local_ca_legacy_root
+
+    - name: Local CA | look for a root in the new location
+      ansible.builtin.stat:
+        path: "{{ local_ca_dir }}/root_ca.crt"
+      register: local_ca_root
+
+    - name: Local CA | migrate the PKI from the old location
+      when:
+        - local_ca_legacy_root.stat.exists
+        - not local_ca_root.stat.exists
+      block:
+        - name: Local CA | list what the old location holds
+          ansible.builtin.find:
+            paths: "{{ local_ca_legacy_dir }}"
+            patterns: "*.crt,*.key"
+          register: local_ca_legacy_files
+
+        - name: Local CA | copy the PKI across
+          ansible.builtin.copy:
+            src: "{{ item.path }}"
+            dest: "{{ local_ca_dir }}/{{ item.path | basename }}"
+            mode: "0600"
+            remote_src: true
+          loop: "{{ local_ca_legacy_files.files }}"
+          loop_control:
+            label: "{{ item.path | basename }}"
+
+        # Only after every file arrived. A failed copy leaves the old
+        # directory untouched and the migration retries next run.
+        - name: Local CA | remove the old location
+          ansible.builtin.file:
+            path: "{{ local_ca_legacy_dir }}"
+            state: absent
+
+        - name: Local CA | re-check for the root after migrating
+          ansible.builtin.stat:
+            path: "{{ local_ca_dir }}/root_ca.crt"
+          register: local_ca_root
+
+    # ----------------------------------------------------------------------
+    # Root
+    # ----------------------------------------------------------------------
+    # --no-password --insecure: the key is plaintext on disk. LocalKubernetes'
+    # PLAN.md 6 wants it age/sops-encrypted at rest, and that requirement
+    # moves here with the root. It is not a regression - this is how the
+    # existing root was created - but it is now the base repository's problem,
+    # and it matters more than it did: privoxy's inspection CA hangs off this.
+    - name: Local CA | create the root CA
+      ansible.builtin.command:
+        cmd: >-
+          {{ local_ca_step_bin }} certificate create "{{ local_ca_root_name }}"
+          {{ local_ca_dir }}/root_ca.crt {{ local_ca_dir }}/root_ca.key
+          --profile root-ca
+          --not-after {{ local_ca_root_expiry }}
+          --no-password --insecure
+      args:
+        creates: "{{ local_ca_dir }}/root_ca.crt"
+      register: local_ca_root_created
+
+    - name: Local CA | restrict the root key
+      ansible.builtin.file:
+        path: "{{ local_ca_dir }}/{{ item }}"
+        mode: "0600"
+      loop:
+        - root_ca.crt
+        - root_ca.key
+
+    # ----------------------------------------------------------------------
+    # Trust
+    # ----------------------------------------------------------------------
+    - name: Local CA | check whether the root is trusted by the System keychain
+      ansible.builtin.command:
+        cmd: security verify-cert -c {{ local_ca_dir }}/root_ca.crt
+      register: local_ca_root_trusted
+      changed_when: false
+      check_mode: false
+      failed_when: false
+
+    - name: Local CA | trust the root in the System keychain
+      ansible.builtin.command:
+        cmd: >-
+          security add-trusted-cert -d -r trustRoot
+          -k /Library/Keychains/System.keychain {{ local_ca_dir }}/root_ca.crt
+      become: true
+      when: local_ca_root_trusted.rc != 0
+      changed_when: true
+
+    # ----------------------------------------------------------------------
+    # Intermediates
+    # ----------------------------------------------------------------------
+    - name: Local CA | issue the intermediates
+      ansible.builtin.command:
+        cmd: >-
+          {{ local_ca_step_bin }} certificate create
+          "{{ item.common_name | default(item.name ~ '.' ~ local_ca_root_name) }}"
+          {{ local_ca_dir }}/{{ item.name }}_intermediate.crt
+          {{ local_ca_dir }}/{{ item.name }}_intermediate.key
+          --profile intermediate-ca
+          --ca {{ local_ca_dir }}/root_ca.crt --ca-key {{ local_ca_dir }}/root_ca.key
+          --not-after {{ local_ca_intermediate_expiry }}
+          --no-password --insecure
+      args:
+        creates: "{{ local_ca_dir }}/{{ item.name }}_intermediate.crt"
+      loop: "{{ local_ca_intermediates }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: local_ca_issued
+
+    - name: Local CA | restrict the intermediate keys
+      ansible.builtin.file:
+        path: "{{ local_ca_dir }}/{{ item.name }}_intermediate.key"
+        mode: "0600"
+      loop: "{{ local_ca_intermediates }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # trustAsRoot, not trustRoot: the certificate is not self-signed, so it is
+    # an anchor for what it issued rather than a root in its own right. This
+    # is what makes a leaf that arrives without its chain verifiable - see
+    # local_ca_intermediates in defaults/main.yml.
+    # find-certificate, not verify-cert. `verify-cert -c <intermediate>` reads
+    # the file it is handed and chains it to the trusted root, so it succeeds
+    # whether or not the keychain has ever seen it - measured: it returns
+    # "certificate verification successful" for an intermediate that
+    # find-certificate cannot find. Used as the idempotence check it would
+    # skip the import for ever, and the symptom appears only later, on a leaf:
+    # a certificate signed by that intermediate and presented without its
+    # chain fails with CSSMERR_TP_NOT_TRUSTED. Which is precisely what privoxy
+    # sends.
+    - name: Local CA | check which intermediates are already in the keychain
+      ansible.builtin.command:
+        cmd: >-
+          security find-certificate
+          -c "{{ item.common_name | default(item.name ~ '.' ~ local_ca_root_name) }}"
+          /Library/Keychains/System.keychain
+      register: local_ca_intermediate_trusted
+      changed_when: false
+      check_mode: false
+      failed_when: false
+      loop: "{{ local_ca_intermediates | selectattr('trust_as_root', 'defined') | selectattr('trust_as_root') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Local CA | trust the intermediates in the System keychain
+      ansible.builtin.command:
+        cmd: >-
+          security add-trusted-cert -d -r trustAsRoot
+          -k /Library/Keychains/System.keychain
+          {{ local_ca_dir }}/{{ item.item.name }}_intermediate.crt
+      become: true
+      when: item.rc != 0
+      changed_when: true
+      loop: "{{ local_ca_intermediate_trusted.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"

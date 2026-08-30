@@ -1,0 +1,64 @@
+# privoxy - {{ ansible_managed }}
+#
+# Managed by MacbookSetup's privoxy role. Edit
+# Ansible/roles/privoxy/templates/config.j2 and re-run the play; edits here
+# are overwritten. Rules belong in user.action, not in this file.
+#
+# The chain is: browser/CLI -> alpaca (127.0.0.1:3128) -> privoxy -> internet,
+# and only in macswitcher contexts whose proxy_mode is `direct`. In `forward`
+# contexts alpaca goes to the corporate proxy instead and privoxy is not in
+# the path at all. See Setup.md -> "Filtering proxy".
+
+listen-address  {{ privoxy_listen_address }}:{{ privoxy_listen_port }}
+
+# privoxy's own templates/, default.action and default.filter, from the
+# formula. Only the user.* files below come from this repository.
+confdir  {{ privoxy_confdir }}
+
+# No logdir/logfile here on purpose. privoxy only honours them when it
+# daemonises (loadcfg.c:1508 gates the directive on daemon_mode), and under
+# launchd it has to stay in the foreground - so everything it logs goes to
+# stderr, and the plist's StandardErrorPath is what makes that
+# ~/Library/Logs/privoxy.log. Setting them here would look right and do
+# nothing.
+
+{% for level in privoxy_debug_levels %}
+debug    {{ level }}
+{% endfor %}
+
+# Order matters: later files win. match-all sets the machine-wide defaults,
+# default.action is privoxy's shipped ad/tracker list, user.action is ours.
+actionsfile  match-all.action
+actionsfile  default.action
+actionsfile  {{ privoxy_config_dir }}/user.action
+
+filterfile   default.filter
+filterfile   {{ privoxy_config_dir }}/user.filter
+
+# Only this machine talks to it, and only through alpaca on loopback.
+permit-access  127.0.0.1
+permit-access  ::1
+
+# ------------------------------------------------------------------------
+# HTTPS inspection
+# ------------------------------------------------------------------------
+# Without these, privoxy sees nothing but the CONNECT hostname on TLS and
+# cannot filter by URL path. With them it terminates TLS itself, using a
+# per-site certificate signed by the CA below - which is why that CA has to
+# be trusted by the machine (Scripts/MacOS/privoxy_ca_init.sh) and why
+# certificate-pinned apps stop working until they are given a
+# {-https-inspection} exception in user.action.
+#
+# These directives only exist in a privoxy built --with-openssl. On
+# homebrew-core's bottle privoxy logs "Ignoring unrecognized directive" for
+# every one of them and silently keeps running without inspection, so the
+# formula in schretzi/tap is not optional.
+ca-directory           {{ privoxy_ca_dir }}
+ca-cert-file           {{ privoxy_ca_cert_file }}
+ca-key-file            {{ privoxy_ca_key_file }}
+certificate-directory  {{ privoxy_state_dir }}/certs
+trusted-cas-file       {{ privoxy_trusted_cas_file }}
+
+# Everything privoxy generates for a site it inspects lands in
+# certificate-directory and is never cleaned up by privoxy itself. It is
+# state, not data: deleting the directory costs one regeneration per site.

@@ -31,6 +31,10 @@ brew "bitwarden-cli"
 
 # Proxy
 brew "samuong/alpaca/alpaca"
+# Not homebrew-core's privoxy: that bottle is built without
+# --with-openssl, so it has no HTTPS inspection and silently ignores
+# every ca-* directive. The tap formula adds openssl@3.
+brew "schretzi/tap/privoxy"
 
 # OpenBao
 brew "openbao"

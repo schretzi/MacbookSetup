@@ -1255,8 +1255,9 @@ ykman --device $YKSERIAL info
 
 ## Trusting locally-generated root CAs (Firefox/Zen)
 
-Locally-generated root CAs — e.g. from a LocalKubernetes-style cluster's
-`roles/host_ca` — are trusted system-wide with:
+The machine's own root CA is created and trusted by the `local_ca` role (see
+"Local CA"). The command it runs, and the one to use for any other
+locally-generated root, is:
 
 ```bash
 sudo security add-trusted-cert -d -r trustRoot \
@@ -1338,6 +1339,280 @@ optional `forwarder_proxy` block enables upstream forwarding.
 Environment-specific addresses, names, PAC URLs, Kerberos paths, and proxy
 settings belong only in those overlays. Passwords and other secrets are read
 from the macOS Keychain and must not be added to any repository.
+
+## Local CA
+
+_Role: `local_ca`_ — `enable_local_ca`
+
+One trust anchor for the whole machine, in `~/.local/share/localca`:
+
+```
+root CA  (CN "LocalKubernetes Root CA", ECDSA P-256, CA:TRUE pathlen:1, → 2036)
+├── host_intermediate       gitea.kiac, registry.kiac      (LocalKubernetes)
+├── main_intermediate       cert-manager ClusterIssuer     (LocalKubernetes)
+├── test1_intermediate      per-cluster                    (LocalKubernetes)
+└── privoxy_intermediate    HTTPS inspection               (here)
+```
+
+**Why it moved out of LocalKubernetes.** The root used to be created by that
+repo's `roles/host_ca`, in `~/.local/share/localkubernetes/pki`. But a root CA
+the System keychain trusts is a property of the machine, not of a cluster —
+and privoxy needs to sign from the same anchor on a machine that may never
+have cloned LocalKubernetes. So `local_ca` owns the root, its keychain trust
+and the intermediates; `roles/host_ca` now asserts the root exists and issues
+only what clusters need.
+
+The old directory is migrated on first run — the keys and certificates are
+*moved*, not regenerated. Regenerating would mean re-trusting the root and
+re-issuing everything under it, including certificates inside running
+clusters. For the same reason the CN still says "LocalKubernetes Root CA":
+renaming a CA does not rename it, it creates a different one. The name is a
+misnomer now; that is cheaper than the churn.
+
+Intermediates beyond the cluster ones are declared in `group_vars/all.yml`:
+
+```yaml
+local_ca_intermediates:
+  - name: privoxy
+    common_name: Privoxy HTTPS Inspection CA
+    trust_as_root: true
+```
+
+`trust_as_root` imports it with `security add-trusted-cert -r trustAsRoot`.
+Needed only where a consumer sends leaves without their chain — privoxy does
+exactly that, see the section below.
+
+**The root key is plaintext on disk** (`--no-password --insecure`, as it
+always was). LocalKubernetes' `PLAN.md` §6 wants it age/sops-encrypted at
+rest, and that requirement came along with the root. It matters more here than
+it did there: this key is now also the anchor for a proxy that can mint a
+certificate for any site.
+
+```sh
+ls -la ~/.local/share/localca                       # 0700, keys 0600
+security verify-cert -c ~/.local/share/localca/root_ca.crt
+security find-certificate -c "Privoxy HTTPS Inspection CA" /Library/Keychains/System.keychain
+```
+
+Note that `verify-cert` on an *intermediate* proves nothing about the
+keychain: it chains the file it is handed up to the trusted root and reports
+success either way. Use `find-certificate` for intermediates.
+
+## Filtering proxy — privoxy
+
+_Role: `privoxy`_ — `enable_privoxy`
+
+URL filtering for the networks where nobody else does it. On a corporate
+network the company proxy already filters; at home, alpaca went straight out.
+This closes that gap without changing which contexts use which path:
+
+```
+browser / CLI  ->  alpaca 127.0.0.1:3128  ->  privoxy 127.0.0.1:8118  ->  internet
+                                    (proxy_mode: direct only)
+
+browser / CLI  ->  alpaca 127.0.0.1:3128  ->  corporate proxy
+                                    (proxy_mode: forward — privoxy not in the path)
+```
+
+### How alpaca is made to forward
+
+alpaca has no "always use this upstream" flag — `-C <pac>` is its only way to
+choose one. macswitcher therefore owns this: a `filter_proxy` block in
+`config.yaml` generates the PAC and starts alpaca with it, for any context
+whose `proxy_mode` is `direct`.
+
+```yaml
+filter_proxy:
+  enabled: true
+  host: 127.0.0.1
+  port: 8118
+  fail_open: true
+  direct: [.kiac, .ts.net]
+```
+
+The generated file lands in `~/.local/state/macswitcher/filter.pac` — state,
+rewritten on every switch, safe to delete. It is generated rather than
+hand-written because its local-network exceptions have to agree with
+`local_proxy.no_proxy`, and two hand-maintained copies of that list drift
+apart. `macswitcher status` gained a `filter_proxy:` line, `observe` a
+`privoxy` row, and `config validate` warns when the block is enabled but
+nothing answers on the port.
+
+**Until a macswitcher carrying that block is installed from the tap**, the
+same effect comes from a per-context override, which is what this machine
+runs today:
+
+```yaml
+# contexts/home.yaml
+alpaca:
+  enabled: true
+  command:
+    [alpaca, -l, "{{local_host}}", -p, "{{local_port}}",
+     -C, "file:///Users/schretzi/.config/macswitcher/privoxy.pac"]
+```
+
+`SwitchContext.Alpaca` overrides the global `alpaca.command` per context
+(macswitcher `internal/app/proxy.go`), so this worked before macswitcher knew
+anything about filtering. Without the override, `buildProxyCommand` drops the
+`-C {{pac_file}}` pair whenever `forwarder_proxy.pac_file` is empty — which is
+every direct context — and alpaca goes out directly. The new code fills that
+same placeholder with the generated PAC instead, so the two mechanisms cannot
+collide; `config validate` warns if a context keeps its override anyway.
+
+The transitional PAC comes from
+`Ansible/roles/privoxy/files/alpaca-direct.pac`. Both versions end in
+
+```js
+return "PROXY 127.0.0.1:8118; DIRECT";
+```
+
+**The trailing `DIRECT` is a deliberate fail-open.** privoxy down means
+unfiltered browsing, not a dead network — and, today, **silently so**:
+macswitcher knows nothing about privoxy, so neither `status` nor `observe`
+reports that the filter dropped out of the path. See "Not integrated yet"
+below. Everything local — plain hostnames,
+`.kiac`, `.local`, `.ts.net`, RFC1918 and CGNAT literals — returns `DIRECT`
+before that line is reached, and no branch calls `dnsResolve()`, so evaluating
+the PAC never costs a lookup.
+
+### It has to be the tap build
+
+`brew install privoxy` from homebrew-core is **not** enough. That formula
+configures without `--with-openssl`, so `FEATURE_HTTPS_INSPECTION` is compiled
+out (`otool -L` shows no TLS library at all) and privoxy answers every `ca-*`
+directive with
+
+```
+Error: Ignoring unrecognized directive 'ca-directory ...'
+```
+
+and then runs happily, filtering nothing but plain HTTP. A proxy that silently
+does not inspect looks exactly like one that does, so the role asserts on the
+linked libraries rather than warning. `schretzi/tap/privoxy` is core's formula
+plus `openssl@3` and `--with-openssl`.
+
+### HTTPS inspection, and what it costs
+
+Without inspection privoxy sees only `CONNECT host:443` — host-level blocking,
+which AdGuard Home already does at the DNS layer. Inspection is what makes URL
+*paths* filterable on HTTPS, and it works by privoxy terminating TLS with a
+certificate it mints from a local CA.
+
+That certificate comes from **this machine's own CA**, not from a private root
+of privoxy's own — see "Local CA" below. privoxy gets an intermediate
+(`privoxy_intermediate`, CN `Privoxy HTTPS Inspection CA`) and never touches
+the root key.
+
+The intermediate has to be trusted in the System keychain in its own right,
+which looks redundant next to an already-trusted root and is not. privoxy
+sends **only the leaf** — `openssl.c:788` uses `SSL_CTX_use_certificate_file`
+and never `add_extra_chain_cert` — so the client never receives the
+intermediate and cannot build a chain to the root itself. Measured on this
+machine: a leaf signed by the intermediate and presented alone fails with
+`CSSMERR_TP_NOT_TRUSTED` until the intermediate is imported. The `local_ca`
+role imports it with `-r trustAsRoot`.
+
+Safari, Chrome and macOS `curl` (SecureTransport) follow the System keychain;
+Firefox and Zen do too, through the `firefox_enterprise_roots` role.
+
+What breaks, and where the escape hatch is:
+
+- **Certificate-pinned clients** — Apple services, Microsoft 365, Dropbox,
+  Signal, Tailscale, banking apps. They compare against a shipped key, not the
+  machine's trust store, so inspection fails them. `user.action` carries a
+  `{-https-inspection}` list; add to it when something works only with the
+  proxy out of the path.
+- **Anything with its own trust store** — Java's `cacerts`, some Go and Python
+  programs. Trusting the CA in the keychain does not reach them.
+
+privoxy is also the TLS *client* once inspecting, and it does not read the
+keychain: with no `trusted-cas-file` at all,
+`SSL_CTX_load_verify_locations(NULL, NULL)` fails and every HTTPS connection
+dies (`openssl.c:1036`). The role therefore assembles
+`~/.local/state/privoxy/trusted-cas.pem` from Homebrew's `ca-certificates`
+plus this machine's keychain roots, so locally-signed hosts keep working
+through the proxy.
+
+### Files
+
+| Path                                    | Owner                    | Notes                                       |
+| --------------------------------------- | ------------------------ | ------------------------------------------- |
+| `~/.config/privoxy/config`              | this repo (`config.j2`)  | templated with force — privoxy never writes it |
+| `~/.config/privoxy/user.action`         | this repo                | inspection defaults, pinning exceptions, blocks |
+| `~/.config/privoxy/user.filter`         | this repo                | empty; `config` references it                |
+| `~/.local/share/localca/privoxy_intermediate.*` | `local_ca` role  | `0600`, shared PKI, never in git             |
+| `~/.local/state/privoxy/certs/`         | privoxy                  | per-site certs, safe to delete               |
+| `~/.local/state/privoxy/trusted-cas.pem`| the role                 | regenerated every run                        |
+| `~/.config/macswitcher/privoxy.pac`     | this repo                | what alpaca is pointed at                    |
+
+Opposite of the macswitcher role directly above: nothing here is
+runtime-owned, so everything is templated with force.
+
+### Logging deviates, on purpose
+
+There is no `privoxy.err.log`, and `privoxy.log` is launchd's
+`StandardErrorPath`. privoxy logs everything to stderr, and its own `logfile`
+directive is honoured only when it daemonises (`loadcfg.c:1508`), which it
+cannot do under launchd. Rotation therefore restarts it: `newsyslog` renames
+the log, signals 15 to the pid from `--pidfile`, and `KeepAlive` brings it
+back against the new file within a second.
+
+`debug` is set to blocks (1024), startup (4096) and errors (8192).
+Deliberately **not** `debug 1`, which logs the destination of every request
+and turns the log into a browsing history on disk.
+
+### Integration state
+
+Built into macswitcher, waiting for a release:
+
+- **`filter_proxy` block** — generates the PAC and starts alpaca with it for
+  every direct context, replacing the per-context `alpaca.command` copies.
+- **`status`** — a `filter_proxy:` line that probes the port rather than
+  reporting what the config intends, because the fail-open PAC is otherwise
+  silent: `127.0.0.1:8118, in path, listening`, or `NOT LISTENING - traffic is
+  going out unfiltered (fail_open)`.
+- **`observe`** — a `privoxy` row directly under alpaca, with the same probe
+  plus whether this context routes through it at all.
+- **`config validate`** — warns when the filter is in the path with nothing
+  listening, and when a context still names its own PAC through
+  `alpaca.command`.
+- **`observe` log view** — privoxy's single log is now found. Its stderr path
+  is not `<name>.err.log`, so the old derivation showed it as an error log
+  with no main log next to it.
+
+The machine keeps running the released binary until the tap is updated, so
+the per-context overrides above are what is actually in the path today.
+
+Still open, outside macswitcher:
+
+- **Little Snitch attribution changes shape.** With traffic flowing through
+  privoxy, connections are attributed as *"app via privoxy"* rather than to
+  the app — visible in the exported model, where every helper (`syft`,
+  `trivy`, `node`, `go`, `kubectl`) already has its own `via` rule. Every app
+  asks again, once. `LittleSnitchConfig` has no rule group for it.
+- **`docs/networking-tools.md` does not mention it.** That page is the
+  self-contained install guide for the three CLIs; privoxy is a fourth moving
+  part in the same chain.
+- **`PROXY_STATE`** in `~/.zsh/rcs/proxy` is `off`/`on`; there is no "on, and
+  filtered", so the Starship line cannot show it.
+
+### Checks
+
+```sh
+launchctl print gui/$(id -u)/com.schretzi.privoxy | grep state
+curl -x 127.0.0.1:8118 -s -o /dev/null -w '%{http_code}\n' http://example.com/
+curl -x 127.0.0.1:3128 -sv https://example.com/ 2>&1 | grep -i issuer   # via alpaca
+tail -f ~/Library/Logs/privoxy.log                                      # blocks land here
+```
+
+The status page at <http://config.privoxy.org/show-status> (through the proxy)
+lists the compiled-in features and every action file it loaded.
+
+**Little Snitch has to allow it.** privoxy is a new binary making outbound
+connections on behalf of everything else; until it has a rule, requests sit
+for 30 s and then fail with `No server or forwarder response received`. The
+30 s is not configurable — privoxy's connect timeout is hardcoded
+(`jbsockets.c:382`).
 
 ## Reference
 

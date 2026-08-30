@@ -90,6 +90,57 @@ instead of scattering them across chat history.
       `no-handler` suppressed with its reason inline - the newsyslog parse
       check must fail at the point of the change, and the role is included
       once per conf file, so a handler would verify whichever ran last.
+- [ ] **Root CA key is plaintext at rest.** Came with the root when it moved
+      from LocalKubernetes' `roles/host_ca` into `local_ca` (it was always
+      `--no-password --insecure`). `PLAN.md` §6 over there wants it
+      age/sops-encrypted, and the requirement moved with the key — now with
+      more weight, since privoxy's inspection CA hangs off the same root and
+      can mint a certificate for any site. privoxy's own key must stay
+      readable unattended, so the encryption can only cover the root: issue
+      intermediates from a decrypted-on-demand root, and keep the plaintext
+      copy out of the fixed location.
+
+- [ ] **privoxy: filtering proxy is built and wired, activation is manual.**
+      Done: `schretzi/tap/privoxy` (core's formula + `openssl@3` +
+      `--with-openssl`, because core's bottle has no HTTPS inspection at all),
+      the `privoxy` role, `com.schretzi.privoxy`, rotation, the PAC, the CA
+      script and Setup.md -> "Filtering proxy". The chain is
+      alpaca -> privoxy -> internet in `direct` contexts only, through a
+      per-context `alpaca.command` override — no macswitcher change was
+      needed, `SwitchContext.Alpaca` already exists.
+
+      Three things are deliberately not done, and the setup is inert until
+      they are:
+      - **Little Snitch has no rule for privoxy**, so it cannot reach the
+        internet: requests sit 30 s (hardcoded, `jbsockets.c:382`) and end in
+        `No server or forwarder response received`. This is also the first
+        real customer for the LittleSnitchConfig repo, which is still empty.
+      - **The privoxy intermediate is not in the System keychain yet.** It
+        exists (`~/.local/share/localca/privoxy_intermediate.crt`) and
+        inspection demonstrably works against it — `https://` path blocking
+        returns 403 — but only for a client told to trust it explicitly.
+        `--tags local_ca --ask-become-pass` does the import.
+      - **Cut a macswitcher release, then remove the transitional wiring.**
+        `filter_proxy` is implemented, tested and lint-clean in the
+        macswitcher checkout but not released, so the machine runs the old
+        binary and the per-context `alpaca.command` overrides are what is
+        actually in the path. Once the tap has it: drop the overrides from
+        `~/.config/macswitcher/contexts/*.yaml` and from the private overlay,
+        delete `Ansible/roles/privoxy/files/alpaca-direct.pac` with its role
+        task and `privoxy_pac_*` defaults, and add the `filter_proxy` block
+        to the live `config.yaml` (the seed in `Dotfiles/` already has it).
+
+      Open questions worth settling once it runs:
+      - **How much does inspection actually break?** The
+        `{-https-inspection}` list in `user.action` is a prediction (Apple,
+        Microsoft, Dropbox, Signal, Tailscale), not a measurement.
+      - **`user.action` blocks nothing yet.** privoxy's `default.action`
+        covers the usual ad/tracker surface and AdGuard Home covers domains;
+        what is left for the URL-path layer is an actual decision.
+      - **`~/.local/state/privoxy/certs` never gets cleaned up.** privoxy
+        mints one certificate per inspected site and deletes none.
+      - **`oebb` and `smartgadget` are in no overlay.** They only exist on
+        this machine, so a rebuild loses them.
 - [ ] **Touch ID for sudo does not authenticate — blocked on the OS side.**
       The `/etc/pam.d/sudo_local` the sudoers role writes is correct (see
       `sudoers_touchid_enabled`), and the full diagnosis is in `Setup.md` →

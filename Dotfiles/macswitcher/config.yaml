@@ -18,6 +18,28 @@ alpaca:
     - -C
     - "{{pac_file}}"
 network_services: []
+
+# The filtering proxy alpaca forwards to in direct contexts - privoxy, from
+# the privoxy role. Only direct contexts: a forward context talks to the
+# corporate proxy, which filters already.
+#
+# macswitcher generates the PAC from this block plus local_proxy.no_proxy and
+# starts alpaca with it. Do not hand-write a PAC and name it through a
+# context's alpaca.command - `config validate` warns about exactly that,
+# because the two lists then drift apart.
+#
+# fail_open: privoxy down means unfiltered browsing rather than no network.
+# `macswitcher status` and the privoxy row in `observe` are what tell you it
+# is happening; without them the fail-open is silent.
+filter_proxy:
+  enabled: true
+  host: 127.0.0.1
+  port: 8118
+  fail_open: true
+  direct:
+    - .kiac
+    - .ts.net
+
 dns:
   local_resolver: 127.0.0.3
 adguard:
@@ -37,6 +59,8 @@ daemons:
     interface: utun99
   tunneling:
     label: com.schretzi.tunneling
+  privoxy:
+    label: com.schretzi.privoxy
 applications:
   docker:
     start:

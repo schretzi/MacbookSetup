@@ -1,0 +1,93 @@
+# privoxy user.action - the rules this machine adds on top of privoxy's own
+# default.action. Managed by MacbookSetup (Ansible/roles/privoxy/files/), so
+# edit it there and re-run the play rather than editing the copy in
+# ~/.config/privoxy.
+#
+# Syntax: a {+action -action} header applies to every pattern under it, until
+# the next header. Patterns are host[/path]; a leading dot matches subdomains.
+# `privoxy --config-test` is not a thing - re-run the play, then check
+# ~/Library/Logs/privoxy.log for "Invalid action section".
+
+{{alias}}
+# Shorthands, so the intent reads rather than the mechanism.
+inspect    = +https-inspection
+no-inspect = -https-inspection
+deny       = +block{Blocked by privoxy user.action.}
+
+# ---------------------------------------------------------------------------
+# 1. Inspect TLS by default
+# ---------------------------------------------------------------------------
+# Without this privoxy only ever sees "CONNECT host:443" and can block whole
+# hosts and nothing finer - which AdGuard Home already does, at the DNS layer.
+# URL-path filtering on HTTPS is the entire reason the CA exists.
+{inspect}
+/
+
+# ---------------------------------------------------------------------------
+# 2. Exceptions: everything that pins its certificates
+# ---------------------------------------------------------------------------
+# A pinned client does not care that the machine trusts the privoxy CA; it
+# compares against the key it was shipped with, sees a different one, and
+# fails - usually with a misleading error. These are the ones that reliably
+# break; add to the list when something starts failing only while the proxy
+# is in the path.
+#
+# The symptom to watch for in ~/Library/Logs/privoxy.log is a TLS handshake
+# error against a host you did not expect to see there.
+{no-inspect}
+# The endpoint security agent. This one is not about breakage: intercepting
+# and decrypting the traffic of the tool that watches this machine is wrong
+# regardless of whether it would work, and it reports to someone else's
+# console. Measured: it is one of the busiest destinations on this machine.
+.sentinelone.net
+
+.apple.com
+.icloud.com
+.mzstatic.com
+.push.apple.com
+
+# Microsoft is several domains, and the obvious one does not cover them.
+# Measured the hard way: `.microsoft.com` does not match
+# login.microsoftonline.com, which was being inspected while this list looked
+# complete. teams.cloud.microsoft rejected the handshake outright.
+.microsoft.com
+.cloud.microsoft
+.microsoftonline.com
+.microsoftonline-p.com
+.sharepoint.com
+.office.com
+.office365.com
+.live.com
+.windowsupdate.com
+
+# Firefox/Zen phone home for captive-portal detection and updates through
+# NSS, which only sees the CA once the enterprise-roots policy has been
+# applied and the browser restarted.
+.firefox.com
+.mozilla.com
+.mozilla.net
+
+.dropbox.com
+.spotify.com
+.whatsapp.net
+.signal.org
+.tailscale.com
+.tailscale.io
+# Banking and anything with a hardware token belongs here too - decrypting it
+# locally buys nothing and breaks apps that check for exactly this.
+
+# ---------------------------------------------------------------------------
+# 3. URL blocking
+# ---------------------------------------------------------------------------
+# Deliberately empty. privoxy's default.action already covers the usual
+# ad/tracker surface; this section is for the paths *this* machine should not
+# reach, which is a decision, not a default. Two worked examples:
+#
+#   {deny}
+#   .example.com/ads/
+#   .example.com/sponsored*
+#
+# and an exception carved back out of a block:
+#
+#   {-block}
+#   .example.com/ads/thing-i-actually-want

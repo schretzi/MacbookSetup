@@ -1,0 +1,39 @@
+---
+# local_ca - the machine's own certificate authority.
+#
+# It was born in LocalKubernetes (roles/host_ca) because the first thing that
+# needed it was gitea.kiac and registry.kiac. But a root CA that the System
+# keychain trusts is a property of the *machine*, not of a Kubernetes setup:
+# privoxy's HTTPS inspection needs one too, and a machine with no cluster
+# checked out could not create one at all. So the root lives here, and
+# LocalKubernetes issues its cluster intermediates from it.
+
+# Deliberately named after neither repository. It used to be
+# ~/.local/share/localkubernetes/pki, which is a directory owned by a checkout
+# that may not exist; the tasks migrate the old location on first run.
+local_ca_dir: "{{ ansible_facts.env.HOME }}/.local/share/localca"
+local_ca_legacy_dir: "{{ ansible_facts.env.HOME }}/.local/share/localkubernetes/pki"
+
+local_ca_step_bin: "{{ homebrew_prefix }}/bin/step"
+
+# The CN is kept as it was. Renaming it does not rename a certificate - it
+# creates a different root, which means re-trusting it in the System keychain
+# and re-issuing every certificate under it, including the ones inside running
+# clusters. The name is now a misnomer; that is cheaper than the churn.
+local_ca_root_name: "LocalKubernetes Root CA"
+local_ca_root_expiry: 87600h # 10 years
+local_ca_intermediate_expiry: 8760h # 1 year
+
+# Intermediates this machine issues from the root, beyond the ones
+# LocalKubernetes creates per cluster.
+#
+#   name:          <name>_intermediate.crt/.key in local_ca_dir
+#   common_name:   subject CN
+#   trust_as_root: import into the System keychain as its own anchor
+#
+# trust_as_root is not decoration for privoxy - it is required. privoxy sends
+# only the leaf certificate it generated (openssl.c:788 uses
+# SSL_CTX_use_certificate_file and never add_extra_chain_cert), so a client
+# never receives the intermediate and cannot build a chain up to the root on
+# its own. The issuer has to be an anchor the client already holds.
+local_ca_intermediates: []

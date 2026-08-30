@@ -1,0 +1,7 @@
+# privoxy user.filter - content rewriting rules for this machine.
+#
+# Empty on purpose. config.j2 references this file, so it has to exist;
+# privoxy's own default.filter carries the standard filters and is loaded
+# first. Add pcrs jobs here only when a block or a header change cannot do
+# the job - content filters run on every matching response body and are the
+# expensive end of privoxy.

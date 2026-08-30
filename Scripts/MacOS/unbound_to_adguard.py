@@ -443,15 +443,22 @@ def main() -> int:
             zone_files[Path(source).stem + ".txt"] = rendered
 
     if args.dry_run:
-        print(f"=== {args.out_dir}/upstreams.conf ===")
-        print(upstreams)
         for name, body in zone_files.items():
             print(f"=== {args.out_dir}/zones/{name} ===")
             print(body)
     else:
         zones_dir = args.out_dir / "zones"
         zones_dir.mkdir(parents=True, exist_ok=True)
-        write_if_changed(args.out_dir / "upstreams.conf", upstreams)
+        # upstreams.conf is deliberately NOT written any more. It has two
+        # owners now and this script is neither: macswitcher rewrites the
+        # default block on every network context switch, and the adguardhome
+        # role seeds the file plus ensures the per-domain lines an overlay
+        # contributes. Regenerating it from conf.d here would drop exactly
+        # those lines the moment a zone is migrated off unbound - silently,
+        # and only visible once the intranet stops resolving on the VPN.
+        #
+        # The default upstreams that used to come from forwarders.conf are
+        # Dotfiles/adguardhome/upstreams.conf in the base repository now.
         for name, body in zone_files.items():
             write_if_changed(zones_dir / name, body)
         # A zone file whose unbound source disappeared would otherwise keep

@@ -83,15 +83,13 @@ instead of scattering them across chat history.
       before every resolver role. The addresses outlive whichever resolver
       uses them, which is exactly why tying them to unbound broke when unbound
       was switched off.
-- [ ] **`ansible-lint site.yml` is not clean.** `Ansible/README.md` says it
-      must stay clean; it currently reports 24 findings, all in the launchd
-      conventions work committed in fd44d94 and none of them behavioural:
-      7× `name[casing]` in `pf_vmnet_nat`, 12× `var-naming[no-role-prefix]`
-      across `kerberoskeepalive`, `launchd/require_service_cli`, `macswitcher`,
-      `mail` and `tunneling`, 3× `name[template]`, 1× `no-handler` in
-      `newsyslog`, 1× `yaml[line-length]` in `work`. Mechanical to fix, but it
-      touches five roles, so it wants its own commit rather than riding along
-      with something else.
+- [x] **`ansible-lint site.yml` is clean.** Done: 29 findings down to zero,
+      profile `production`, 49 files. Task-name casing and Jinja placement,
+      role prefixes on variables (`service_cli_*` -> `launchd_service_cli_*`,
+      `kka_*` -> `kerberoskeepalive_*`, pf_vmnet_proxy's vmnet vars), and one
+      `no-handler` suppressed with its reason inline - the newsyslog parse
+      check must fail at the point of the change, and the role is included
+      once per conf file, so a handler would verify whichever ran last.
 - [ ] **Touch ID for sudo does not authenticate — blocked on the OS side.**
       The `/etc/pam.d/sudo_local` the sudoers role writes is correct (see
       `sudoers_touchid_enabled`), and the full diagnosis is in `Setup.md` →

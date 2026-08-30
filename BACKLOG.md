@@ -142,6 +142,45 @@ instead of scattering them across chat history.
          authentication and is *not* extended by use, and site.yml reaches
          its first root task only after `homebrew` — 20 minutes may not cover
          a cold run.
+- [ ] **AI: where assistant settings and environment context belong.**
+      `~/.claude/settings.json` is a *symlink* into this repository, so Claude
+      Code writes runtime state straight into the source tree - which is the
+      one thing the setup avoids everywhere else (AdGuardHome.yaml.seed,
+      macswitcher's config.yaml: seeded once, then owned by the runtime).
+
+      It showed up as a generated `autoMode.environment` block, 24 entries
+      describing the employer VPN, secret stores, DNS zones and data
+      classification - in a repository whose README calls it the publishable
+      base, all machinery and no identity. Deleted for now (it was meant for
+      one session on one project); a copy of what it looked like is not kept.
+
+      What is already known, so the next round does not re-derive it:
+      - Settings are layered and merged, more specific winning:
+        `~/.claude/settings.json` (machine), `<repo>/.claude/settings.json`
+        (project, versioned and shareable), `<repo>/.claude/settings.local.json`
+        (project, machine-only - globally ignored through
+        `~/.config/git/ignore`, not through a .gitignore in the repo).
+      - There is no include/import *inside* a settings file. The layering is
+        the mechanism, so "move it out" means "put it in another layer".
+      - Per-project environment blocks are therefore possible in principle,
+        which is what "one for the private code repo, another for something
+        else" would need.
+      - It cannot be made assistant-agnostic. The schema and the path are
+        Claude Code's; moving the file to `~/.agents/` would only hide it.
+        `~/.agents/skills` works because several tools agreed on that path -
+        there is no such convention for settings. Only the *content* could be
+        neutral prose that one hands to an assistant deliberately.
+
+      Open, and the thing to settle first: **where does the generator write?**
+      The block appeared in the machine-level file. If it always goes there,
+      relocating it to a project layer is pointless - it would come back.
+      Cheap to test: put a block in the project-local file, remove it from the
+      machine-level one, trigger a regeneration, see where it lands.
+
+      Then decide between: seeding `~/.claude/settings.json` as a real file
+      (copy, `force: false`) so the runtime owns it and only the machinery
+      stays versioned; splitting by layer and leaving the symlink; or keeping
+      the identity-flavoured parts in the work/private overlay.
 - [ ] **gcloud IAP tunneling wrapper script** — currently only documented
       manually in `Setup.md` (SSH key prereq via `gcloud compute ssh`,
       `/etc/hosts` `kubernetes` alias, stale-host-key workaround). Script

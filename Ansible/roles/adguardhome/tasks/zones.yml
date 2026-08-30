@@ -24,14 +24,20 @@
 # overwriting each other, and which one AdGuard Home ends up serving would
 # depend on the order of the last run. Refuse instead.
 #
+# Runtime zones are checked too, not just the ones installed from a repository:
+# kiac.txt is rendered by LocalKubernetes' host_dns, and a leftover kiac.conf
+# would have the translator quietly undo that render on the very next refresh.
+#
 # Migration machinery: goes away with unbound and its conf.d.
 - name: AdGuardHome | check no migrated zone still has an unbound source
   ansible.builtin.stat:
-    path: "{{ adguardhome_legacy_confd }}/{{ item.file | splitext | first }}.conf"
+    path: "{{ adguardhome_legacy_confd }}/{{ item | splitext | first }}.conf"
     follow: false
-  loop: "{{ adguardhome_all_zones | selectattr('enabled') | list }}"
+  loop: >-
+    {{ (adguardhome_all_zones | selectattr('enabled') | map(attribute='file') | list)
+       + adguardhome_zones_runtime }}
   loop_control:
-    label: "{{ item.file }}"
+    label: "{{ item }}"
   register: adguardhome_legacy_sources
   changed_when: false
   check_mode: false
@@ -43,14 +49,14 @@
     # templated even when the assertion passes, and a stat result carries no
     # `invocation` to read the path back out of.
     fail_msg: >-
-      {{ item.item.file }} is installed from a repository, but
-      {{ adguardhome_legacy_confd }}/{{ item.item.file | splitext | first }}.conf
+      {{ item.item }} is written by a repository or by another tool, but
+      {{ adguardhome_legacy_confd }}/{{ item.item | splitext | first }}.conf
       still exists, so unbound_to_adguard.py keeps regenerating it and the two
       overwrite each other. Remove the leftover source:
-      rm {{ adguardhome_legacy_confd }}/{{ item.item.file | splitext | first }}.conf
+      rm {{ adguardhome_legacy_confd }}/{{ item.item | splitext | first }}.conf
   loop: "{{ adguardhome_legacy_sources.results }}"
   loop_control:
-    label: "{{ item.item.file }}"
+    label: "{{ item.item }}"
 
 - name: AdGuardHome | install the zone files
   ansible.builtin.copy:

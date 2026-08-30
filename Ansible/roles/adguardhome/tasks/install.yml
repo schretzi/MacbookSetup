@@ -95,13 +95,27 @@
 
 - name: AdGuardHome | ensure the generated inputs directory exists
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ adguardhome_generated }}"
     state: directory
     owner: root
     group: wheel
     mode: "0755"
   become: true
-  loop:
-    - "{{ adguardhome_generated }}"
-    - "{{ adguardhome_generated }}/zones"
+  when: adguardhome_enabled | bool
+
+# zones/ is group-writable by admin, the directory above is not. Zone files are
+# rendered by whoever owns the zone, and one of them comes from another
+# repository: LocalKubernetes' host_dns re-renders kiac.txt whenever the vmnet
+# hands out new addresses, from a play that deliberately runs without become
+# and reaches for `sudo -n` only where it has a NOPASSWD rule. unbound's conf.d
+# was user-writable and this is the same arrangement - on a single-user machine
+# the admin group is the same trust level as the login user.
+- name: AdGuardHome | ensure the zones directory is writable by its renderers
+  ansible.builtin.file:
+    path: "{{ adguardhome_generated }}/zones"
+    state: directory
+    owner: root
+    group: admin
+    mode: "0775"
+  become: true
   when: adguardhome_enabled | bool

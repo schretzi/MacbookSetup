@@ -34,8 +34,8 @@
     name: launchd
     tasks_from: require_service_cli
   vars:
-    service_cli_bin: "{{ tunneling_bin }}"
-    service_cli_label: com.schretzi.tunneling
+    launchd_service_cli_bin: "{{ tunneling_bin }}"
+    launchd_service_cli_label: com.schretzi.tunneling
   when: tunneling_binary.stat.exists
 
 # `service install` refuses to install when the config does not parse, so a

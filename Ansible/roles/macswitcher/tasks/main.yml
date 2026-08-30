@@ -205,8 +205,8 @@
         name: launchd
         tasks_from: require_service_cli
       vars:
-        service_cli_bin: "{{ homebrew_prefix }}/bin/macswitcher"
-        service_cli_label: com.schretzi.macswitcher
+        launchd_service_cli_bin: "{{ homebrew_prefix }}/bin/macswitcher"
+        launchd_service_cli_label: com.schretzi.macswitcher
       when: macswitcher_validate.rc == 0
 
     - name: Macswitcher | install the LaunchAgent

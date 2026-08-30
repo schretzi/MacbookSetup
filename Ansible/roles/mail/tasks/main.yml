@@ -328,8 +328,8 @@
         name: launchd
         tasks_from: require_service_cli
       vars:
-        service_cli_bin: "{{ homebrew_prefix }}/bin/omt"
-        service_cli_label: com.schretzi.omt
+        launchd_service_cli_bin: "{{ homebrew_prefix }}/bin/omt"
+        launchd_service_cli_label: com.schretzi.omt
       when: mail_omt.stat.exists
 
     - name: Mail | install the omt LaunchAgent

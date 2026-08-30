@@ -28,7 +28,7 @@
 # daemon involved. Node VMs/containers then reach the proxy at
 # 192.168.64.1:3128 (see LocalKubernetes' proxy_url).
 
-- name: pf_vmnet_proxy | render the proxy redirect anchor file
+- name: PF vmnet proxy | render the proxy redirect anchor file
   ansible.builtin.copy:
     dest: /etc/pf.anchors/com.kiac.vmnet-proxy
     content: |
@@ -39,8 +39,8 @@
       # actual loopback-only listener. Alpaca is never exposed off-host:
       # only traffic already inside the vmnet (i.e. already inside this
       # Mac's own container runtime) can reach it this way.
-      rdr pass on {{ vmnet_interface }} proto tcp \
-        from {{ vmnet_subnet }} to ({{ vmnet_interface }}) port {{ pf_vmnet_proxy_upstream_port }} \
+      rdr pass on {{ pf_vmnet_proxy_interface }} proto tcp \
+        from {{ pf_vmnet_proxy_subnet }} to ({{ pf_vmnet_proxy_interface }}) port {{ pf_vmnet_proxy_upstream_port }} \
         -> {{ pf_vmnet_proxy_upstream_host }} port {{ pf_vmnet_proxy_upstream_port }}
     owner: root
     group: wheel
@@ -53,7 +53,7 @@
 # must land before any filtering anchor — com.apple's own rdr-anchor line
 # is the natural landmark, mirroring how roles/pf_vmnet_nat hooks its
 # nat-anchor directly after com.apple's nat-anchor line.
-- name: pf_vmnet_proxy | hook the anchor into /etc/pf.conf
+- name: PF vmnet proxy | hook the anchor into /etc/pf.conf
   ansible.builtin.blockinfile:
     path: /etc/pf.conf
     marker: "# {mark} ANSIBLE MANAGED BLOCK - pf_vmnet_proxy"
@@ -65,7 +65,7 @@
   register: pf_vmnet_proxy_conf
   when: pf_vmnet_proxy_enabled | bool
 
-- name: pf_vmnet_proxy | reload pf with the new ruleset now
+- name: PF vmnet proxy | reload pf with the new ruleset now
   ansible.builtin.command: /sbin/pfctl -f /etc/pf.conf
   become: true
   when: >
@@ -73,7 +73,7 @@
     (pf_vmnet_proxy_conf.changed or pf_vmnet_proxy_anchor.changed)
   changed_when: true
 
-- name: pf_vmnet_proxy | make sure pf itself is enabled
+- name: PF vmnet proxy | make sure pf itself is enabled
   ansible.builtin.command: /sbin/pfctl -e
   become: true
   register: pf_vmnet_proxy_enable

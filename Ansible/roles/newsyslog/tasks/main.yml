@@ -35,13 +35,19 @@
 # newsyslog silently ignores a malformed line, so a typo costs you rotation
 # without ever saying so. -n is a dry run: it parses the file, explains what
 # it would do to each log, and exits non-zero if it cannot read the config.
-- name: "Newsyslog | verify {{ newsyslog_conf }} parses"
+# Deliberately not a handler, for two reasons. The check
+# has to fail at the point of the change, not at the end of the play after
+# twenty other roles have run against a rotation config that does not parse.
+# And this role is included per conf file with newsyslog_conf set for that
+# invocation: a handler is global and fires once, so it would verify whichever
+# file happened to be last.
+- name: "Newsyslog | verify it parses: {{ newsyslog_conf }}"
   ansible.builtin.command: "newsyslog -n -f /etc/newsyslog.d/{{ newsyslog_conf }}"
   become: true
   register: newsyslog_check
   changed_when: false
   failed_when: newsyslog_check.rc != 0
-  when: newsyslog_copy.changed
+  when: newsyslog_copy.changed # noqa: no-handler
 
 - name: "Newsyslog | forget variables"
   ansible.builtin.set_fact:

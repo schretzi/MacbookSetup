@@ -9,7 +9,7 @@
 # that re-runs the script on every network change -> sudoers rule for
 # manual on-demand refresh.
 
-- name: pf_vmnet_nat | install the NAT interface refresh script
+- name: PF vmnet NAT | install the NAT interface refresh script
   ansible.builtin.copy:
     src: "{{ repo_root }}/Scripts/MacOS/vmnet_nat_refresh.sh"
     dest: /usr/local/bin/vmnet_nat_refresh
@@ -22,7 +22,7 @@
 # Placeholder anchor file so /etc/pf.conf's `load anchor` below never
 # fails to find it — the refresh script (or its LaunchDaemon) overwrites
 # this with the real interface-specific rule the first time it runs.
-- name: pf_vmnet_nat | ensure a placeholder anchor file exists
+- name: PF vmnet NAT | ensure a placeholder anchor file exists
   ansible.builtin.copy:
     dest: /etc/pf.anchors/com.kiac.vmnet-nat
     content: |
@@ -42,7 +42,7 @@
 # queueing, translation, filtering), so this must land in the translation
 # section, before any filtering anchor such as com.apple's later
 # rdr-anchor/anchor lines.
-- name: pf_vmnet_nat | hook the anchor into /etc/pf.conf
+- name: PF vmnet NAT | hook the anchor into /etc/pf.conf
   ansible.builtin.blockinfile:
     path: /etc/pf.conf
     marker: "# {mark} ANSIBLE MANAGED BLOCK - pf_vmnet_nat"
@@ -54,7 +54,7 @@
   register: pf_vmnet_nat_conf
   when: pf_vmnet_nat_enabled | bool
 
-- name: pf_vmnet_nat | install the LaunchDaemon that refreshes NAT on network changes
+- name: PF vmnet NAT | install the LaunchDaemon that refreshes NAT on network changes
   ansible.builtin.include_role:
     name: launchd
     tasks_from: daemon
@@ -63,20 +63,20 @@
     launchd_label: com.schretzi.vmnet-nat-refresh
   when: pf_vmnet_nat_enabled | bool
 
-- name: pf_vmnet_nat | rotate the NAT refresh logs
+- name: PF vmnet NAT | rotate the NAT refresh logs
   ansible.builtin.include_role:
     name: newsyslog
   vars:
     newsyslog_conf: vmnet-nat-refresh.conf
   when: pf_vmnet_nat_enabled | bool
 
-- name: pf_vmnet_nat | reload pf with the new ruleset now
+- name: PF vmnet NAT | reload pf with the new ruleset now
   ansible.builtin.command: /sbin/pfctl -f /etc/pf.conf
   become: true
   when: pf_vmnet_nat_enabled | bool and pf_vmnet_nat_conf.changed
   changed_when: true
 
-- name: pf_vmnet_nat | run the refresh script now so NAT is correct immediately
+- name: PF vmnet NAT | run the refresh script now so NAT is correct immediately
   ansible.builtin.command: /usr/local/bin/vmnet_nat_refresh
   become: true
   when: pf_vmnet_nat_enabled | bool

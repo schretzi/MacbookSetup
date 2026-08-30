@@ -18,36 +18,36 @@
 # whether the subcommand exists.
 #
 # Caller must set:
-#   service_cli_bin:   "{{ homebrew_prefix }}/bin/omt"
-#   service_cli_label: com.schretzi.omt
+#   launchd_service_cli_bin:   "{{ homebrew_prefix }}/bin/omt"
+#   launchd_service_cli_label: com.schretzi.omt
 
-- name: "Launchd | probe {{ service_cli_bin | basename }} for service support"
-  ansible.builtin.command: "{{ service_cli_bin }} service status"
-  register: service_cli_probe
+- name: "Launchd | probe for service support: {{ launchd_service_cli_bin | basename }}"
+  ansible.builtin.command: "{{ launchd_service_cli_bin }} service status"
+  register: launchd_service_cli_probe
   changed_when: false
   check_mode: false
   failed_when: false
 
-- name: "Launchd | require {{ service_cli_bin | basename }} to implement the current convention"
+- name: "Launchd | require the current service convention from {{ launchd_service_cli_bin | basename }}"
   ansible.builtin.assert:
     that:
-      - service_cli_probe.rc == 0
-      - service_cli_label in (service_cli_probe.stdout | default(''))
+      - launchd_service_cli_probe.rc == 0
+      - launchd_service_cli_label in (launchd_service_cli_probe.stdout | default(''))
     success_msg: >-
-      {{ service_cli_bin | basename }} implements {{ service_cli_label }}
+      {{ launchd_service_cli_bin | basename }} implements {{ launchd_service_cli_label }}
     fail_msg: >-
-      {{ service_cli_bin }} does not implement the current LaunchAgent
+      {{ launchd_service_cli_bin }} does not implement the current LaunchAgent
       convention: `service status` was expected to report
-      "{{ service_cli_label }}" and did not.
+      "{{ launchd_service_cli_label }}" and did not.
 
       This is an outdated build. Either it has no `service` command at all, or
       it has an older one that would still install the pre-convention label -
       which would look like success and leave the machine unmigrated.
 
       Upgrade the binary first (`brew upgrade --cask
-      {{ service_cli_bin | basename }}`, or build and install from its repo),
+      {{ launchd_service_cli_bin | basename }}`, or build and install from its repo),
       then re-run. See MacbookSetup/CONVENTIONS.md.
 
 - name: "Launchd | forget probe variables"
   ansible.builtin.set_fact:
-    service_cli_probe: null
+    launchd_service_cli_probe: null

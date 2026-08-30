@@ -19,15 +19,10 @@ alpaca:
     - "{{pac_file}}"
 network_services: []
 dns:
-  local_resolver: 127.0.0.2
-unbound:
-  forwarders_file: /opt/homebrew/etc/unbound/conf.d/forwarders.conf
+  local_resolver: 127.0.0.3
 adguard:
   upstreams_file: /etc/adguardhome/upstreams.conf
 daemons:
-  unbound:
-    label: net.unbound
-    scope: system
   adguardhome:
     label: com.schretzi.adguardhome
     scope: system
@@ -65,16 +60,6 @@ applications:
       - osascript
       - -e
       - tell application "Elgato Stream Deck" to quit
-  unbound:
-    restart:
-      - sudo
-      - launchctl
-      - kickstart
-      - -k
-      - system/net.unbound
-    reload:
-      - unbound-control
-      - reload
   adguardhome:
     restart:
       - sudo

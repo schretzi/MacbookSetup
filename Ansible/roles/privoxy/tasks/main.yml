@@ -122,12 +122,6 @@
         - user.filter
       register: privoxy_rules
 
-    - name: Privoxy | seed the PAC that points alpaca at privoxy
-      ansible.builtin.copy:
-        src: "{{ repo_root }}/{{ privoxy_pac_src }}"
-        dest: "{{ privoxy_pac_dest }}"
-        mode: "0644"
-
     # ----------------------------------------------------------------------
     # The CA, which this role only ever checks for
     # ----------------------------------------------------------------------

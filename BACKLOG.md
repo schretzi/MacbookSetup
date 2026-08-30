@@ -100,47 +100,27 @@ instead of scattering them across chat history.
       intermediates from a decrypted-on-demand root, and keep the plaintext
       copy out of the fixed location.
 
-- [ ] **privoxy: filtering proxy is built and wired, activation is manual.**
-      Done: `schretzi/tap/privoxy` (core's formula + `openssl@3` +
-      `--with-openssl`, because core's bottle has no HTTPS inspection at all),
-      the `privoxy` role, `com.schretzi.privoxy`, rotation, the PAC, the CA
-      script and Setup.md -> "Filtering proxy". The chain is
-      alpaca -> privoxy -> internet in `direct` contexts only, through a
-      per-context `alpaca.command` override — no macswitcher change was
-      needed, `SwitchContext.Alpaca` already exists.
+- [x] **privoxy: filtering URLs on the way out.** Done and live. The chain is
+      alpaca -> privoxy -> internet in `direct` contexts, from
+      `schretzi/tap/privoxy` (core's bottle has no HTTPS inspection at all),
+      with HTTPS inspection signing from a `local_ca` intermediate. macswitcher
+      0.3.0 carries the `filter_proxy` block that generates the PAC, plus the
+      `status` line, the `observe` row and the `config validate` warnings; the
+      per-context `alpaca.command` overrides and the repo's own PAC are gone
+      again.
 
-      Three things are deliberately not done, and the setup is inert until
-      they are:
-      - **Little Snitch has no rule for privoxy**, so it cannot reach the
-        internet: requests sit 30 s (hardcoded, `jbsockets.c:382`) and end in
-        `No server or forwarder response received`. This is also the first
-        real customer for the LittleSnitchConfig repo, which is still empty.
-      - **The privoxy intermediate is not in the System keychain yet.** It
-        exists (`~/.local/share/localca/privoxy_intermediate.crt`) and
-        inspection demonstrably works against it — `https://` path blocking
-        returns 403 — but only for a client told to trust it explicitly.
-        `--tags local_ca --ask-become-pass` does the import.
-      - **Cut a macswitcher release, then remove the transitional wiring.**
-        `filter_proxy` is implemented, tested and lint-clean in the
-        macswitcher checkout but not released, so the machine runs the old
-        binary and the per-context `alpaca.command` overrides are what is
-        actually in the path. Once the tap has it: drop the overrides from
-        `~/.config/macswitcher/contexts/*.yaml` and from the private overlay,
-        delete `Ansible/roles/privoxy/files/alpaca-direct.pac` with its role
-        task and `privoxy_pac_*` defaults, and add the `filter_proxy` block
-        to the live `config.yaml` (the seed in `Dotfiles/` already has it).
+      What it cost to get right, worth remembering:
+      - Little Snitch attributes proxied connections as *"app via privoxy"*,
+        so every app asks once more. `LittleSnitchConfig` still has no rule
+        group for it.
+      - The `{-https-inspection}` list is measurement, not prediction:
+        `.microsoft.com` does not match `login.microsoftonline.com`, and
+        `teams.cloud.microsoft` rejects the handshake. `.sentinelone.net` is
+        excluded on principle - decrypting the endpoint security agent is
+        wrong regardless of whether it would work.
+      - Still to watch: `~/.local/state/privoxy/certs` is never cleaned up,
+        and `oebb`/`smartgadget` exist only live, in no overlay.
 
-      Open questions worth settling once it runs:
-      - **How much does inspection actually break?** The
-        `{-https-inspection}` list in `user.action` is a prediction (Apple,
-        Microsoft, Dropbox, Signal, Tailscale), not a measurement.
-      - **`user.action` blocks nothing yet.** privoxy's `default.action`
-        covers the usual ad/tracker surface and AdGuard Home covers domains;
-        what is left for the URL-path layer is an actual decision.
-      - **`~/.local/state/privoxy/certs` never gets cleaned up.** privoxy
-        mints one certificate per inspected site and deletes none.
-      - **`oebb` and `smartgadget` are in no overlay.** They only exist on
-        this machine, so a rebuild loses them.
 - [ ] **Touch ID for sudo does not authenticate — blocked on the OS side.**
       The `/etc/pam.d/sudo_local` the sudoers role writes is correct (see
       `sudoers_touchid_enabled`), and the full diagnosis is in `Setup.md` →

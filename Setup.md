@@ -1438,39 +1438,10 @@ apart. `macswitcher status` gained a `filter_proxy:` line, `observe` a
 `privoxy` row, and `config validate` warns when the block is enabled but
 nothing answers on the port.
 
-**Until a macswitcher carrying that block is installed from the tap**, the
-same effect comes from a per-context override, which is what this machine
-runs today:
-
-```yaml
-# contexts/home.yaml
-alpaca:
-  enabled: true
-  command:
-    [alpaca, -l, "{{local_host}}", -p, "{{local_port}}",
-     -C, "file:///Users/schretzi/.config/macswitcher/privoxy.pac"]
-```
-
-`SwitchContext.Alpaca` overrides the global `alpaca.command` per context
-(macswitcher `internal/app/proxy.go`), so this worked before macswitcher knew
-anything about filtering. Without the override, `buildProxyCommand` drops the
-`-C {{pac_file}}` pair whenever `forwarder_proxy.pac_file` is empty — which is
-every direct context — and alpaca goes out directly. The new code fills that
-same placeholder with the generated PAC instead, so the two mechanisms cannot
-collide; `config validate` warns if a context keeps its override anyway.
-
-The transitional PAC comes from
-`Ansible/roles/privoxy/files/alpaca-direct.pac`. Both versions end in
-
-```js
-return "PROXY 127.0.0.1:8118; DIRECT";
-```
-
 **The trailing `DIRECT` is a deliberate fail-open.** privoxy down means
-unfiltered browsing, not a dead network — and, today, **silently so**:
-macswitcher knows nothing about privoxy, so neither `status` nor `observe`
-reports that the filter dropped out of the path. See "Not integrated yet"
-below. Everything local — plain hostnames,
+unfiltered browsing, not a dead network. That would be silent on its own, so
+`macswitcher status` probes the port and says
+`NOT LISTENING - traffic is going out unfiltered (fail_open)` when it is. Everything local — plain hostnames,
 `.kiac`, `.local`, `.ts.net`, RFC1918 and CGNAT literals — returns `DIRECT`
 before that line is reached, and no branch calls `dnsResolve()`, so evaluating
 the PAC never costs a lookup.
@@ -1563,25 +1534,12 @@ and turns the log into a browsing history on disk.
 
 ### Integration state
 
-Built into macswitcher, waiting for a release:
-
-- **`filter_proxy` block** — generates the PAC and starts alpaca with it for
-  every direct context, replacing the per-context `alpaca.command` copies.
-- **`status`** — a `filter_proxy:` line that probes the port rather than
-  reporting what the config intends, because the fail-open PAC is otherwise
-  silent: `127.0.0.1:8118, in path, listening`, or `NOT LISTENING - traffic is
-  going out unfiltered (fail_open)`.
-- **`observe`** — a `privoxy` row directly under alpaca, with the same probe
-  plus whether this context routes through it at all.
-- **`config validate`** — warns when the filter is in the path with nothing
-  listening, and when a context still names its own PAC through
-  `alpaca.command`.
-- **`observe` log view** — privoxy's single log is now found. Its stderr path
-  is not `<name>.err.log`, so the old derivation showed it as an error log
-  with no main log next to it.
-
-The machine keeps running the released binary until the tap is updated, so
-the per-context overrides above are what is actually in the path today.
+In macswitcher since 0.3.0: the `filter_proxy` block above, a `filter_proxy:`
+line in `status` that probes the port rather than reporting what the config
+intends, a `privoxy` row in `observe` directly under alpaca, and
+`config validate` warnings when the filter is in the path with nothing
+listening — or when a context still names its own PAC through
+`alpaca.command`, which is the wiring this replaced.
 
 Still open, outside macswitcher:
 

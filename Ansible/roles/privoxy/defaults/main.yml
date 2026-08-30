@@ -55,16 +55,3 @@ privoxy_debug_levels: [1024, 4096, 8192]
 privoxy_label: com.schretzi.privoxy
 privoxy_plist: com.schretzi.privoxy.plist
 privoxy_pid_file: "{{ privoxy_state_dir }}/privoxy.pid"
-
-# PAC that alpaca is started with in direct contexts: everything public goes
-# to privoxy, everything local stays direct.
-#
-# TRANSITIONAL. macswitcher now has a `filter_proxy` block that generates this
-# file itself (into ~/.local/state/macswitcher/filter.pac) from the same
-# no_proxy list it already owns, which is where it belongs - two hand-kept
-# copies of the local-network exceptions drift apart. This copy, and the
-# per-context alpaca.command overrides that point at it, stay only until a
-# macswitcher carrying filter_proxy is installed from the tap. Then both go,
-# and the contexts lose their overrides.
-privoxy_pac_src: Ansible/roles/privoxy/files/alpaca-direct.pac
-privoxy_pac_dest: "{{ ansible_facts.env.HOME }}/.config/macswitcher/privoxy.pac"

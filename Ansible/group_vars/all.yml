@@ -129,6 +129,15 @@ enable_adguardhome: true
 # leave enabled elsewhere, it just NATs a private subnet nothing else uses.
 enable_pf_vmnet_nat: true
 
+# pf redirect that makes the Alpaca proxy (loopback-only) reachable from the
+# kiac vmnet subnet at the gateway's own address, so cluster node VMs and
+# host containers can route all egress through it (needs sudo). Static
+# rule, independent of which physical interface currently has the default
+# route — unlike pf_vmnet_nat, no refresh daemon is needed. Only meaningful
+# on machines running both kiac and Alpaca; safe to leave enabled
+# elsewhere.
+enable_pf_vmnet_proxy: true
+
 # Trusts locally-generated root CAs (added via `security add-trusted-cert`
 # into /Library/Keychains/System.keychain) in Firefox-based browsers too -
 # Firefox/NSS ignores the System keychain by default, unlike Safari/Chrome.

@@ -177,6 +177,13 @@
       when: enable_pf_vmnet_nat | bool
       tags: [pf_vmnet_nat, kiac, vmnet]
 
+    # Makes the Alpaca proxy reachable from the kiac vmnet without exposing
+    # it off-host (PLAN.md §7.3 in LocalKubernetes). Static pf rdr rule, no
+    # LaunchDaemon needed. After pf_vmnet_nat, same anchor-hook pattern.
+    - role: pf_vmnet_proxy
+      when: enable_pf_vmnet_proxy | bool
+      tags: [pf_vmnet_proxy, kiac, vmnet, proxy]
+
     # trusts locally-generated root CAs (`security add-trusted-cert ...
     # System.keychain`) in Firefox-based browsers too - Safari/Chrome do this
     # natively, Firefox/NSS needs ImportEnterpriseRoots turned on explicitly.

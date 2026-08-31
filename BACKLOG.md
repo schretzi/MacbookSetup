@@ -110,9 +110,12 @@ instead of scattering them across chat history.
       again.
 
       What it cost to get right, worth remembering:
-      - Little Snitch attributes proxied connections as *"app via privoxy"*,
-        so every app asks once more. `LittleSnitchConfig` still has no rule
-        group for it.
+      - Little Snitch loses per-app attribution: outbound traffic leaves as
+        `privoxy`, so one allow rule for it replaces the per-app decision for
+        everything proxied. It runs under launchd and connects as itself, so
+        it is one rule - `via` in Little Snitch means "helper spawned by this
+        app", not "through this proxy", which is what the earlier note here
+        got wrong.
       - The `{-https-inspection}` list is measurement, not prediction:
         `.microsoft.com` does not match `login.microsoftonline.com`, and
         `teams.cloud.microsoft` rejects the handshake. `.sentinelone.net` is
@@ -120,10 +123,9 @@ instead of scattering them across chat history.
         wrong regardless of whether it would work.
       - Still to watch: `~/.local/state/privoxy/certs` is never cleaned up,
         and `oebb`/`smartgadget` exist only live, in no overlay.
-      - Still open: `LittleSnitchConfig` has no rule group for privoxy, which
-        is the last piece of this that is not written down anywhere.
-        `docs/networking-tools.md` and `PROXY_STATE` are done - the prompt
-        reads `filtered` from macswitcher 0.3.1.
+      - `docs/networking-tools.md` and `PROXY_STATE` are done - the prompt
+        reads `filtered` from macswitcher 0.3.1. The Little Snitch side is
+        `rules/proxy-chain.lsrules` in `LittleSnitchConfig`.
 
 - [ ] **Touch ID for sudo does not authenticate — blocked on the OS side.**
       The `/etc/pam.d/sudo_local` the sudoers role writes is correct (see

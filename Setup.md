@@ -1463,7 +1463,7 @@ Error: Ignoring unrecognized directive 'ca-directory ...'
 and then runs happily, filtering nothing but plain HTTP. A proxy that silently
 does not inspect looks exactly like one that does, so the role asserts on the
 linked libraries rather than warning. `schretzi/tap/privoxy` is core's formula
-plus `openssl@3` and `--with-openssl`.
+plus `openssl@3`, `--with-openssl` and `--enable-extended-statistics`.
 
 ### HTTPS inspection, and what it costs
 
@@ -1535,6 +1535,21 @@ back against the new file within a second.
 Deliberately **not** `debug 1`, which logs the destination of every request
 and turns the log into a browsing history on disk.
 
+That rules out the usual way of getting numbers out of privoxy.
+`privoxy-log-parser --statistics` (shipped by the formula) reads `LOG_LEVEL_CLF`
+lines, so it needs `debug 512` — the same browsing history under another name,
+and one that rotation makes *worse* rather than better: the statistics window is
+whatever is still on disk, so useful numbers mean deliberately keeping five
+generations of every URL visited.
+
+The tap build therefore passes `--enable-extended-statistics` instead, and the
+counters live in memory. They are keyed by the block reason from the action file
+(`filters.c:645`) and by filter name (`filters.c:1791`) — never by URL or host —
+which answers "which rule is actually firing" without any of it being written
+down. The cost is that they reset on every restart, including the one rotation
+performs; at block-only logging the 5 MB threshold is rare enough that this
+means "since the last reboot".
+
 ### Integration state
 
 In macswitcher since 0.3.0: the `filter_proxy` block above, a `filter_proxy:`
@@ -1546,11 +1561,12 @@ listening — or when a context still names its own PAC through
 
 Still open, outside macswitcher:
 
-- **Little Snitch attribution changes shape.** With traffic flowing through
-  privoxy, connections are attributed as *"app via privoxy"* rather than to
-  the app — visible in the exported model, where every helper (`syft`,
-  `trivy`, `node`, `go`, `kubectl`) already has its own `via` rule. Every app
-  asks again, once. `LittleSnitchConfig` has no rule group for it.
+- **Little Snitch sees one process, not the app behind it.** Outbound traffic
+  now leaves as `privoxy`, so proxied connections can no longer be attributed
+  to the app that caused them — one allow rule for privoxy replaces the
+  per-app decision for everything that goes through it. privoxy runs under
+  launchd and connects as itself, so that is a single rule, not a wave of new
+  prompts. `LittleSnitchConfig` carries it as `rules/proxy-chain.lsrules`.
 - **`docs/networking-tools.md` does not mention it.** That page is the
   self-contained install guide for the three CLIs; privoxy is a fourth moving
   part in the same chain.
@@ -1565,7 +1581,12 @@ tail -f ~/Library/Logs/privoxy.log                                      # blocks
 ```
 
 The status page at <http://config.privoxy.org/show-status> (through the proxy)
-lists the compiled-in features and every action file it loaded.
+lists the compiled-in features, every action file it loaded, and the three
+statistics tables — block rate, count per block reason, count per filter. It is
+reachable only *through* the proxy; `http://127.0.0.1:8118/` answers 400.
+`/show-url-info` is the one to use when a `user.action` rule does not do what it
+looks like it should: it says which actions apply to a URL and which file set
+them.
 
 **Little Snitch has to allow it.** privoxy is a new binary making outbound
 connections on behalf of everything else; until it has a rule, requests sit

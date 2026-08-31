@@ -287,11 +287,13 @@ open http://config.privoxy.org/show-status # through the proxy: compiled-in feat
 `FEATURE_HTTPS_INSPECTION  Yes` on that page is the direct answer to "did I
 install the right build".
 
-**A per-application firewall will notice.** Once traffic flows through
-privoxy, connections are attributed to *"the app, via privoxy"* rather than to
-the app, so tools like Little Snitch ask again for every application. Until
-privoxy itself is allowed out, requests sit for 30 s and fail with
-`No server or forwarder response received` — that timeout is hardcoded and not
+**A per-application firewall needs one rule, and loses something for it.**
+privoxy runs under launchd and connects as itself, so a single allow rule
+covers it — but that rule then replaces the per-app decision for everything
+proxied, because outbound traffic no longer carries the identity of the app
+that caused it. Until privoxy is allowed out, requests sit for 30 s and fail
+with `No server or forwarder response received`, which reads like a network
+fault rather than a firewall decision. That timeout is hardcoded and not
 configurable.
 
 ---

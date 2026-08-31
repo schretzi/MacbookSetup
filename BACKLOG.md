@@ -120,6 +120,10 @@ instead of scattering them across chat history.
         wrong regardless of whether it would work.
       - Still to watch: `~/.local/state/privoxy/certs` is never cleaned up,
         and `oebb`/`smartgadget` exist only live, in no overlay.
+      - Still open: `LittleSnitchConfig` has no rule group for privoxy, which
+        is the last piece of this that is not written down anywhere.
+        `docs/networking-tools.md` and `PROXY_STATE` are done - the prompt
+        reads `filtered` from macswitcher 0.3.1.
 
 - [ ] **Touch ID for sudo does not authenticate — blocked on the OS side.**
       The `/etc/pam.d/sudo_local` the sudoers role writes is correct (see

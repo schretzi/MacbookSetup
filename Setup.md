@@ -330,15 +330,18 @@ It keeps every one of Starship's built-in default modules and styling
 default, on their own second line:
 
 - **`env_var.PROXY_STATE`** — mirrors `PROXY_STATE` from
-  `Dotfiles/macswitcher/proxy.zsh` (`"off"` until `macswitcher proxy set`
-  flips it), so an accidentally-left-on proxy is never invisible.
+  `Dotfiles/macswitcher/proxy.zsh`, so an accidentally-left-on proxy is never
+  invisible. Three values: `off`, `on`, and `filtered` when privoxy is in the
+  path for the active context (see "Filtering proxy"). It describes routing
+  as of the last context switch, not liveness — `macswitcher status` probes
+  the port for that.
 - **`kubernetes`** — the active context from `~/.kube/config` (built by the
   `kubeconfig` role — see Kubernetes below), enabled since it's off by
   default in Starship.
 
 ```
 MacbookSetup on  main [!] on ☁️  user@corp.example
-proxy: off on ⛵ APL-GCP-2-Staging
+proxy: filtered on ⛵ APL-GCP-2-Staging
 ❯
 ```
 
@@ -1551,8 +1554,6 @@ Still open, outside macswitcher:
 - **`docs/networking-tools.md` does not mention it.** That page is the
   self-contained install guide for the three CLIs; privoxy is a fourth moving
   part in the same chain.
-- **`PROXY_STATE`** in `~/.zsh/rcs/proxy` is `off`/`on`; there is no "on, and
-  filtered", so the Starship line cannot show it.
 
 ### Checks
 

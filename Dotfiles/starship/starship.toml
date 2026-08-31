@@ -8,9 +8,14 @@
 # on their own line instead.
 format = """$all$line_break${env_var.PROXY_STATE}$kubernetes$line_break$character"""
 
-# Reflects PROXY_STATE from Dotfiles/macswitcher/proxy.zsh ("off" until
-# `macswitcher proxy set` flips it). Shown always, not just when a proxy is
-# active, so an accidentally-left-on proxy is never invisible.
+# Reflects PROXY_STATE from Dotfiles/macswitcher/proxy.zsh, which macswitcher
+# rewrites on every context switch: off | on | filtered. Shown always, not
+# just when a proxy is active, so an accidentally-left-on proxy is never
+# invisible - and "filtered" is there because "on" cannot say whether what is
+# on also filters URLs (Setup.md -> "Filtering proxy").
+#
+# One module, one style, because Starship cannot colour an env_var by its
+# value. The word carries the distinction instead.
 [env_var.PROXY_STATE]
 variable = "PROXY_STATE"
 format = "proxy: [$env_value]($style) "

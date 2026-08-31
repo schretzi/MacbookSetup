@@ -11,8 +11,8 @@
 privoxy_config_dir: "{{ ansible_facts.env.HOME }}/.config/privoxy"
 privoxy_state_dir: "{{ ansible_facts.env.HOME }}/.local/state/privoxy"
 
-# Where privoxy listens. macswitcher's alpaca is pointed here by
-# privoxy_pac_dest; nothing else should talk to it directly.
+# Where privoxy listens. macswitcher's alpaca is pointed here by its own
+# `filter_proxy` block; nothing else should talk to it directly.
 privoxy_listen_address: 127.0.0.1
 privoxy_listen_port: 8118
 

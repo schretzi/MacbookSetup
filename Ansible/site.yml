@@ -199,6 +199,11 @@
       when: enable_firefox_enterprise_roots | bool
       tags: [firefox_enterprise_roots, certs, firefox]
 
+    # after local_ca, which issues the certificate it serves with
+    - role: lsrules
+      when: enable_lsrules | bool
+      tags: [lsrules, certs]
+
     # before macswitcher: it seeds the PAC that macswitcher's alpaca is
     # started with in direct contexts, and after firefox_enterprise_roots
     # so the CA it asks for is picked up by Firefox-based browsers too.

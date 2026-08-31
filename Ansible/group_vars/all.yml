@@ -182,6 +182,11 @@ local_ca_server_certs:
       - localhost
       - 127.0.0.1
 
+# lsrules' LaunchAgent and log rotation: it serves the Little Snitch rule
+# groups from LittleSnitchConfig over HTTPS, with the certificate local_ca
+# issues. The binary itself comes from the homebrew role.
+enable_lsrules: true
+
 # privoxy, the filtering HTTP proxy alpaca forwards to in direct contexts:
 # ~/.config/privoxy, the LaunchAgent, log rotation and the PAC that puts it
 # in alpaca's path. The CA it needs is created by

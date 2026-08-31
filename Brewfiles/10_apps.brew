@@ -3,6 +3,14 @@ cask "zen"
 cask "arc"
 cask "google-chrome"
 
+# Terminal browser - opened directly in kitty via open-in-w3m.sh /
+# open_url_with in kitty.conf. NOTE: w3m's inline images (w3mimgdisplay)
+# draw a native Cocoa overlay on top of the terminal window - this is known
+# to work in Terminal.app/iTerm2 but is unreliable in kitty, which paints
+# its own contents via GPU (Metal) compositing. Text-only browsing works
+# regardless; verify image rendering after install before relying on it.
+brew "w3m"
+
 # Password manager
 cask "bitwarden"
 

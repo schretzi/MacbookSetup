@@ -1373,9 +1373,9 @@ renaming a CA does not rename it, it creates a different one. The name is a
 misnomer now; that is cheaper than the churn.
 
 The role also issues **server certificates** for services that run here and
-are reached over HTTPS — currently one, for the local server that hands
-Little Snitch its rule groups (Little Snitch refuses to subscribe over
-anything but HTTPS, and those files describe this machine). They are issued
+are reached over HTTPS — currently one, for `lsrules`, which hands Little
+Snitch its rule groups (it refuses to subscribe over anything but HTTPS, and
+those files describe this machine — see "Little Snitch rule groups"). They are issued
 with `step --bundle`, so the `.crt` is leaf + intermediate: an ordinary TLS
 server sends that whole chain and the client verifies against the root it
 already trusts. `curl https://localhost:8443/…` succeeds with no `--cacert`.
@@ -1419,6 +1419,58 @@ security find-certificate -c "Privoxy HTTPS Inspection CA" /Library/Keychains/Sy
 Note that `verify-cert` on an *intermediate* proves nothing about the
 keychain: it chains the file it is handed up to the trusted root and reports
 success either way. Use `find-certificate` for intermediates.
+
+## Little Snitch rule groups — lsrules
+
+_Role: `lsrules`_ — `enable_lsrules`
+
+Little Snitch subscribes to a rule group by URL, keeps it in sync, and refuses
+anything but HTTPS. The rule groups live in the `LittleSnitchConfig`
+repository and describe what runs on this machine, which is an argument
+against publishing them — so `lsrules` serves them from it:
+
+```
+LittleSnitchConfig/rules/*.lsrules
+   └─ lsrules (com.schretzi.lsrules) on https://localhost:8443/
+        └─ Little Snitch subscription
+```
+
+The certificate is the `lsrules` server certificate from the `local_ca` role
+(see "Local CA"). Because an ordinary TLS server sends leaf **and**
+intermediate, the client chains up to the root the System keychain already
+trusts — `curl https://localhost:8443/…` verifies with no `--cacert`.
+
+The binary is `brew install schretzi/tap/lsrules`
+([LittleSnitchRules](https://github.com/schretzi/LittleSnitchRules)); the role
+owns only what brew does not — the LaunchAgent and log rotation — exactly like
+`kerberoskeepalive` and `omt`.
+
+**A `brew upgrade` removes the launch agent.** The cask's uninstall preflight
+runs `lsrules service uninstall` before replacing the binary, so the job is
+gone until `lsrules service install` runs again. The next play run does it;
+`macswitcher observe` is where you would notice in the meantime.
+
+### Checks
+
+```sh
+lsrules status                # served groups, TLS probe, certificate expiry
+lsrules status --json         # the same, as macswitcher's observe reads it
+tail -f ~/Library/Logs/lsrules.log
+```
+
+A live subscription shows up as a fetch followed by conditional requests:
+
+```
+2026-08-31T07:10:35+02:00 127.0.0.1 "GET /proxy-chain.lsrules" 200 1478 342µs
+2026-08-31T07:11:02+02:00 127.0.0.1 "HEAD /proxy-chain.lsrules" 304 0 340µs
+```
+
+The 304 is the point: a one-time import never asks again, so that line is what
+distinguishes a subscription from an import.
+
+**Nothing renews the certificate.** `local_ca` issues it for a year;
+`lsrules status` and the `observe` row warn 30 days out, and after that
+subscriptions fail rather than degrade.
 
 ## Filtering proxy — privoxy
 
@@ -1536,7 +1588,7 @@ through the proxy.
 | `~/.local/share/localca/privoxy_intermediate.*` | `local_ca` role  | `0600`, shared PKI, never in git             |
 | `~/.local/state/privoxy/certs/`         | privoxy                  | per-site certs, safe to delete               |
 | `~/.local/state/privoxy/trusted-cas.pem`| the role                 | regenerated every run                        |
-| `~/.config/macswitcher/privoxy.pac`     | this repo                | what alpaca is pointed at                    |
+| `~/.local/state/macswitcher/filter.pac` | macswitcher              | what alpaca is pointed at — `filter_proxy` generates it, this repo owns no PAC |
 
 Opposite of the macswitcher role directly above: nothing here is
 runtime-owned, so everything is templated with force.

@@ -61,6 +61,8 @@ daemons:
     label: com.schretzi.tunneling
   privoxy:
     label: com.schretzi.privoxy
+  lsrules:
+    label: com.schretzi.lsrules
 applications:
   docker:
     start:

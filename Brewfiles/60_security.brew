@@ -36,6 +36,10 @@ brew "samuong/alpaca/alpaca"
 # every ca-* directive. The tap formula adds openssl@3.
 brew "schretzi/tap/privoxy"
 
+# Serves the Little Snitch rule groups over HTTPS, because Little Snitch
+# subscribes over nothing else. Certificate from the local_ca role.
+cask "schretzi/tap/lsrules"
+
 # OpenBao
 brew "openbao"
 

@@ -188,3 +188,34 @@
       loop: "{{ local_ca_intermediate_trusted.results }}"
       loop_control:
         label: "{{ item.item.name }}"
+
+    # ----------------------------------------------------------------------
+    # Server certificates
+    # ----------------------------------------------------------------------
+    - name: Local CA | issue the server certificates
+      ansible.builtin.command:
+        cmd: >-
+          {{ local_ca_step_bin }} certificate create
+          "{{ item.common_name | default(item.name) }}"
+          {{ local_ca_dir }}/{{ item.name }}.crt
+          {{ local_ca_dir }}/{{ item.name }}.key
+          --ca {{ local_ca_dir }}/{{ item.issuer }}_intermediate.crt
+          --ca-key {{ local_ca_dir }}/{{ item.issuer }}_intermediate.key
+          --not-after {{ local_ca_server_cert_expiry }}
+          --bundle --no-password --insecure
+          {{ item.sans | default([]) | map('regex_replace', '^', '--san ') | join(' ') }}
+      args:
+        creates: "{{ local_ca_dir }}/{{ item.name }}.crt"
+      loop: "{{ local_ca_server_certs }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # The certificate is public, the key is not - and a server running as this
+    # user has to be able to read it.
+    - name: Local CA | restrict the server keys
+      ansible.builtin.file:
+        path: "{{ local_ca_dir }}/{{ item.name }}.key"
+        mode: "0600"
+      loop: "{{ local_ca_server_certs }}"
+      loop_control:
+        label: "{{ item.name }}"

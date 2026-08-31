@@ -161,6 +161,26 @@ local_ca_intermediates:
   - name: privoxy
     common_name: Privoxy HTTPS Inspection CA
     trust_as_root: true
+  # Signs the certificates of services that run on this machine and are
+  # reached over HTTPS. No trust_as_root here, and that is the difference
+  # worth seeing: an ordinary TLS server sends leaf + intermediate, so the
+  # client chains up to the root it already trusts. privoxy needs the extra
+  # trust only because it can send a leaf and nothing else.
+  - name: services
+    common_name: Local Services Intermediate CA
+
+# HTTPS certificates for local services, issued from those intermediates.
+local_ca_server_certs:
+  # Little Snitch refuses to subscribe to a rule group over anything but
+  # HTTPS ("For security reasons, only HTTPS URLs are allowed"), so the
+  # .lsrules files in the LittleSnitchConfig repository are served from
+  # this machine rather than published somewhere public.
+  - name: lsrules
+    common_name: localhost
+    issuer: services
+    sans:
+      - localhost
+      - 127.0.0.1
 
 # privoxy, the filtering HTTP proxy alpaca forwards to in direct contexts:
 # ~/.config/privoxy, the LaunchAgent, log rotation and the PAC that puts it

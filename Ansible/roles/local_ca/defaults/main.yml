@@ -37,3 +37,19 @@ local_ca_intermediate_expiry: 8760h # 1 year
 # never receives the intermediate and cannot build a chain up to the root on
 # its own. The issuer has to be an anchor the client already holds.
 local_ca_intermediates: []
+
+# Server certificates issued from one of the intermediates above, for services
+# that run on this machine and are reached over HTTPS.
+#
+#   name:        <name>.crt / <name>.key in local_ca_dir
+#   common_name: subject CN
+#   sans:        every name and address the service is reached by - a modern
+#                client ignores the CN entirely and matches SANs only
+#   issuer:      which intermediate signs it
+#
+# Issued with `step --bundle`, so the .crt is leaf + issuing intermediate. A
+# server presents that whole file: unlike privoxy, which can only send a leaf,
+# an ordinary TLS server sends its chain, so nothing extra has to be trusted
+# beyond the root the machine already trusts.
+local_ca_server_certs: []
+local_ca_server_cert_expiry: 8760h # 1 year; renew by deleting the pair and re-running

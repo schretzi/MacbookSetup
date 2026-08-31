@@ -1372,7 +1372,18 @@ clusters. For the same reason the CN still says "LocalKubernetes Root CA":
 renaming a CA does not rename it, it creates a different one. The name is a
 misnomer now; that is cheaper than the churn.
 
-Intermediates beyond the cluster ones are declared in `group_vars/all.yml`:
+The role also issues **server certificates** for services that run here and
+are reached over HTTPS — currently one, for the local server that hands
+Little Snitch its rule groups (Little Snitch refuses to subscribe over
+anything but HTTPS, and those files describe this machine). They are issued
+with `step --bundle`, so the `.crt` is leaf + intermediate: an ordinary TLS
+server sends that whole chain and the client verifies against the root it
+already trusts. `curl https://localhost:8443/…` succeeds with no `--cacert`.
+
+That is the contrast worth keeping in mind next to privoxy, which can only
+send a leaf and therefore needs its intermediate trusted separately.
+
+Intermediates and server certificates are declared in `group_vars/all.yml`:
 
 ```yaml
 local_ca_intermediates:
@@ -1390,6 +1401,14 @@ always was). LocalKubernetes' `PLAN.md` §6 wants it age/sops-encrypted at
 rest, and that requirement came along with the root. It matters more here than
 it did there: this key is now also the anchor for a proxy that can mint a
 certificate for any site.
+
+```yaml
+local_ca_server_certs:
+  - name: lsrules
+    common_name: localhost
+    issuer: services
+    sans: [localhost, 127.0.0.1]
+```
 
 ```sh
 ls -la ~/.local/share/localca                       # 0700, keys 0600

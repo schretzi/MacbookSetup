@@ -63,6 +63,59 @@ your upstream proxy and where its credentials live in the Keychain.
 passes — the launch agent refuses to install against an invalid config, which
 is deliberate: a job that cannot start just becomes a background crash-loop.
 
+### Contexts on this machine
+
+Seven named contexts cover every network situation this machine actually sees.
+`no-filter`, `full-direct`, `remote-vpn` and `home-alone` live in
+`~/.config/macswitcher/contexts/` (the personal/private overlay);
+`home-vpn`, `office` and `vpn-debug` are symlinked from the `MacbookSetup-Work`
+overlay, because they carry the corporate `forwarder_proxy` block or the
+corporate upstream resolvers.
+
+| Context | DNS | proxy_mode | privoxy | alpaca | adguard | VPN | kka |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `no-filter` | public (bypass adguard) | direct | stopped (fail-open) | ✅ | running, unused | stopped | — |
+| `full-direct` | DHCP | off | stopped | ❌ | unused | stopped | — |
+| `remote-vpn` | OEBB → adguard fallback | direct | started | ✅ | opportunistic | started (**needs field-testing**) | — |
+| `home-alone` | adguard | direct | started | ✅ | ✅ | stopped | — |
+| `home-vpn` | adguard | forward → corp | stopped | ✅ | ✅ | started | started |
+| `office` | adguard | forward → corp | stopped | ✅ | ✅ | stopped | started |
+| `vpn-debug` | adguard → corp upstreams | off | stopped | ❌ | ✅ | started | started |
+
+`no-filter` and `full-direct` are diagnostic/fallback contexts — the former
+bypasses AdGuard Home's DNS filtering and lets privoxy fail open while
+leaving both daemons running as a pass-thru; the latter turns everything off
+(including the system proxy itself) for the case where the network is
+misbehaving and the only goal is *some* connectivity.
+
+`remote-vpn` targets OEBB train WiFi, whose captive portal only completes
+against its own DNS servers — resolvers list OEBB's servers first and
+AdGuard Home as a last-resort fallback. The VPN start in this context is
+unverified: a captive portal intercepts the VPN handshake too, and once the
+tunnel is up its routing may fight the OEBB-first resolver order. Confirm on
+an actual train before trusting the automatic VPN start.
+
+`home-vpn` and `office` both forward through the corporate proxy (Alpaca
+never talks to privoxy in `forward` mode, and privoxy is stopped outright to
+match), and both need `kerberoskeepalive` for Kerberos tickets. The only
+difference is the VPN: `office` assumes the corporate network is already
+reachable directly; `home-vpn` brings the tunnel up first.
+
+`vpn-debug` is `home-vpn` with both proxies taken out of the path — the
+tunnel, AdGuard Home and Kerberos, nothing else. It exists because those
+three contexts stack the tunnel, Alpaca and the corporate PAC on top of each
+other, so a failure could belong to any of them and the error usually names
+the last one rather than the one at fault. Anything that still fails in
+`vpn-debug` fails without a proxy involved; anything that works here but not
+in `home-vpn` is the proxy layer. Not a daily driver: no ad filtering and no
+HTTPS inspection. Pair it with `Scripts/MacOS/net_probe.sh`, which separates
+a name that does not resolve from a port that does not answer:
+
+```sh
+net_probe.sh www-proxy.corp.example 8080
+net_probe.sh --realm CORP.EXAMPLE.COM   # KDC discovery + reachability
+```
+
 ### Run it in the background
 
 ```sh

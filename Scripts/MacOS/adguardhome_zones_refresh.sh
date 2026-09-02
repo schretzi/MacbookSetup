@@ -60,9 +60,10 @@ RESOLVER=127.0.0.3
 API_USER=zonesync
 API_KEYCHAIN_SERVICE="adguardhome api"
 
-# Readable by an unprivileged process on purpose: `macswitcher observe` reads
-# upstreams.conf as the user to report what is being forwarded.
-chmod 0644 "$OUT_DIR/upstreams.conf" 2>/dev/null || true
+# Writable by the admin group because macswitcher rewrites the default
+# upstream block during every context switch; readable by any user so
+# `macswitcher observe` can report the current forwarding state.
+chmod 0664 "$OUT_DIR/upstreams.conf" 2>/dev/null || true
 chmod 0644 "$OUT_DIR"/zones/*.txt 2>/dev/null || true
 
 zone="$OUT_DIR/zones/kiac.txt"

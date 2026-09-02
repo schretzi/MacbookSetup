@@ -57,6 +57,14 @@
     force: false
   become: true
 
+- name: AdGuardHome | keep the default upstreams writable by macswitcher
+  ansible.builtin.file:
+    path: "{{ adguardhome_generated }}/upstreams.conf"
+    owner: root
+    group: admin
+    mode: "0664"
+  become: true
+
 # Per-domain upstreams an overlay contributes ("[/intranet.example/]10.0.0.1").
 # Ensured line by line rather than templated: the rest of the file is
 # macswitcher's, rewritten on every context switch, and it carries these

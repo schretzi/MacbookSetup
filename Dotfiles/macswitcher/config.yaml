@@ -39,6 +39,16 @@ filter_proxy:
   direct:
     - .kiac
     - .ts.net
+    - localhost
+    - kubernetes
+    # gcloud verifies via Python/certifi, which ignores the macOS System
+    # keychain and therefore rejects the Privoxy HTTPS-inspection CA.
+    - .googleapis.com
+    # Snowflake account hosts may contain an underscore (corp-corp_main1).
+    # Privoxy links against OpenSSL, whose wildcard matching only accepts
+    # [A-Za-z0-9-] for characters covered by `*`, so `*.snowflakecomputing.com`
+    # is rejected as "hostname mismatch". Browsers accept it; Privoxy cannot.
+    - .snowflakecomputing.com
 
 dns:
   local_resolver: 127.0.0.3
@@ -93,3 +103,56 @@ applications:
       - kickstart
       - -k
       - system/com.schretzi.adguardhome
+  # privoxy and vpn have no `service` subcommand of their own (third-party /
+  # script-based agents - see docs/networking-tools.md), so contexts control
+  # them with raw launchctl against the gui domain. bootout/bootstrap, not
+  # kill/kickstart, are used for start/stop: bootout is what actually removes
+  # the job so KeepAlive does not just restart it (see the corp-vpn plist
+  # comment). `sh -c` (not a bare argv) so `$(id -u)` and `~` expand per-user.
+  #
+  # Both RunAtLoad, so they are already bootstrapped at login - a plain
+  # `bootstrap`/`bootout` errors ("already loaded" / "not loaded") if a
+  # context asks for a state the job is already in. `launchctl print` first
+  # makes start/stop idempotent: start only bootstraps if not already
+  # loaded, stop only boots out if it is.
+  privoxy:
+    start:
+      - sh
+      - -c
+      - launchctl print gui/$(id -u)/com.schretzi.privoxy >/dev/null 2>&1 || launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.schretzi.privoxy.plist
+    stop:
+      - sh
+      - -c
+      - launchctl print gui/$(id -u)/com.schretzi.privoxy >/dev/null 2>&1 && launchctl bootout gui/$(id -u)/com.schretzi.privoxy || true
+    restart:
+      - sh
+      - -c
+      - launchctl kickstart -k gui/$(id -u)/com.schretzi.privoxy
+  vpn:
+    start:
+      - sh
+      - -c
+      - launchctl print gui/$(id -u)/com.schretzi.corp-vpn >/dev/null 2>&1 || launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.schretzi.corp-vpn.plist
+    stop:
+      - sh
+      - -c
+      - launchctl print gui/$(id -u)/com.schretzi.corp-vpn >/dev/null 2>&1 && launchctl bootout gui/$(id -u)/com.schretzi.corp-vpn || true
+    restart:
+      - sh
+      - -c
+      - launchctl kickstart -k gui/$(id -u)/com.schretzi.corp-vpn
+  # kerberoskeepalive ships its own `service` subcommand - prefer it over raw
+  # launchctl so plist path/label details stay owned by that tool.
+  kerberos_keep_alive:
+    start:
+      - kerberoskeepalive
+      - service
+      - start
+    stop:
+      - kerberoskeepalive
+      - service
+      - stop
+    restart:
+      - kerberoskeepalive
+      - service
+      - restart

@@ -8,11 +8,22 @@
 # Firefox/Zen/LibreWolf/Waterfox/Floorp until this policy is in place.
 #
 # ImportEnterpriseRoots, set via a distribution/policies.json dropped into
-# the browser's own .app bundle, fixes that for good: once enabled, every
-# Firefox-based browser reads the System keychain's trusted roots on
-# startup - no separate certutil/NSS import needed per profile, and it keeps
-# working across ordinary browser updates (a cask reinstall that replaces the
-# whole .app, rather than updating it in place, will need this role re-run).
+# the browser's own .app bundle, fixes that: once enabled, every Firefox-based
+# browser reads the System keychain's trusted roots on startup - no separate
+# certutil/NSS import needed per profile.
+#
+# That copy does not survive a browser update, though, and it cannot be
+# repaired automatically: since macOS 13, App Management protects application
+# bundles through TCC rather than file permissions, so writing into
+# /Applications needs a grant that no launchd job holds - being root is not
+# enough. This play only works because ansible-playbook inherits the grant
+# from the terminal you run it in.
+#
+# The last tasks below therefore add a second, privilege-free copy of the same
+# setting as user.js in each browser profile
+# (security.enterprise_roots.enabled, the preference the policy sets). Profiles
+# are untouched by updaters, so that copy survives the event that destroys this
+# one - and a re-run of this role restores the bundle policy itself.
 
 - name: Firefox enterprise roots | check for installed browsers
   ansible.builtin.stat:
@@ -58,3 +69,65 @@
   loop_control:
     label: "{{ item }}"
   become: true
+
+# Browser self-updaters can replace an app bundle after this role has run, and
+# the policies.json above goes with it. The repair cannot be a launchd job that
+# rewrites the bundle: since macOS 13, App Management protects /Applications
+# through TCC rather than file permissions, so a write there needs a grant that
+# no launchd job holds - root included. This play works only because
+# ansible-playbook inherits the grant from the terminal it runs in.
+#
+# So durability is moved to where no permission is needed at all: user.js in
+# each browser profile, setting the same preference the policy sets
+# (security.enterprise_roots.enabled). Profiles are untouched by updaters, so
+# that copy survives exactly the event that destroys the bundle copy.
+# Remove the earlier attempt at this, which was a LaunchDaemon rewriting the
+# .app bundles. It cannot work - see above - and left behind it would keep
+# firing hourly and filling /Library/Logs with "Operation not permitted".
+- name: Firefox enterprise roots | unload the obsolete refresh LaunchDaemon
+  ansible.builtin.command: >-
+    launchctl bootout system/com.schretzi.firefox-enterprise-roots-refresh
+  become: true
+  register: firefox_enterprise_roots_bootout
+  changed_when: firefox_enterprise_roots_bootout.rc == 0
+  failed_when: false
+
+- name: Firefox enterprise roots | remove the obsolete refresh LaunchDaemon
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /Library/LaunchDaemons/com.schretzi.firefox-enterprise-roots-refresh.plist
+    - /Library/Logs/firefox-enterprise-roots-refresh.log
+    - /Library/Logs/firefox-enterprise-roots-refresh.err.log
+  become: true
+
+- name: Firefox enterprise roots | install the profile preference script
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/firefox_enterprise_roots_refresh.sh"
+    dest: /usr/local/bin/firefox_enterprise_roots_refresh
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+
+# An Agent, not a Daemon: profiles are per-user, and root buys nothing here.
+- name: Firefox enterprise roots | install the profile preference LaunchAgent
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: agent
+  vars:
+    launchd_plist: com.schretzi.firefox-enterprise-roots-refresh.plist
+    launchd_label: com.schretzi.firefox-enterprise-roots-refresh
+
+- name: Firefox enterprise roots | rotate profile preference logs
+  ansible.builtin.include_role:
+    name: newsyslog
+  vars:
+    newsyslog_conf: firefox-enterprise-roots-refresh.conf
+
+# Deliberately without become: the profiles belong to the user, and running
+# this as root would create user.js files the browser cannot rewrite.
+- name: Firefox enterprise roots | set the profile preference now
+  ansible.builtin.command: /usr/local/bin/firefox_enterprise_roots_refresh
+  changed_when: false

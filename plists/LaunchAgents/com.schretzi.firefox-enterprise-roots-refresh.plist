@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.firefox-enterprise-roots-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/firefox_enterprise_roots_refresh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Exits after each run, so a bare <true/> here would make launchd
+         restart it forever. -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- An Agent, not a Daemon, for two reasons: browser profiles are
+         per-user, and writing into an .app bundle needs a TCC App Management
+         grant that no launchd job has - root included. See the script header. -->
+
+    <!-- A new profile is the only case the .app bundle policy does not already
+         cover, so watch where profiles appear. Firefox, Developer Edition and
+         Nightly all share the Firefox directory. -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/schretzi/Library/Application Support/Firefox/Profiles</string>
+        <string>/Users/schretzi/Library/Application Support/zen/Profiles</string>
+        <string>/Users/schretzi/Library/Application Support/LibreWolf/Profiles</string>
+        <string>/Users/schretzi/Library/Application Support/Waterfox/Profiles</string>
+        <string>/Users/schretzi/Library/Application Support/Floorp/Profiles</string>
+    </array>
+
+    <!-- Safety net for a profile created while the agent was not loaded. -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <!-- Exits after each run, so launchd opens fresh files and newsyslog's
+         rename-based rotation is safe. -->
+    <key>StandardOutPath</key>
+    <string>/Users/schretzi/Library/Logs/firefox-enterprise-roots-refresh.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/schretzi/Library/Logs/firefox-enterprise-roots-refresh.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

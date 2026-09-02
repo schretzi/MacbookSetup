@@ -38,6 +38,12 @@ Privacy & Security** and reboot when asked:
 systemextensionsctl list | grep littlesnitch   # [activated enabled]
 ```
 
+At this time I don't have a ruleset ready to be used, so starting with a blank
+list of rules can be very hard for the first minutes/hours. You might
+considering setting the firewall to operation mode "silent allow" and check the
+added rules a day or two later and approve the major systems like Microsoft,
+Google, Apple. From this on you should set it back to Alert for new accesses.
+
 ### DisplayLink (docks)
 
 Docks that drive external displays over USB need Synaptics' driver. There is no
@@ -1073,7 +1079,7 @@ default upstreams together, which is the point — the resolver and its upstream
 always match the network you are on.
 
 ```bash
-macswitcher switch home
+macswitcher switch home-alone
 macswitcher status
 networksetup -getdnsservers Wi-Fi     # 127.0.0.3
 ```
@@ -1315,13 +1321,13 @@ _seeds_ each file once (`copy` with `force: false`) and never touches it again.
 
 Where each file comes from:
 
-| File                                         | Source                                        | Notes                                       |
-| -------------------------------------------- | --------------------------------------------- | ------------------------------------------- |
-| `config.yaml`                                | this repo, `Dotfiles/macswitcher/config.yaml` | generic, no addresses                       |
-| `contexts/home.yaml`, `contexts/remote.yaml` | private overlay                               | via `macswitcher_contexts_overlay`          |
-| `contexts/work.yaml`                         | work overlay                                  | same, follows `enable_work`                 |
-| `state.json`                                 | macswitcher itself                            | never versioned                             |
-| `~/.zsh/rcs/proxy`                           | this repo, `Dotfiles/macswitcher/proxy.zsh`   | neutral defaults, then owned by the runtime |
+| File                                                                                                                                   | Source                                        | Notes                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------- |
+| `config.yaml`                                                                                                                          | this repo, `Dotfiles/macswitcher/config.yaml` | generic, no addresses                       |
+| `contexts/no-filter.yaml`, `contexts/full-direct.yaml`, `contexts/remote-vpn.yaml`, `contexts/home-alone.yaml`, `contexts/remote.yaml` | private overlay                               | via `macswitcher_contexts_overlay`          |
+| `contexts/office.yaml`, `contexts/home-vpn.yaml`                                                                                       | work overlay                                  | same, follows `enable_work`                 |
+| `state.json`                                                                                                                           | macswitcher itself                            | never versioned                             |
+| `~/.zsh/rcs/proxy`                                                                                                                     | this repo, `Dotfiles/macswitcher/proxy.zsh`   | neutral defaults, then owned by the runtime |
 
 `Dotfiles/macswitcher/proxy.zsh` deliberately does **not** live in
 `Dotfiles/zsh/.zsh/rcs/`. That directory is a dotfiles merge dir: every file in

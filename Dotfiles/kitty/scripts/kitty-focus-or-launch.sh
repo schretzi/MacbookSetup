@@ -84,10 +84,21 @@ fi
 # plain kitty.app exactly as before, as does any session whose bundle hasn't
 # been generated yet - so this stays functional on a machine where
 # make-session-apps.sh has never been run.
+#
+# A private overlay repo declares its own sessions in
+# ~/.config/kitty/session-apps.d/*.conf, mirroring the `globinclude
+# local.d/*.conf` that kitty.conf itself uses - the base session-apps.conf
+# must not name overlay-only sessions, or a machine without the overlay
+# builds a wrapper for a session it does not have. Overlay files are read
+# first, so an overlay can also override a base glob.
 conf="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../session-apps.conf"
 session_name="$(basename "$session_file" .kitty-session)"
 app_name=""
-if [[ -r "$conf" ]]; then
+shopt -s nullglob
+session_app_confs=("$home/.config/kitty/session-apps.d/"*.conf "$conf")
+shopt -u nullglob
+for session_app_conf in ${session_app_confs[@]+"${session_app_confs[@]}"}; do
+  [[ -r "$session_app_conf" ]] || continue
   while IFS='|' read -r glob name _letter _rgb; do
     [[ -z "${glob// }" || "${glob:0:1}" == "#" ]] && continue
     # $glob unquoted on purpose: these are globs, and matching them is the
@@ -96,8 +107,9 @@ if [[ -r "$conf" ]]; then
     case "$session_name" in
       $glob) app_name="$name"; break ;;
     esac
-  done < "$conf"
-fi
+  done < "$session_app_conf"
+  [[ -n "$app_name" ]] && break
+done
 
 app_bundle=""
 launch_bin="$kitty_bin"

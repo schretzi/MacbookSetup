@@ -41,6 +41,13 @@
 # CFBundleIconName is removed too: it points at the "kitty" image in the
 # symlinked Assets.car and takes precedence over CFBundleIconFile, so leaving
 # it in would silently override the per-session icon we just generated.
+#
+# OVERLAY CONFS
+# A private overlay repo contributes its own sessions via
+# ~/.config/kitty/session-apps.d/*.conf, mirroring the `globinclude
+# local.d/*.conf` that kitty.conf itself uses. Overlay-only sessions must not
+# be listed in the base session-apps.conf, or a machine without the overlay
+# would build a wrapper for a session it does not have.
 set -euo pipefail
 
 kitty_app="/Applications/kitty.app"
@@ -50,6 +57,11 @@ dest_dir="$HOME/Applications/Kitty Sessions"
 
 [[ -d "$kitty_app" ]] || { echo "error: $kitty_app not found" >&2; exit 1; }
 [[ -r "$conf" ]] || { echo "error: $conf not found" >&2; exit 1; }
+
+# Base conf plus any overlay confs - see "OVERLAY CONFS" above.
+shopt -s nullglob
+confs=("$conf" "$HOME/.config/kitty/session-apps.d/"*.conf)
+shopt -u nullglob
 
 mkdir -p "$dest_dir"
 
@@ -121,7 +133,7 @@ while IFS='|' read -r glob app_name letter rgb; do
   wanted+=("$app_name")
   built=$((built + 1))
   printf '  built %-14s -> %s\n' "$glob" "$app"
-done < "$conf"
+done < <(cat "${confs[@]}")
 
 # Drop bundles for sessions that were renamed or removed from the conf -
 # otherwise renaming e.g. Mail -> Neomutt leaves the old Mail.app behind and

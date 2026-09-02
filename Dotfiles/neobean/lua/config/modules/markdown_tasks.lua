@@ -3,6 +3,33 @@
 
 local M = {}
 
+local task_states = require("config.modules.task_states")
+
+-- Escape a set of markdown state chars for use inside a Lua pattern
+-- character class (`[...]`) -- Lua's magic chars inside a class are
+-- `% ] ^ -`, escaped with a leading `%` (unlike rg/PCRE's backslash)
+local function lua_class(chars)
+  local escaped = {}
+  for _, c in ipairs(chars) do
+    if c:match("[%%%]%^%-]") then
+      table.insert(escaped, "%" .. c)
+    else
+      table.insert(escaped, c)
+    end
+  end
+  return table.concat(escaped)
+end
+
+-- Any markdown char that means "not done yet": space (built-in open) plus
+-- any custom "active" state (in-progress/on-hold)
+local ACTIVE_CLASS = lua_class(task_states.active_chars())
+local OPEN_CLASS = " " .. ACTIVE_CLASS
+-- Any markdown char that means "done": x/X plus any custom "complete" state
+-- (e.g. cancelled)
+local DONE_CLASS = lua_class(task_states.done_chars())
+-- Every valid bracket char, used to validate "is this line a task bullet"
+local ANY_CLASS = OPEN_CLASS .. DONE_CLASS
+
 local function restore_view(win)
   if win and vim.api.nvim_win_is_valid(win) then
     vim.api.nvim_win_call(win, function()
@@ -101,7 +128,7 @@ function M.toggle_done(opts)
   -- (B) Validate that it's actually a task bullet, i.e. '- [ ]' or '- [x]'
   ------------------------------------------------------------------------------
   local bullet_line = lines[start_line + 1]
-  if not bullet_line:match("^%s*%- %[[x ]%]") then
+  if not bullet_line:match("^%s*%- %[[" .. ANY_CLASS .. "]%]") then
     -- Not a task bullet => show a message and return
     print("Not a task bullet: no action taken.")
     restore_view(context.win)
@@ -150,13 +177,17 @@ function M.toggle_done(opts)
   ------------------------------------------------------------------------------
   -- 3. Helpers to toggle bullet
   ------------------------------------------------------------------------------
-  -- Convert '- [ ]' to '- [x]'
+  -- Convert '- [ ]' (or '- []') or any "not done" custom-state bracket to '- [x]'
   local function bulletToX(line)
-    return line:gsub("^(%s*%- )%[%s*%]", "%1[x]")
+    local new_line, n = line:gsub("^(%s*%- )%[[" .. ACTIVE_CLASS .. "]%]", "%1[x]")
+    if n == 0 then
+      new_line = line:gsub("^(%s*%- )%[%s*%]", "%1[x]")
+    end
+    return new_line
   end
-  -- Convert '- [x]' to '- [ ]'
+  -- Convert '- [x]' or any "done" custom-state bracket (e.g. cancelled) to '- [ ]'
   local function bulletToBlank(line)
-    return line:gsub("^(%s*%- )%[x%]", "%1[ ]")
+    return (line:gsub("^(%s*%- )%[[" .. DONE_CLASS .. "]%]", "%1[ ]"))
   end
   ------------------------------------------------------------------------------
   -- 4. Insert or remove label *after* the bracket

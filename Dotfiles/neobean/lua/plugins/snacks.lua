@@ -50,6 +50,12 @@ local default_sort_fields = { "score:desc", "mtime:desc", "#text", "idx" }
 local work_sort_fields = { "#text", "mtime:desc", "score:desc", "idx" }
 local modified_sort_fields = { "mtime:desc" }
 
+-- Shared with plugins/checkmate.lua so both agree on which markdown
+-- character (inside `- [<char>]`) means "in progress" vs "done"
+local task_states = require("config.modules.task_states")
+local active_state_class = task_states.escape_class(task_states.active_chars())
+local done_state_class = task_states.escape_class(task_states.done_chars())
+
 local function add_mtime(item)
   local file = item.file
   if type(file) ~= "string" then
@@ -166,6 +172,128 @@ return {
         end,
         desc = "[P]Search for incomplete tasks",
       },
+      -- -- Iterate through in-progress/on-hold (custom-state) tasks, i.e. not
+      -- -- open and not done -- see config/modules/task_states.lua
+      {
+        "<leader>tp",
+        function()
+          Snacks.picker.grep({
+            prompt = " ",
+            search = "^\\s*- \\[[" .. active_state_class .. "]\\]",
+            regex = true,
+            live = false,
+            dirs = { require("config.modules.notes").root() },
+            glob = "*.md",
+            args = { "--no-ignore" },
+            sort = {
+              fields = modified_sort_fields,
+            },
+            finder = "grep",
+            format = "file",
+            transform = add_mtime,
+            matcher = {
+              sort_empty = true,
+            },
+            show_empty = true,
+            supports_live = false,
+            layout = "ivy_split",
+            actions = {
+              task_done = function(picker, item)
+                picker:norm(function()
+                  item = item or picker:current()
+                  local path = item and Snacks.picker.util.path(item)
+                  local line = item and item.pos and item.pos[1]
+                  if not path or not line then
+                    vim.notify("No task selected", vim.log.levels.WARN)
+                    return
+                  end
+                  local changed = require("config.modules.markdown_tasks").toggle_done({
+                    file = path,
+                    line = line,
+                  })
+                  if changed then
+                    picker:refresh()
+                  end
+                end)
+              end,
+            },
+            win = {
+              input = {
+                keys = {
+                  ["<M-x>"] = { "task_done", mode = { "n", "i" } },
+                },
+              },
+              list = {
+                keys = {
+                  ["<M-x>"] = "task_done",
+                },
+              },
+            },
+          })
+        end,
+        desc = "[P]Search for in-progress/on-hold tasks",
+      },
+      -- -- Iterate through every unfinished task: open + in-progress/on-hold,
+      -- -- i.e. everything except done -- a single "what's left" overview
+      {
+        "<leader>ta",
+        function()
+          Snacks.picker.grep({
+            prompt = " ",
+            search = "^\\s*- \\[[ " .. active_state_class .. "]\\]",
+            regex = true,
+            live = false,
+            dirs = { require("config.modules.notes").root() },
+            glob = "*.md",
+            args = { "--no-ignore" },
+            sort = {
+              fields = modified_sort_fields,
+            },
+            finder = "grep",
+            format = "file",
+            transform = add_mtime,
+            matcher = {
+              sort_empty = true,
+            },
+            show_empty = true,
+            supports_live = false,
+            layout = "ivy_split",
+            actions = {
+              task_done = function(picker, item)
+                picker:norm(function()
+                  item = item or picker:current()
+                  local path = item and Snacks.picker.util.path(item)
+                  local line = item and item.pos and item.pos[1]
+                  if not path or not line then
+                    vim.notify("No task selected", vim.log.levels.WARN)
+                    return
+                  end
+                  local changed = require("config.modules.markdown_tasks").toggle_done({
+                    file = path,
+                    line = line,
+                  })
+                  if changed then
+                    picker:refresh()
+                  end
+                end)
+              end,
+            },
+            win = {
+              input = {
+                keys = {
+                  ["<M-x>"] = { "task_done", mode = { "n", "i" } },
+                },
+              },
+              list = {
+                keys = {
+                  ["<M-x>"] = "task_done",
+                },
+              },
+            },
+          })
+        end,
+        desc = "[P]Search for all unfinished tasks (open + in-progress)",
+      },
       -- -- Iterate throuth completed tasks in Snacks_picker lamw26wmal
       {
         "<leader>tc",
@@ -174,7 +302,7 @@ return {
             prompt = " ",
             -- pass your desired search as a static pattern
             -- search = "^\\s*- \\[x\\] `done:",
-            search = "^\\s*- \\[[xX]\\](?: `done:)?",
+            search = "^\\s*- \\[[" .. done_state_class .. "]\\](?: `done:)?",
             -- we enable regex so the pattern is interpreted as a regex
             regex = true,
             -- no “live grep” needed here since we have a fixed pattern

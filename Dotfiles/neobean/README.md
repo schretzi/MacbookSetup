@@ -79,6 +79,16 @@
   * [Spectre pattern matching](#spectre-pattern-matching)
   * [Working with markdown](#working-with-markdown)
     + [markdownlint config](#markdownlint-config)
+- [Task management](#task-management)
+  * [Custom todo states](#custom-todo-states)
+  * [Fast state changes: `<leader>tx` / `<leader>t.` / `<leader>t/`](#fast-state-changes-leadertx-leadert-leadert)
+  * [Task overview pickers](#task-overview-pickers)
+  * [Metadata: due dates and priority](#metadata-due-dates-and-priority)
+  * [Metadata: created date, client, and project](#metadata-created-date-client-and-project)
+  * [Toggling and completing tasks](#toggling-and-completing-tasks)
+  * [Adding a new custom state](#adding-a-new-custom-state)
+  * [Review file: deduplicated open-tasks digest](#review-file-deduplicated-open-tasks-digest)
+  * [Daily note task carryover](#daily-note-task-carryover)
 - [Fix Mason warnings](#fix-mason-warnings)
 - [Working with marks](#working-with-marks)
 - [Replacements](#replacements)
@@ -621,6 +631,292 @@ help command
 - To each dir in which you want the settings to be applied, for example, I
   copied it to my `github/obsidian_main` and `github/linkarzu.github.io` dir.
 - Copy it to the working directory, you can see it with `:pwd`
+
+## Task management
+
+Task management combines three pieces that all agree on the same vault and
+the same task-state markdown characters:
+
+- [`bngarren/checkmate.nvim`](https://github.com/bngarren/checkmate.nvim) —
+  custom todo states + `@tag(value)` metadata, configured in
+  `plugins/checkmate.lua`
+- `config/modules/task_states.lua` — single source of truth for the custom
+  states (marker, saved character, type), shared by checkmate's config and
+  the pickers below, so adding/renaming a state only requires one edit
+- `plugins/snacks.lua` task pickers (`<leader>tt/tp/ta/tc`) — the
+  Dataview-style "show me all open tasks" overview, built on ripgrep +
+  Snacks picker, scoped to the personal Obsidian vault
+  (`config/modules/notes.lua`) regardless of Neovim's cwd
+
+checkmate.nvim only activates (`files` option in `plugins/checkmate.lua`) for
+markdown files inside the vault, and its `list_continuation` is disabled on
+purpose — `bullets.vim` (`plugins/bullets.lua`) already owns `<CR>`
+continuation everywhere, including outside the vault, so the two don't
+double up.
+
+### Custom todo states
+
+Beyond plain GitHub-flavored `- [ ]`/`- [x]`, three custom states are
+defined in `config/modules/task_states.lua`:
+
+| State         | Saved as (`- [<char>]`) | Rendered as (live buffer) | `type`         | Meaning                          |
+| ------------- | ----------------------- | ------------------------- | -------------- | --------------------------------- |
+| `in_progress` | `- [.]`                 | "◐"                        | `incomplete`   | Started, not done                |
+| `on_hold`     | `- [/]`                 | "⏸"                        | `inactive`     | Paused/blocked, ignored in counts |
+| `cancelled`   | `- [c]`                 | "✗"                        | `complete`     | Done (won't happen), counts as complete |
+
+Cycle through states on the todo under the cursor with `:Checkmate
+cycle_next` / `cycle_previous` (checkmate.nvim defaults, see
+[`neobean.md`](../Keybindings/neobean.md#task-management) for the exact
+keys), or jump straight to a state with `require("checkmate").toggle("on_hold")`.
+
+> [!WARNING]
+> Custom states like `- [.]` or `- [/]` are not standard Markdown and won't
+> be recognized as todos by other markdown tools/apps — they'll just look
+> like a list item with a stray character in it. `- [ ]`/`- [x]` stay fully
+> compatible everywhere, and this is exactly what's saved to disk regardless
+> of the icon rendering below.
+
+> [!NOTE]
+> checkmate.nvim renders todos with pretty single-glyph icons (e.g. "⏸")
+> live in the buffer instead of the raw bracket text (only the on-disk file
+> uses `- [<char>]`) — this looks good and is the intended way to use
+> checkmate, but it means any *other* tool here expecting literal bracket
+> text in the live buffer (`<M-x>` in `markdown_tasks.lua`, the
+> continuation auto-tagging in `task_tags.lua`) can no longer reliably see
+> or edit a line once it's rendered as an icon. That's exactly why
+> `<leader>tx` / `<leader>t.` / `<leader>t/` exist (see
+> [below](#fast-state-changes-leadertx-leadert-leadert)) — they go through
+> checkmate's own `toggle()`/`add_metadata()` API, which works against
+> checkmate's parsed state rather than raw buffer text, so the icons don't
+> matter. Prefer those three over `<M-x>`/manual bracket-editing for any
+> todo that already has (or is about to get) a custom state.
+
+### Fast state changes: `<leader>tx` / `<leader>t.` / `<leader>t/`
+
+Three keymaps (`config/keymaps.lua`) for the todo under the cursor, each a
+thin wrapper around checkmate.nvim's own `toggle()`/`add_metadata()` API
+(not a bracket regex, so they work regardless of icon rendering):
+
+- `<leader>tx` — mark done: `toggle("checked")` + stamps `@done(today)`
+  (its own `@tag(value)` metadata, defined alongside `@created` in
+  `plugins/checkmate.lua`, manual escape-hatch key `<leader>Tx`)
+- `<leader>t.` — mark in-progress: `toggle("in_progress")`
+- `<leader>t/` — mark on-hold: `toggle("on_hold")`
+
+### Task overview pickers
+
+Vault-wide Snacks pickers, always searching the Obsidian vault root
+regardless of where Neovim was started (`config/modules/notes.lua`):
+
+- `<leader>tt` — strictly open/unstarted tasks (`- [ ]`)
+- `<leader>tp` — "in progress but not open, not done" — the custom
+  `incomplete`/`inactive` states (`- [.]`, `- [/]`)
+- `<leader>ta` — everything unfinished in one view (open + in-progress/on-hold)
+- `<leader>tc` — done tasks (`- [x]`/`- [X]`, plus `cancelled` `- [c]`),
+  scoped to the current working directory rather than the whole vault
+
+All four are backed by ripgrep character-class regexes built from
+`task_states.lua` at config-load time (`active_chars()`/`done_chars()`), so
+adding a new state to that one file automatically flows into every picker
+without touching `snacks.lua`.
+
+Inside any of these pickers, `<M-x>` toggles the highlighted task done
+in-place (via the existing `markdown_tasks.toggle_done` — see
+[below](#toggling-and-completing-tasks)) and refreshes the list.
+
+### Metadata: due dates and priority
+
+`plugins/checkmate.lua` defines two `@tag(value)` metadata annotations:
+
+- `@due(YYYY-MM-DD)` — key `<leader>TD` inserts today's date, edit the value
+  to set the actual due date
+- `@priority(low|medium|high)` — key `<leader>Tp`, colored by value
+  (red/orange/blue)
+
+These render inline on the todo line and are just plain text on disk (e.g.
+`- [ ] Renew passport @due(2026-09-20) @priority(high)`), so they're fully
+`rg`-searchable — e.g. `rg '@due\(2026-09' vault-path` to find everything
+due in a given month. A dedicated due-date-sorted picker isn't wired up yet;
+that's a natural next step (grep for `@due\(` and sort the results by the
+extracted date instead of by file mtime).
+
+### Metadata: created date, client, and project
+
+`config/modules/task_tags.lua` defines three more `@tag(value)` metadata
+annotations (also registered with checkmate.nvim in `plugins/checkmate.lua`
+so they render/style like `@due`/`@priority`):
+
+- `@created(YYYY-MM-DD)` — stamped automatically, never picked manually
+- `@done(YYYY-MM-DD)` — stamped automatically by `<leader>tx` (see
+  [Fast state changes](#fast-state-changes-leadertx-leadert-leadert)
+  above), manual escape-hatch key `<leader>Tx`
+- `@client(Work|Schretzi|FF)` — key `<leader>Tk`, a short "top-level"
+  bucket; the picker opens immediately after inserting the tag
+  (`select_on_insert = true`). The 3 fixed values come from
+  `task_tags.lua`'s `M.clients`, but any other value typed by hand is still
+  recognized everywhere else (pickers, review grouping) — it's just not
+  offered as a suggestion.
+- `@project(<free text>)` — key `<leader>Tj`, a second, finer-grained
+  level nested under `@client` (e.g. `@client(Work) @project(Kafka)`).
+  Unlike `@client`, there's no fixed list — projects come and go too often
+  for that — so the picker's suggestions are *dynamic*: they're the
+  distinct `@project(...)` values already used elsewhere in the vault,
+  scoped to the todo's own `@client` if it has any (falling back to every
+  known project otherwise), computed on the fly by `task_tags.lua`'s
+  `known_projects()` (a single `rg` scan). Any typed value is still
+  accepted even if it's brand new.
+
+**`<leader>tn` — new tagged task.** Inserts a new task below the cursor,
+pre-filled with `@created(today)`, a `@client(...)` chosen from a
+`vim.ui.select` prompt, and then — only if a client was picked — a
+`@project(...)` prompt listing that client's known projects plus a
+"`+ New project...`" entry (which opens a `vim.ui.input` for a brand new
+name). `<Esc>` on either prompt just skips that tag (skipping the client
+prompt also skips the project prompt entirely). Drops you into insert mode
+right after `- [ ] ` to type the task text, e.g.
+`- [ ] |@created(2026-09-01) @client(Work) @project(Kafka)` (`|` = cursor).
+
+**Auto-tagging on list continuation.** Pressing `<CR>` on a task line to
+continue the list (bullets.vim's job, see
+[Working with markdown](#working-with-markdown)) also silently stamps the
+new line with a fresh `@created(today)` and inherits the previous line's
+`@client(...)`/`@project(...)` values, if it had them — no extra keypress
+needed. This only fires for genuine continuations (the line directly above
+must itself be a task), not when hand-typing a brand new `- [ ] ` from
+scratch, and only inside the vault (`config/modules/task_tags.lua`'s
+`setup_continuation`, wired up unconditionally at startup from
+`plugins/checkmate.lua`'s `init` so it's active even for the very first
+markdown file opened in a session).
+
+### Toggling and completing tasks
+
+The **older**, hand-rolled toggle (`config/modules/markdown_tasks.lua`,
+bound to `<M-x>`) is still what actually marks a task done from both the
+buffer and the task pickers: it flips `- [ ]` (or any custom "not done"
+state, e.g. `- [/]`/`- [.]`) → `- [x]`, tags it `` `done: YYMMDD-HHMM` ``,
+and moves the item into a `## Completed Tasks` heading in the same file
+(creating the heading if needed). Its bracket-matching regexes are built
+from `task_states.lua`'s `active_chars()`/`done_chars()` at load time, so
+it recognizes every custom state in *saved* bracket form -- but since
+checkmate.nvim renders states as icons live in the buffer (see the
+[icon-rendering note](#custom-todo-states) above), `<M-x>` can only
+actually match a line while it still shows plain bracket text (e.g. right
+after typing it, before checkmate re-renders, or after `:w` reverts it to
+disk form and the buffer hasn't been redrawn yet) -- it's not reliable for
+already-rendered custom-state lines. For those, prefer `<leader>tx`
+(closes + stamps `@done`, see [above](#fast-state-changes-leadertx-leadert-leadert))
+which always works regardless of rendering.
+
+checkmate.nvim's own `:Checkmate check`/`cycle_next`/`archive` commands are
+available too (see [`neobean.md`](../Keybindings/neobean.md#task-management)
+for the default `<leader>T*` keys) and understand the custom states above,
+but they don't currently move completed items into the `## Completed Tasks`
+heading the way `<M-x>` does. Until the two are unified, use `<leader>tx` /
+`<M-x>` / `markdown_tasks.toggle_done` for marking the built-in `- [ ]`/
+`- [x]` states done, and `<leader>t.`/`<leader>t/`/`:Checkmate cycle_next`
+for moving a task through the custom states (`in_progress` → `on_hold` →
+`cancelled`, etc.).
+
+### Adding a new custom state
+
+1. Add the state to `config/modules/task_states.lua`'s `M.custom_states`
+   table (`marker`, `markdown` char, `type`, optional `order`) — pick a
+   `markdown` char not already used by another state
+2. That's it for the pickers — `<leader>tp`/`<leader>ta`/`<leader>tc` read
+   from `active_chars()`/`done_chars()` automatically
+3. Restart Neovim (or `:Lazy reload checkmate.nvim`) to pick up the new
+   state in checkmate's `todo_states`
+
+### Review file: deduplicated open-tasks digest
+
+`<leader>tR` (`config/modules/task_review.lua`) builds a single
+deduplicated list of every not-done task in the vault (open +
+in-progress/on-hold, i.e. everything the `<leader>ta` picker would show) and
+writes it into a `<!-- task-review:start -->` / `<!-- task-review:end -->`
+marked section of a file you choose (prompted via `vim.ui.input`, defaults
+to `notes.root() .. "/Review.md"`).
+
+- **Idempotent / re-run-safe:** only the content between the two HTML
+  comment markers is ever touched. Everything else in the file — your own
+  notes above/below the section — is left exactly as-is. Re-running just
+  replaces the section in place (only the "Generated ..." timestamp line
+  changes if the task list itself hasn't changed).
+- **Deduplicated:** if the exact same task text appears in multiple files
+  (e.g. copy-pasted across daily notes), it's listed once, annotated with
+  how many times and where it was found, e.g.
+  `- [ ] Buy groceries _(x2: a.md:2, sub/b.md:2)_`.
+- **Two levels: `@client` then `@project`:** tasks are split into one
+  `### <heading>` per `@client` value — the 3 fixed clients first (in
+  their declared order, each only shown if it has tasks), then any
+  other/custom `@client(...)` value encountered (alphabetically), then
+  `### Untagged` last for tasks with no `@client` at all. Within each
+  client heading, tasks are further split into one `#### <heading>` per
+  `@project` value — custom projects alphabetically, then `#### No
+  project` last for tasks that have a `@client` but no `@project`.
+- If the target file doesn't have the markers yet (new file, or a file you
+  hand-wrote), the section is appended at the end instead of failing.
+- **The target file itself is excluded from the task scan**, so if it lives
+  inside the vault (the default `Review.md` does), its own rendered lines
+  from a previous run are never re-picked-up as "new" tasks — without this,
+  every refresh would duplicate everything, since the rendered
+  `- [ ] ... _(source)_` lines still match the "not done" task pattern.
+- **Source refs are followable:** each `_(file:line)_` annotation is a
+  plain relative path + line number, which is exactly the format Neovim's
+  built-in `gF` (go-to-file-under-cursor, then to that line) understands —
+  put the cursor anywhere on e.g. `a.md:2` and press `gF` to jump straight
+  there (works across subdirectories too, since `gf`/`gF` resolve paths
+  relative to the current buffer's own directory by default).
+- **Task state is preserved:** each rendered line uses the same bracket
+  character as its source task (`- [/] ...`, `- [.] ...`, `- [ ] ...`), not
+  a hardcoded `- [ ]` — so an on-hold or in-progress task still looks
+  on-hold/in-progress in the review file instead of looking open.
+- **Default folds — first client expanded, rest collapsed:** the first
+  time this file is displayed in a window, `task_review.lua`'s
+  `setup_autofold()` (registered at startup in `config/autocmds.lua`)
+  automatically collapses every `### <client>` heading in the managed
+  section except the first one declared in `task_tags.lua`'s `M.clients`
+  (`"Work"` by default — change `M.default_expanded_heading` in
+  `task_review.lua` to expand a different one), leaving that client's
+  `#### <project>` subheadings expanded too. Handy for glancing at the file
+  on a shared/work screen without personal (`Schretzi`/`FF`/`Untagged`)
+  task text showing by default. This only sets the *initial* state per
+  window — manually opening/closing folds afterwards (`za`/`zo`/`zc`) isn't
+  overridden again unless the file is opened in a brand new window/split.
+  The generic vault-wide "collapse all markdown headings on open" behavior
+  (the `zk` autocmd in `config/autocmds.lua`) explicitly skips this file so
+  the two don't race with each other.
+
+### Daily note task carryover
+
+Small stray to-dos jotted straight into a daily note (things that don't
+belong in a project file or `@client`/`@project`-tagged task) shouldn't get
+silently lost once that day scrolls off. `config/modules/task_carryover.lua`
+sweeps them forward automatically:
+
+- **Runs automatically when today's daily note is first created** (via
+  `gt`, or any of the other `create_daily_note()`-based keymaps, but only
+  when the note being created is dated *today* — creating a future daily
+  note, e.g. via the "create next N days" keymaps, never triggers this).
+  It scans every *other* daily note under the daily notes directory for
+  unfinished tasks — any not-done state (open, in-progress, on-hold, ...,
+  the same set `task_review.lua`/`<leader>ta` treat as "not done"), not
+  just plain open ones — and **really moves** them: deleted from the old
+  note, inserted into today's new note under its `### Open Tasks for
+  Today` heading. Each task's own state/icon and any `@client`/`@project`/
+  other metadata tags travel with it unchanged.
+- **Deduplicated:** if the exact same task line text exists in more than
+  one old daily note, it's only inserted once into today's note (still
+  deleted from every old note it was found in — a real move, not a copy).
+- **Manual re-run: `<leader>tC`.** If an older daily note gets a new or
+  reopened unfinished task *after* today's note was already created, run
+  this with the cursor in any daily note (usually today's) to re-sweep
+  every other daily note again. Errors out if the current file isn't a
+  daily note.
+- Leaves everything else in both the old and new notes untouched — only
+  the matched task lines themselves are removed/inserted, no other content
+  is touched, and completed (`[x]`)/cancelled tasks are always left alone
+  in the old note.
 
 ## Fix Mason warnings
 

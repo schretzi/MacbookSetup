@@ -204,6 +204,81 @@ Claude Code and GitHub Copilot are wired in as official LazyVim extras (`lazy.lu
 | markdown ft | `<leader>mp` | Toggle Markdown Preview | `plugins/markdown-preview.lua` |
 | typst ft | `<leader>cpp` | Toggle Typst Preview | `plugins/typst-preview.lua` |
 
+### Task management
+
+See [`README.md`](../neobean/README.md#task-management) for the full
+picture (custom states, metadata, and how the pieces fit together). Vault
+path/root always comes from `config/modules/notes.lua`, regardless of cwd.
+
+Vault-wide overview pickers (`plugins/snacks.lua`, ripgrep + Snacks picker):
+
+| Mode | Key | Action |
+|---|---|---|
+| n | `<leader>tt` | Picker: strictly open/unstarted tasks (`- [ ]`) |
+| n | `<leader>tp` | Picker: in-progress/on-hold custom-state tasks (`- [.]`, `- [/]`) — not open, not done |
+| n | `<leader>ta` | Picker: all unfinished tasks (open + in-progress/on-hold combined) |
+| n | `<leader>tc` | Picker (cwd-scoped): done tasks (`- [x]`/`- [X]`, plus `cancelled` `- [c]`) |
+| n, i (in any of the above pickers) | `<M-x>` | Toggle the highlighted task done in-place, list refreshes |
+
+Fast state-change keymaps (`config/keymaps.lua`), for the todo under the
+cursor — go through checkmate.nvim's own `toggle()`/`add_metadata()` API
+(not a bracket regex), so they work reliably even though checkmate renders
+todos as icons live in the buffer (unlike `<M-x>`, which needs literal
+`- [ ]`/`- [x]` bracket text):
+
+| Mode | Key | Action |
+|---|---|---|
+| n | `<leader>tx` | Close: `toggle("checked")` + stamp `@done(today)` |
+| n | `<leader>t.` | Set in-progress: `toggle("in_progress")` |
+| n | `<leader>t/` | Set on-hold: `toggle("on_hold")` |
+
+checkmate.nvim (`plugins/checkmate.lua`), scoped to the Obsidian vault only —
+custom states + `@due(...)`/`@priority(...)` metadata:
+
+| Mode | Key | Action |
+|---|---|---|
+| n, v | `<leader>Tt` / `<leader>Tc` / `<leader>Tu` | Toggle / check / uncheck todo under cursor (or selection) |
+| n, v | `<leader>T=` / `<leader>T-` | Cycle todo to next / previous state (unchecked → in-progress → on-hold → cancelled → …) |
+| n, v | `<leader>Tn` | Create todo |
+| n, v | `<leader>Tr` | Remove todo marker (convert to text) |
+| n, v | `<leader>TR` | Remove all metadata from todo |
+| n | `<leader>Ta` | Archive completed todos (move to bottom section) |
+| n | `<leader>TF` | Picker: select a todo in the current buffer |
+| n | `<leader>Tv` | Update the value of the metadata tag under the cursor |
+| n | `<leader>TD` | Add/edit `@due(YYYY-MM-DD)` metadata |
+| n | `<leader>Tp` | Add/edit `@priority(low\|medium\|high)` metadata |
+| n | `<leader>Tk` | Add/edit `@client(Work\|Schretzi\|FF)` metadata (picker opens immediately) |
+| n | `<leader>Tj` | Add/edit `@project(<free text>)` metadata (picker opens immediately, suggestions scoped to the todo's `@client`) |
+| n | `<leader>Tz` | Add/edit `@created(...)` metadata (manual escape hatch — usually set automatically, see below) |
+| n | `<leader>Tx` | Add/edit `@done(...)` metadata (manual escape hatch — usually stamped automatically by `<leader>tx` above) |
+| n | `<leader>T]` / `<leader>T[` | Jump to next / previous metadata tag |
+| n | `<leader>tR` | Refresh deduplicated open-tasks digest into a chosen file's marked section, grouped by `@client` then `@project` (`config/modules/task_review.lua`) |
+| n | `<leader>tn` | New tagged task: insert `- [ ] @created(today) @client(...) @project(...)` below cursor (client via picker, then project via picker/"+ New project..." if a client was chosen), then insert mode to type the text (`config/keymaps.lua`) |
+
+Daily note task carryover (`config/modules/task_carryover.lua`) — runs
+automatically the moment today's daily note is first created (via `gt` or
+any other `create_daily_note()`-based keymap, never for future-dated
+notes): sweeps every *other* daily note for unfinished tasks (any not-done
+state, not just plain open ones) and really moves them — deleted from the
+old note, inserted (deduplicated, state/tags preserved) into today's new
+note's `### Open Tasks for Today` section:
+
+| Mode | Key | Action |
+|---|---|---|
+| n | `<leader>tC` | Manually re-run the carryover against the current daily note (e.g. an older note got a new unfinished task after today's note already existed) |
+
+Continuing a task line with `<CR>` (bullets.vim, vault-scoped only) also
+silently stamps the new line with `@created(today)` and inherits the
+previous line's `@client(...)`/`@project(...)` values, if any — no extra
+keypress needed (`config/modules/task_tags.lua`).
+
+Older, still-primary "mark done" workflow (`config/modules/markdown_tasks.lua`
+— see [Markdown / notes](#markdown--notes-largest-section-of-keymapslua-lines-1790-4300) above):
+
+| Mode | Key | Action |
+|---|---|---|
+| n | `<M-x>` | Toggle task done, tag `` `done: timestamp` ``, move to `## Completed Tasks` heading |
+
 ### Images
 
 | Mode | Key | Action |

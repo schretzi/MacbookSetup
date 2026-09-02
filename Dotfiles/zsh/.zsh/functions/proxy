@@ -29,9 +29,38 @@ proxy_unset() {
   echo "Proxy disabled"
 }
 
-# Show current proxy variables in the current shell.
+# Show proxy state, separated into the two layers that are easy to confuse.
+#
+# PROXY_* describes what macswitcher configured system-wide; it is read from
+# ~/.zsh/rcs/proxy at shell start and is NOT changed by proxy_set/proxy_unset.
+# http_proxy/HTTP_PROXY et al are this shell's own environment, and are the
+# only thing curl, git and the Go tools actually act on. Looking at the wrong
+# one is how "proxy_unset does nothing" happens.
 proxy_status() {
-  echo "http_proxy=${http_proxy}"
-  echo "https_proxy=${https_proxy}"
-  echo "no_proxy=${no_proxy}"
+  local unset_marker="(unset)"
+
+  echo "System (macswitcher, from ~/.zsh/rcs/proxy)"
+  echo "  PROXY_STATE    = ${PROXY_STATE:-${unset_marker}}"
+  echo "  PROXY_URL      = ${PROXY_URL:-${unset_marker}}"
+  echo "  PROXY_FILTER   = ${PROXY_FILTER:-${unset_marker}}"
+  echo "  PROXY_NO_PROXY = ${PROXY_NO_PROXY:-${unset_marker}}"
+  echo
+
+  if [[ -n "${http_proxy}${https_proxy}${HTTP_PROXY}${HTTPS_PROXY}" ]]; then
+    echo "This shell: ACTIVE"
+  else
+    echo "This shell: no proxy"
+  fi
+  echo "  http_proxy  = ${http_proxy:-${unset_marker}}"
+  echo "  https_proxy = ${https_proxy:-${unset_marker}}"
+  echo "  no_proxy    = ${no_proxy:-${unset_marker}}"
+
+  # A shell started before the last `macswitcher proxy set` keeps the old
+  # values, which fails as a routing error long after the change that caused
+  # it -- so say so rather than printing two lists and leaving it to the eye.
+  if [[ -n "${no_proxy}" && -n "${PROXY_NO_PROXY}" && "${no_proxy}" != "${PROXY_NO_PROXY}" ]]; then
+    echo
+    echo "  ! no_proxy differs from the system value - this shell is stale."
+    echo "    Run: source ~/.zsh/rcs/proxy && proxy_set"
+  fi
 }

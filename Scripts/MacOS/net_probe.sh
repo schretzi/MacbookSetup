@@ -84,37 +84,55 @@ probe_host() {
 	return "$_rc"
 }
 
-# probe_realm discovers a Kerberos realm's KDCs over DNS and tests each one.
-# Discovery is reported on its own because kinit's "tried 0 KDCs" means it
-# never got this far, and no amount of KDC-side debugging helps in that case.
-probe_realm() {
-	_realm=$1
-	_srv="_kerberos._tcp.$_realm"
-	echo "realm     $_realm"
-	echo "discovery $_srv"
-
-	# A `+short` SRV answer is "<priority> <weight> <port> <target>."; anything
-	# else on stdout is dig complaining, which it does while still exiting 0.
-	# Matching the shape keeps ";; connection timed out" from being mistaken
-	# for a KDC named "out;".
-	_kdcs=$(dig +short +time="$DNS_TIMEOUT" +tries=1 "$_srv" SRV 2>/dev/null |
+# srv_targets prints the target names of an SRV answer, one per line.
+#
+# A `+short` SRV answer is "<priority> <weight> <port> <target>."; anything
+# else on stdout is dig complaining, which it does while still exiting 0.
+# Matching the shape keeps ";; connection timed out" from being mistaken for a
+# KDC named "out;". $2 is an optional "@server" argument.
+srv_targets() {
+	# shellcheck disable=SC2086 # $2 is an optional @server, deliberately split
+	dig +short +time="$DNS_TIMEOUT" +tries=1 ${2:-} "$1" SRV 2>/dev/null |
 		awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && NF == 4 {
 			sub(/\.$/, "", $4); print $4
-		}')
+		}'
+}
+
+# probe_realm discovers a Kerberos realm's KDCs over DNS and tests each one.
+#
+# Discovery is reported on its own because kinit's "tried 0 KDCs" means it
+# never got that far, and no amount of KDC-side debugging helps in that case.
+#
+# When the usual lookup finds nothing, the realm's own SOA nameserver is asked
+# directly. That distinguishes the two reasons for an empty answer, which need
+# opposite fixes: a local resolver that does not carry the records (fix the
+# resolver) versus a zone that genuinely does not publish them (configure the
+# KDCs statically, since discovery is never going to work).
+probe_realm() {
+	_realm=$1
+	_lc=$(echo "$_realm" | tr '[:upper:]' '[:lower:]')
+	echo "realm     $_realm"
+
+	# _tcp is what kinit prefers; _udp is checked too so that a realm
+	# publishing only the UDP records is not reported as publishing none.
+	_kdcs=""
+	for _proto in _tcp _udp; do
+		_srv="_kerberos.$_proto.$_realm"
+		_found=$(srv_targets "$_srv")
+		if [ -n "$_found" ]; then
+			echo "  SRV       $_srv -> $(echo "$_found" | tr '\n' ' ')"
+			_kdcs=$(printf '%s\n%s' "$_kdcs" "$_found")
+		else
+			echo "  SRV       $_srv -> nothing"
+		fi
+	done
+	_kdcs=$(echo "$_kdcs" | grep -v '^$' | sort -u)
+
 	if [ -z "$_kdcs" ]; then
-		echo "  SRV       no records"
-		echo
-		echo "This is what kinit reports as \"tried 0 KDCs\": it found no KDC to"
-		echo "contact, so nothing was ever unreachable. Either the realm's domain"
-		echo "is being resolved by a server that does not hold these records, or"
-		echo "the resolver for it is not reachable right now."
-		echo
-		echo "Check which resolver answers for the realm's domain:"
-		echo "  dig +short $(echo "$_realm" | tr '[:upper:]' '[:lower:]') SOA"
+		probe_realm_no_records "$_realm" "$_lc"
 		return 1
 	fi
 
-	echo "  SRV       $(echo "$_kdcs" | tr '\n' ' ')"
 	echo
 	_rc=1
 	for _kdc in $_kdcs; do
@@ -128,6 +146,62 @@ probe_realm() {
 		echo "firewall question, not a DNS one."
 	fi
 	return "$_rc"
+}
+
+# probe_realm_no_records works out why discovery came back empty, by asking the
+# zone's own nameserver what the local resolver could not answer.
+probe_realm_no_records() {
+	_realm=$1
+	_lc=$2
+	echo
+	echo "No KDC records came back. This is what kinit reports as \"tried 0"
+	echo "KDCs\": it found none to contact, so nothing was ever unreachable."
+	echo
+
+	_soa=$(dig +short +time="$DNS_TIMEOUT" +tries=1 "$_lc" SOA 2>/dev/null |
+		awk 'NF >= 7 {sub(/\.$/, "", $1); print $1; exit}')
+	if [ -z "$_soa" ]; then
+		echo "The realm's domain ($_lc) does not resolve at all, so the records"
+		echo "could not have been found. Fix name resolution for that domain"
+		echo "first - on a VPN, that usually means the resolver holding it is"
+		echo "not reachable through the tunnel yet."
+		return
+	fi
+	echo "zone      $_lc is served by $_soa"
+
+	_soa_ip=$(resolve "$_soa" | head -1)
+	if [ -z "$_soa_ip" ]; then
+		echo "          (which does not itself resolve; cannot ask it directly)"
+		return
+	fi
+	echo "asking    $_soa_ip directly, bypassing the local resolver"
+
+	_direct=""
+	for _proto in _tcp _udp; do
+		_found=$(srv_targets "_kerberos.$_proto.$_realm" "@$_soa_ip")
+		[ -n "$_found" ] && _direct=$(printf '%s\n%s' "$_direct" "$_found")
+	done
+	_direct=$(echo "$_direct" | grep -v '^$' | sort -u)
+
+	echo
+	if [ -n "$_direct" ]; then
+		echo "  -> the zone DOES publish KDCs: $(echo "$_direct" | tr '\n' ' ')"
+		echo "     The local resolver is what is losing them. Check that the"
+		echo "     per-domain upstream for this zone points at a server that"
+		echo "     is reachable and authoritative."
+	else
+		echo "  -> the zone publishes no _kerberos SRV records at all, so DNS"
+		echo "     discovery is never going to find a KDC here. Name the KDCs"
+		echo "     statically instead, in a krb5.conf:"
+		echo
+		echo "       [realms]"
+		echo "         $_realm = {"
+		echo "           kdc = <domain-controller>"
+		echo "         }"
+		echo
+		echo "     Domain controllers usually answer _ldap._tcp; try:"
+		echo "       dig +short @$_soa_ip _ldap._tcp.$_lc SRV"
+	fi
 }
 
 [ "$#" -ge 1 ] || usage

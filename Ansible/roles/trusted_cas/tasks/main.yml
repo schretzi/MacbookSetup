@@ -1,0 +1,68 @@
+---
+# trusted_cas - import and trust CA certificates this machine did not create
+# itself. See defaults/main.yml for how this differs from local_ca and what
+# an entry looks like.
+#
+# privoxy is why this exists as its own role rather than "just use Keychain
+# Access": a certificate imported through the GUI (or `security
+# add-trusted-cert` without an explicit -k) lands in the *login* keychain by
+# default, and privoxy's own trusted-CA bundle (roles/privoxy) is assembled by
+# scanning only /System/Library/Keychains/SystemRootCertificates.keychain and
+# /Library/Keychains/System.keychain - it never looks at login.keychain-db, so
+# a cert trusted that way is invisible to it. Importing with an explicit -k
+# System.keychain here fixes both at once: the OS trust store and privoxy's
+# scan read from the same place.
+
+- name: Trusted CAs | create the certificate directory
+  ansible.builtin.file:
+    path: "{{ trusted_cas_dir }}"
+    state: directory
+    mode: "0755"
+  when: trusted_cas_certs | length > 0
+
+- name: Trusted CAs | copy the certificates in
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ trusted_cas_dir }}/{{ item.name }}.crt"
+    mode: "0644"
+  loop: "{{ trusted_cas_certs }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# find-certificate, not verify-cert - the same measured reason as local_ca's
+# intermediate check: verify-cert chains a certificate handed to it against
+# whatever root is already trusted and succeeds regardless of whether the
+# keychain has ever seen this exact certificate, so it never reports rc != 0
+# for one that is only sitting on disk. find-certificate on the Common Name
+# actually asks the keychain "do you already have this one".
+- name: Trusted CAs | check which are already in the System keychain
+  ansible.builtin.command:
+    cmd: >-
+      security find-certificate -c "{{ item.common_name }}"
+      /Library/Keychains/System.keychain
+  register: trusted_cas_found
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  loop: "{{ trusted_cas_certs }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# trustRoot for every entry, no trust_as_root distinction like local_ca's
+# intermediates: these are assumed to be actual roots, with the servers
+# behind them sending a complete chain on their own (unlike privoxy, which
+# can only ever send a leaf - see local_ca). If that assumption stops holding
+# for some entry, trustRoot still installs it as an anchor in its own right,
+# it is just the wrong shape for what the certificate actually is.
+- name: Trusted CAs | trust the certificates in the System keychain
+  ansible.builtin.command:
+    cmd: >-
+      security add-trusted-cert -d -r trustRoot
+      -k /Library/Keychains/System.keychain
+      {{ trusted_cas_dir }}/{{ item.item.name }}.crt
+  become: true
+  when: item.rc != 0
+  changed_when: true
+  loop: "{{ trusted_cas_found.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"

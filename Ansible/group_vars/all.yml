@@ -151,6 +151,14 @@ enable_firefox_enterprise_roots: true
 # trust anything new)
 enable_local_ca: true
 
+# CA certificates this machine did not create itself - typically an
+# employer's internal root, contributed via `trusted_cas_certs` (see
+# roles/trusted_cas/defaults/main.yml). Trusted into the System keychain the
+# same way local_ca trusts its own root, and picked up by privoxy's bundle
+# from there. Empty by default: nothing to trust until an overlay adds
+# entries. (needs sudo, once per certificate, to trust anything new)
+enable_trusted_cas: true
+
 # Intermediates beyond the per-cluster ones LocalKubernetes issues.
 #
 # privoxy signs its on-the-fly site certificates with this one, and never

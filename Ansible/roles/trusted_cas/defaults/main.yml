@@ -1,0 +1,25 @@
+---
+# trusted_cas - CA certificates this machine did not create itself.
+#
+# local_ca is for the machine's own CA (issued by `step`, see roles/local_ca).
+# This role is for anyone else's CA - typically an employer's internal root,
+# contributed by the work overlay's overlay.yml via `trusted_cas_certs`
+# (list_merge='append' in site.yml, so the private overlay can add its own
+# entries too without dropping work's).
+#
+# Deliberately generic: every entry given here gets trusted, no distinction
+# between root and intermediate. That is a simplification, not an oversight -
+# see the trust step in tasks/main.yml for why it only holds as long as each
+# entry is an actual root and the servers behind it send a complete chain.
+#
+#   name:        <name>.crt in trusted_cas_dir
+#   src:         path to the PEM-encoded certificate to import, e.g. a path
+#                inside the overlay's own checkout
+#   common_name: the certificate's subject CN - used only to ask the System
+#                keychain "do you already have this one" (`security
+#                find-certificate -c`); openssl can read it back
+#                (`openssl x509 -noout -subject -in <file>`) if it is not
+#                already documented wherever the certificate came from
+trusted_cas_certs: []
+
+trusted_cas_dir: "{{ ansible_facts.env.HOME }}/.local/share/trustedcas"

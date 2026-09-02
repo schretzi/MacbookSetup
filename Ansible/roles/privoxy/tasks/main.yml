@@ -86,6 +86,37 @@
         src: "{{ privoxy_ca_certificates_bundle }}"
       register: privoxy_brew_bundle
 
+    # Belt and suspenders on top of the keychain scan above: a certificate
+    # trusted the ordinary way (`security add-trusted-cert -k
+    # System.keychain ...`, what the trusted_cas role does) is already caught
+    # by that scan. This reads roles/trusted_cas' own files directly, so a
+    # certificate that ends up trusted some other way (imported through the
+    # Keychain Access GUI, which defaults to the *login* keychain - the
+    # keychain scan above never reads that one) still reaches privoxy.
+    - name: Privoxy | check for externally trusted CA certificates
+      ansible.builtin.stat:
+        path: "{{ privoxy_extra_trusted_cas_dir }}"
+      register: privoxy_extra_trusted_cas_stat
+      changed_when: false
+      check_mode: false
+
+    - name: Privoxy | list externally trusted CA certificates
+      ansible.builtin.find:
+        paths: "{{ privoxy_extra_trusted_cas_dir }}"
+        patterns: "*.crt"
+      register: privoxy_extra_trusted_cas
+      when: privoxy_extra_trusted_cas_stat.stat.isdir | default(false)
+      changed_when: false
+      check_mode: false
+
+    - name: Privoxy | read the externally trusted CA certificates
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      register: privoxy_extra_trusted_cas_content
+      loop: "{{ privoxy_extra_trusted_cas.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
     - name: Privoxy | assemble the trusted-CA bundle
       ansible.builtin.copy:
         content: |
@@ -95,6 +126,10 @@
           {% for result in privoxy_keychain_roots.results %}
           # ---- {{ result.item }} ----
           {{ result.stdout }}
+          {% endfor %}
+          {% for result in privoxy_extra_trusted_cas_content.results | default([]) %}
+          # ---- {{ result.item.path | basename }} (roles/trusted_cas) ----
+          {{ result.content | b64decode }}
           {% endfor %}
         dest: "{{ privoxy_trusted_cas_file }}"
         mode: "0644"

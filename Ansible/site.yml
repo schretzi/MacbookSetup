@@ -195,6 +195,13 @@
     # System.keychain`) in Firefox-based browsers too - Safari/Chrome do this
     # natively, Firefox/NSS needs ImportEnterpriseRoots turned on explicitly.
     # Runs after homebrew so the browsers it targets already exist.
+    # after local_ca (same certs family) and before firefox_enterprise_roots
+    # and privoxy, both of which need whatever lands in the System keychain
+    # here to already be there
+    - role: trusted_cas
+      when: enable_trusted_cas | bool
+      tags: [trusted_cas, certs]
+
     - role: firefox_enterprise_roots
       when: enable_firefox_enterprise_roots | bool
       tags: [firefox_enterprise_roots, certs, firefox]
@@ -206,7 +213,9 @@
 
     # before macswitcher: it seeds the PAC that macswitcher's alpaca is
     # started with in direct contexts, and after firefox_enterprise_roots
-    # so the CA it asks for is picked up by Firefox-based browsers too.
+    # so the CA it asks for is picked up by Firefox-based browsers too, and
+    # after trusted_cas so its bundle-assembly step finds that role's
+    # certificates already on disk.
     - role: privoxy
       when: enable_privoxy | bool
       tags: [privoxy, proxy]

@@ -45,6 +45,11 @@ privoxy_system_keychains:
   - /System/Library/Keychains/SystemRootCertificates.keychain
   - /Library/Keychains/System.keychain
 
+# roles/trusted_cas' own directory, read directly in addition to the keychain
+# scan above - see the task for why the scan alone is not enough for every
+# certificate that ends up trusted.
+privoxy_extra_trusted_cas_dir: "{{ trusted_cas_dir }}"
+
 # debug levels privoxy logs at. 1024 is the crunches - blocks and redirects,
 # the only thing a filtering proxy is really asked to account for - and 4096
 # and 8192 are startup messages and errors. Deliberately NOT 1, which logs the

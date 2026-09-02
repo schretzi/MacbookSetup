@@ -12,7 +12,7 @@ environment.
 > [docs/networking-tools.md](docs/networking-tools.md) covers installing and
 > using macswitcher, kerberoskeepalive and omt **without** this repository —
 > no Ansible, no clone, no overlays. It is the page to send to a colleague.
-> The rest of this file assumes you are rebuilding *my* machine.
+> The rest of this file assumes you are rebuilding _my_ machine.
 
 ## Software outside Automation
 
@@ -86,10 +86,10 @@ The `kanata` role checks both and stops if the extension is not active.
 **The real file always lives here.** Nothing is copy-pasted into `~` and then
 forgotten. Two mechanisms keep it that way:
 
-| Mechanism   | Used for                                                                    | Why                                                                                                                                             |
-| ----------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Symlink** | `~/.config/*`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config` | Editing the live file edits the repo file. Nothing to sync.                                                                                     |
-| **Copy**    | LaunchAgents, LaunchDaemons, `/etc/newsyslog.d`, `/usr/local/bin`           | launchd and root-owned locations refuse to follow links into a user checkout. The repo copy is still the truth — re-run the play after editing. |
+| Mechanism   | Used for                                                          | Why                                                                                                                                             |
+| ----------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Symlink** | `~/.config/*`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`        | Editing the live file edits the repo file. Nothing to sync.                                                                                     |
+| **Copy**    | LaunchAgents, LaunchDaemons, `/etc/newsyslog.d`, `/usr/local/bin` | launchd and root-owned locations refuse to follow links into a user checkout. The repo copy is still the truth — re-run the play after editing. |
 
 If a config is not in this repo, it is not managed, and rebuilding the machine
 will lose it.
@@ -134,26 +134,26 @@ locations: `sudoers`, `localhost_alias`, `adguardhome`, `java`, `kanata`,
 instead — see [sudo](#sudo) below — but it is switched off until Touch ID for
 sudo works.
 
-| Role / tag      | Switch                 | What it does                                                      |
-| --------------- | ---------------------- | ----------------------------------------------------------------- |
-| `base_dirs`     | `enable_base_dirs`     | `~/bin`, `~/tmp`, `~/Workspace`                                   |
-| `homebrew`      | `enable_homebrew`      | `brew bundle` per Brewfile, each file individually toggleable     |
-| `dotfiles`      | `enable_dotfiles`      | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`     |
-| `git`           | `enable_git`           | links the shared git ignore file, checks the signing key          |
-| `ssh`           | `enable_ssh`           | links `~/.ssh/config`, fixes permissions                          |
-| `gitlab`        | `enable_gitlab`        | renders instance list for `gl`, checks tokens are in the keychain |
-| `kubeconfig`    | `enable_kubeconfig`    | creates `~/.kube/configs` for `kubeconfig-add`/`kubeconfig-merge` |
-| `sudoers`       | `enable_sudoers`       | Touch ID for sudo, the shared credential cache, NOPASSWD rules    |
-| `java`          | `enable_java`          | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines`  |
-| `kanata`        | `enable_kanata`        | builds kanata with `cmd`, installs both daemons + log rotation    |
-| `windowmanager` | `enable_windowmanager` | yabai + skhd LaunchAgents                                         |
-| `mail`          | `enable_mail`          | maildir, notmuch index, offlineimap/omt agents, mail dotfiles     |
-| `localhost_alias` | `enable_localhost_alias` | the extra 127.0.0.x addresses on lo0                           |
-| `adguardhome`   | `enable_adguardhome`   | the resolver: pinned release, seeded config, zones, daemons       |
-| `macswitcher`   | `enable_macswitcher`   | seeds `~/.config/macswitcher` and the shell proxy variables       |
-| `gcloud`        | `enable_gcloud`        | gcloud components                                                 |
-| `ai`            | `enable_ai`            | links `schretzi-skills` into every assistant, assistant configs   |
-| `work`          | `enable_work`          | employer profile, supplied by the work overlay                    |
+| Role / tag        | Switch                   | What it does                                                      |
+| ----------------- | ------------------------ | ----------------------------------------------------------------- |
+| `base_dirs`       | `enable_base_dirs`       | `~/bin`, `~/tmp`, `~/Workspace`                                   |
+| `homebrew`        | `enable_homebrew`        | `brew bundle` per Brewfile, each file individually toggleable     |
+| `dotfiles`        | `enable_dotfiles`        | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`     |
+| `git`             | `enable_git`             | links the shared git ignore file, checks the signing key          |
+| `ssh`             | `enable_ssh`             | links `~/.ssh/config`, fixes permissions                          |
+| `gitlab`          | `enable_gitlab`          | renders instance list for `gl`, checks tokens are in the keychain |
+| `kubeconfig`      | `enable_kubeconfig`      | creates `~/.kube/configs` for `kubeconfig-add`/`kubeconfig-merge` |
+| `sudoers`         | `enable_sudoers`         | Touch ID for sudo, the shared credential cache, NOPASSWD rules    |
+| `java`            | `enable_java`            | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines`  |
+| `kanata`          | `enable_kanata`          | builds kanata with `cmd`, installs both daemons + log rotation    |
+| `windowmanager`   | `enable_windowmanager`   | yabai + skhd LaunchAgents                                         |
+| `mail`            | `enable_mail`            | maildir, notmuch index, offlineimap/omt agents, mail dotfiles     |
+| `localhost_alias` | `enable_localhost_alias` | the extra 127.0.0.x addresses on lo0                              |
+| `adguardhome`     | `enable_adguardhome`     | the resolver: pinned release, seeded config, zones, daemons       |
+| `macswitcher`     | `enable_macswitcher`     | seeds `~/.config/macswitcher` and the shell proxy variables       |
+| `gcloud`          | `enable_gcloud`          | gcloud components                                                 |
+| `ai`              | `enable_ai`              | links `schretzi-skills` into every assistant, assistant configs   |
+| `work`            | `enable_work`            | employer profile, supplied by the work overlay                    |
 
 Two helper roles are never run directly: `link` (backup-then-symlink) and
 `launchd` (copy or render plist + `bootout`/`bootstrap`).
@@ -633,7 +633,7 @@ being `sudo_local` rather than `sudo` it survives system updates.
 The configuration above is correct and is reached — the unified log shows sudo
 creating an `LAContext`, requesting `DeviceOwnerAuthenticationWithBiometrics`,
 with `BiometryType=1` and `MechanismTouchId` present. But `pam_tid` only ever
-makes the *non-interactive* call (`LACopyResultOfPolicyEvaluation`), gets
+makes the _non-interactive_ call (`LACopyResultOfPolicyEvaluation`), gets
 `-1004 "User interaction is required"`, and returns **24**
 (`PAM_NO_MODULE_DATA`) — a value openpam itself logs as an unexpected return
 for `pam_sm_authenticate()`. It never presents a biometric prompt. What
@@ -645,7 +645,7 @@ behaves identically to kitty), tmux/`pam_reattach`, MDM (the machine is not
 enrolled), clamshell, remote sessions, enrollment (`bioutil -r` reports
 effective), file modes, PAM ordering, a missing module, and a replaced sudo
 (`/usr/bin/sudo` sits on the sealed system volume with SIP enabled). Touch ID
-for *other* authorizations works — a System Settings padlock offers it, and
+for _other_ authorizations works — a System Settings padlock offers it, and
 notably does so without ever spawning `SecurityAgent`.
 
 **So the file is not installed** (`sudoers_touchid_enabled: false`). It cannot
@@ -701,7 +701,7 @@ the become tasks fail with `sudo: a password is required` rather than hanging.
 Two things measured while getting there, both worth keeping:
 
 - The 20 minutes run from the **authentication**, and a `sudo` that consumes
-  the cache does *not* push the deadline back. So the window has to cover the
+  the cache does _not_ push the deadline back. So the window has to cover the
   whole stretch from `sudo -v` to the last root task — and site.yml reaches
   its first root task (the `sudoers` role itself) only after `homebrew`, so on
   a cold machine the credential can be gone before Ansible ever needs it.
@@ -710,7 +710,7 @@ Two things measured while getting there, both worth keeping:
   it immediately, everywhere.
 
 That cost buys one Touch ID instead of a typed password. With Touch ID not
-authenticating, it would buy one *typed password* instead of one typed
+authenticating, it would buy one _typed password_ instead of one typed
 password — nothing. Hence off.
 
 ### Passwordless rules
@@ -836,6 +836,7 @@ The role runs the full chain:
    Separate from the resolver role on purpose: the addresses outlive whichever
    resolver uses them. While they belonged to the unbound role, switching
    unbound off left AdGuard Home's own address unmanaged.
+
 2. **The daemon.** There is no Homebrew formula — `brew search adguard` finds
    only an unrelated content-blocker cask — so the role downloads the pinned
    GitHub release and verifies its SHA-256 **before** anything is unpacked as
@@ -854,10 +855,10 @@ The role runs the full chain:
 AdGuard Home has no permission model — every entry in `users:` is a full admin
 — so the two accounts are credential isolation, not privilege isolation:
 
-| account | keychain service | for |
-| --- | --- | --- |
-| `admin` | `adguardhome admin` | the web UI at <http://127.0.0.3:3053> |
-| `zonesync` | `adguardhome api` | `POST /control/filtering/refresh`, so a zone change needs no restart |
+| account    | keychain service    | for                                                                  |
+| ---------- | ------------------- | -------------------------------------------------------------------- |
+| `admin`    | `adguardhome admin` | the web UI at <http://127.0.0.3:3053>                                |
+| `zonesync` | `adguardhome api`   | `POST /control/filtering/refresh`, so a zone change needs no restart |
 
 Neither password is in this repository. The role generates a random one for
 whichever has no System keychain entry yet, so a fresh machine converges
@@ -879,11 +880,11 @@ silently does not work is worse than an absent one.
 A "zone" here is an AdGuard Home **filtering rule list**, not a zone file in the
 DNS sense. Three of them, each owned by whoever owns the names:
 
-| file | from | holds |
-| --- | --- | --- |
-| `kiac.txt` | LocalKubernetes, at runtime | cluster and container addresses on the vmnet |
-| `schretzi.txt` | private overlay | home LAN and private domains |
-| `work.txt` | work overlay | the one intranet name that needs a fixed answer |
+| file           | from                        | holds                                           |
+| -------------- | --------------------------- | ----------------------------------------------- |
+| `kiac.txt`     | LocalKubernetes, at runtime | cluster and container addresses on the vmnet    |
+| `schretzi.txt` | private overlay             | home LAN and private domains                    |
+| `work.txt`     | work overlay                | the one intranet name that needs a fixed answer |
 
 The overlays declare theirs in `overlay.yml`, and the role installs them from
 `<root>/Dotfiles/adguardhome/zones.d/<file>` into `/etc/adguardhome/zones/`:
@@ -953,7 +954,7 @@ macswitcher preserves any line starting with `[`. The role seeds the file from
 present, so an overlay can add one and have it arrive on the next play.
 
 Comments must be on their own line. AdGuard Home parses a trailing
-`9.9.9.9 # note` as a *second* upstream address and rejects it.
+`9.9.9.9 # note` as a _second_ upstream address and rejects it.
 
 ### Two traps, both measured
 
@@ -986,7 +987,7 @@ kiac is a Go tool of its own (`~/Workspace/Schretzi/kiac`); nothing about it is
 installed from this repository. Its node VMs — and every `container` the runtime
 starts — sit on the `vmnet` network and get `nameserver 192.168.64.1` written
 into their `resolv.conf`. That address is the host end of the vmnet bridge, and
-the resolver has to be *listening on it*; mDNSResponder does not forward on
+the resolver has to be _listening on it_; mDNSResponder does not forward on
 their behalf.
 
 The addresses are **not** fixed. The vmnet hands them out by DHCP in start
@@ -1100,6 +1101,7 @@ keeps its own rotation because it holds the fd open) and
 documented exception in [CONVENTIONS.md](CONVENTIONS.md).
 
 _Role: `adguardhome`_ — needs sudo
+
 ## AI tooling — one set of skills, every assistant
 
 Skills are `SKILL.md` directories on disk.
@@ -1372,7 +1374,7 @@ and the intermediates; `roles/host_ca` now asserts the root exists and issues
 only what clusters need.
 
 The old directory is migrated on first run — the keys and certificates are
-*moved*, not regenerated. Regenerating would mean re-trusting the root and
+_moved_, not regenerated. Regenerating would mean re-trusting the root and
 re-issuing everything under it, including certificates inside running
 clusters. For the same reason the CN still says "LocalKubernetes Root CA":
 renaming a CA does not rename it, it creates a different one. The name is a
@@ -1422,7 +1424,7 @@ security verify-cert -c ~/.local/share/localca/root_ca.crt
 security find-certificate -c "Privoxy HTTPS Inspection CA" /Library/Keychains/System.keychain
 ```
 
-Note that `verify-cert` on an *intermediate* proves nothing about the
+Note that `verify-cert` on an _intermediate_ proves nothing about the
 keychain: it chains the file it is handed up to the trusted root and reports
 success either way. Use `find-certificate` for intermediates.
 
@@ -1546,7 +1548,7 @@ plus `openssl@3`, `--with-openssl` and `--enable-extended-statistics`.
 
 Without inspection privoxy sees only `CONNECT host:443` — host-level blocking,
 which AdGuard Home already does at the DNS layer. Inspection is what makes URL
-*paths* filterable on HTTPS, and it works by privoxy terminating TLS with a
+_paths_ filterable on HTTPS, and it works by privoxy terminating TLS with a
 certificate it mints from a local CA.
 
 That certificate comes from **this machine's own CA**, not from a private root
@@ -1576,7 +1578,7 @@ What breaks, and where the escape hatch is:
 - **Anything with its own trust store** — Java's `cacerts`, some Go and Python
   programs. Trusting the CA in the keychain does not reach them.
 
-privoxy is also the TLS *client* once inspecting, and it does not read the
+privoxy is also the TLS _client_ once inspecting, and it does not read the
 keychain: with no `trusted-cas-file` at all,
 `SSL_CTX_load_verify_locations(NULL, NULL)` fails and every HTTPS connection
 dies (`openssl.c:1036`). The role therefore assembles
@@ -1586,15 +1588,15 @@ through the proxy.
 
 ### Files
 
-| Path                                    | Owner                    | Notes                                       |
-| --------------------------------------- | ------------------------ | ------------------------------------------- |
-| `~/.config/privoxy/config`              | this repo (`config.j2`)  | templated with force — privoxy never writes it |
-| `~/.config/privoxy/user.action`         | this repo                | inspection defaults, pinning exceptions, blocks |
-| `~/.config/privoxy/user.filter`         | this repo                | empty; `config` references it                |
-| `~/.local/share/localca/privoxy_intermediate.*` | `local_ca` role  | `0600`, shared PKI, never in git             |
-| `~/.local/state/privoxy/certs/`         | privoxy                  | per-site certs, safe to delete               |
-| `~/.local/state/privoxy/trusted-cas.pem`| the role                 | regenerated every run                        |
-| `~/.local/state/macswitcher/filter.pac` | macswitcher              | what alpaca is pointed at — `filter_proxy` generates it, this repo owns no PAC |
+| Path                                            | Owner                   | Notes                                                                          |
+| ----------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `~/.config/privoxy/config`                      | this repo (`config.j2`) | templated with force — privoxy never writes it                                 |
+| `~/.config/privoxy/user.action`                 | this repo               | inspection defaults, pinning exceptions, blocks                                |
+| `~/.config/privoxy/user.filter`                 | this repo               | empty; `config` references it                                                  |
+| `~/.local/share/localca/privoxy_intermediate.*` | `local_ca` role         | `0600`, shared PKI, never in git                                               |
+| `~/.local/state/privoxy/certs/`                 | privoxy                 | per-site certs, safe to delete                                                 |
+| `~/.local/state/privoxy/trusted-cas.pem`        | the role                | regenerated every run                                                          |
+| `~/.local/state/macswitcher/filter.pac`         | macswitcher             | what alpaca is pointed at — `filter_proxy` generates it, this repo owns no PAC |
 
 Opposite of the macswitcher role directly above: nothing here is
 runtime-owned, so everything is templated with force.
@@ -1615,7 +1617,7 @@ and turns the log into a browsing history on disk.
 That rules out the usual way of getting numbers out of privoxy.
 `privoxy-log-parser --statistics` (shipped by the formula) reads `LOG_LEVEL_CLF`
 lines, so it needs `debug 512` — the same browsing history under another name,
-and one that rotation makes *worse* rather than better: the statistics window is
+and one that rotation makes _worse_ rather than better: the statistics window is
 whatever is still on disk, so useful numbers mean deliberately keeping five
 generations of every URL visited.
 
@@ -1660,7 +1662,7 @@ tail -f ~/Library/Logs/privoxy.log                                      # blocks
 The status page at <http://config.privoxy.org/show-status> (through the proxy)
 lists the compiled-in features, every action file it loaded, and the three
 statistics tables — block rate, count per block reason, count per filter. It is
-reachable only *through* the proxy; `http://127.0.0.1:8118/` answers 400.
+reachable only _through_ the proxy; `http://127.0.0.1:8118/` answers 400.
 `/show-url-info` is the one to use when a `user.action` rule does not do what it
 looks like it should: it says which actions apply to a URL and which file set
 them.
@@ -1687,6 +1689,5 @@ for 30 s and then fail with `No server or forwarder response received`. The
 - [ ] Work configs into overlay and search for repo to push
 - [ ] Regularly vulnerability check and how to keep track of my project status
 - [ ] ssh config - now everything is one big file combined private and work,
-      need to adapt and split
+  need to adapt and split
 - [ ] look into checkmate.nvim (https://github.com/bngarren/checkmate.nvim)
-

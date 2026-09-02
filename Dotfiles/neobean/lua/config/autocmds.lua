@@ -253,6 +253,14 @@ vim.api.nvim_create_autocmd("BufRead", {
     -- Ignore files in my daily note directory
     if file_path:match(os.getenv("HOME") .. "/github/obsidian_main/250%-daily/") then
       return
+    end
+    -- Ignore the task-review digest file -- it manages its own fold
+    -- defaults (config/modules/task_review.lua's setup_autofold) so that
+    -- "Work" stays expanded and other clients/Untagged start collapsed;
+    -- running this generic "collapse everything" pass first would race
+    -- with (and get overwritten by, or clobber) that logic
+    if require("config.modules.task_review").is_review_buffer(vim.api.nvim_get_current_buf()) then
+      return
     end -- Avoid running zk multiple times for the same buffer
     if vim.b.zk_executed then
       return
@@ -267,6 +275,11 @@ vim.api.nvim_create_autocmd("BufRead", {
     end, 100) -- Delay in milliseconds (100ms should be enough)
   end,
 })
+
+-- Apply config/modules/task_review.lua's default fold state (first client
+-- expanded, everything else in the managed section collapsed) whenever the
+-- review digest file is opened in a window
+require("config.modules.task_review").setup_autofold()
 
 -- Clear jumps when I open Neovim, otherwise there'a lot of crap that links to
 -- different files, trying this and will see if it works out or not

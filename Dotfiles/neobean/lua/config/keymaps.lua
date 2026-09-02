@@ -2749,6 +2749,106 @@ vim.keymap.set("n", "<M-x>", function()
   require("config.modules.markdown_tasks").toggle_done()
 end, { desc = "[P]Toggle task and move it to 'done'" })
 
+-- Build/refresh a deduplicated review list of every not-done task across
+-- the vault (open + in-progress/on-hold custom states) into the
+-- `<!-- task-review:start/end -->` section of a file, replacing only that
+-- section each time it's run -- see config/modules/task_review.lua.
+-- Prompts for a target file, defaulting to notes.root() .. "/Review.md"
+vim.keymap.set("n", "<leader>tR", function()
+  local task_review = require("config.modules.task_review")
+  vim.ui.input({
+    prompt = "Task review target file: ",
+    default = task_review.default_target(),
+    completion = "file",
+  }, function(target_file)
+    if target_file and target_file ~= "" then
+      task_review.refresh(target_file)
+    end
+  end)
+end, { desc = "[P]Refresh open-tasks review section in a file" })
+
+-- Create a new task below the cursor, pre-tagged with @created(today), a
+-- @client(...) chosen from config/modules/task_tags.lua's fixed client
+-- list, and (if a client was chosen) a @project(...) picked from that
+-- client's previously-used projects or typed fresh via "+ New project...".
+-- Cancelling either prompt (<Esc>) still creates the task, just without
+-- that tag (and skips the project prompt entirely if client was skipped).
+local NEW_PROJECT_CHOICE = "+ New project..."
+
+vim.keymap.set("n", "<leader>tn", function()
+  local task_tags = require("config.modules.task_tags")
+
+  local function insert_task(client, project)
+    local row = vim.api.nvim_win_get_cursor(0)[1]
+    local tags = "@created(" .. task_tags.today() .. ")"
+    if client then
+      tags = tags .. " @client(" .. client .. ")"
+    end
+    if project and project ~= "" then
+      tags = tags .. " @project(" .. project .. ")"
+    end
+    local new_line = "- [ ] " .. tags
+    vim.api.nvim_buf_set_lines(0, row, row, false, { new_line })
+    vim.api.nvim_win_set_cursor(0, { row + 1, 6 })
+    vim.cmd("startinsert")
+  end
+
+  vim.ui.select(task_tags.clients, { prompt = "Task client:" }, function(client)
+    if not client then
+      insert_task(nil, nil)
+      return
+    end
+
+    local projects = task_tags.known_projects(client)
+    table.insert(projects, NEW_PROJECT_CHOICE)
+    vim.ui.select(projects, { prompt = "Task project (" .. client .. "):" }, function(project)
+      if project == NEW_PROJECT_CHOICE then
+        vim.ui.input({ prompt = "New project name: " }, function(input)
+          insert_task(client, input)
+        end)
+      else
+        insert_task(client, project)
+      end
+    end)
+  end)
+end, { desc = "[P]New task with @created + @client + @project" })
+
+-- Fast state-change keymaps for the todo under the cursor, going through
+-- checkmate.nvim's own toggle()/add_metadata() API (checkmate's parsed
+-- state) rather than any bracket-regex tool -- this keeps working
+-- regardless of whether the buffer currently shows the plain `- [ ]` text
+-- or checkmate's rendered icon glyph, unlike `<M-x>` (markdown_tasks.lua)
+vim.keymap.set("n", "<leader>tx", function()
+  local checkmate = require("checkmate")
+  checkmate.toggle("checked")
+  checkmate.add_metadata("done", os.date("%Y-%m-%d"))
+end, { desc = "[P]Close task (checked + @done today)" })
+
+vim.keymap.set("n", "<leader>t.", function()
+  require("checkmate").toggle("in_progress")
+end, { desc = "[P]Set task in-progress" })
+
+vim.keymap.set("n", "<leader>t/", function()
+  require("checkmate").toggle("on_hold")
+end, { desc = "[P]Set task on-hold" })
+
+-- Manually re-run the unfinished-task carryover (config/modules/
+-- task_carryover.lua) against the daily note currently open -- normally
+-- this runs automatically the moment today's daily note is first created,
+-- but if an older daily note gets a new/reopened unfinished task afterwards,
+-- this sweeps it (and any other stray unfinished tasks in *other* daily
+-- notes) into the current note's "### Open Tasks for Today" section
+vim.keymap.set("n", "<leader>tC", function()
+  local fname = vim.fn.expand("%:t")
+  if not fname:match("^%d+%-%d+%-%d+%-?%w*%.md$") then
+    vim.api.nvim_echo({ { "Current file is not a daily note", "ErrorMsg" } }, false, {})
+    return
+  end
+  vim.cmd("update")
+  require("config.modules.task_carryover").move_unfinished_tasks(vim.fn.expand("%:p"))
+  vim.cmd("checktime")
+end, { desc = "[P]Carry over unfinished tasks from other daily notes" })
+
 -- -- Toggle bullet point at the beginning of the current line in normal mode
 -- vim.keymap.set("n", "<leader>ml", function()
 --   -- Notify that the function is being executed
@@ -3977,6 +4077,15 @@ local function create_daily_note(date_line, daily_note_dir)
         file:write(string.format("# %s\n\n## Daily Note\n\n", note_name))
       end
       file:close()
+
+      -- Only sweep unfinished tasks forward when the note just created is
+      -- *today's* -- carrying stray open tasks into a future-dated note
+      -- (e.g. via the "create next N days" keymaps) wouldn't make sense,
+      -- since those tasks aren't due yet
+      if y and tonumber(y) == tonumber(os.date("%Y")) and tonumber(m) == tonumber(os.date("%m")) and tonumber(d) == tonumber(os.date("%d")) then
+        require("config.modules.task_carryover").move_unfinished_tasks(full_path)
+      end
+
       vim.cmd("edit " .. vim.fn.fnameescape(full_path))
       vim.cmd("bd!")
       vim.api.nvim_echo({

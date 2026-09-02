@@ -7,6 +7,17 @@ local_proxy:
     - ::1
     - kubernetes
     - kiac
+  # Agents that read the proxy from their launchd environment. launchd does not
+  # source the shell's rc files, so they only see a proxy because macswitcher
+  # publishes one with `launchctl setenv` - and only ever the value that was
+  # published before they started. Restarting them is the whole mechanism.
+  #
+  # tunneling is here because its IAP dialer reaches Google through Go's
+  # http.DefaultTransport. Without a proxy in its environment it resolves
+  # oauth2.googleapis.com itself and fails every tunnel with "no such host",
+  # which reads like broken DNS and is not.
+  restart_agents:
+    - tunneling
 alpaca:
   enabled: true
   command:
@@ -154,5 +165,21 @@ applications:
       - stop
     restart:
       - kerberoskeepalive
+      - service
+      - restart
+  # Same reasoning as kerberoskeepalive: tunneling owns its own plist, so let
+  # its `service` subcommand own the restart. Named in local_proxy.restart_agents,
+  # which is what actually invokes this.
+  tunneling:
+    start:
+      - tunneling
+      - service
+      - start
+    stop:
+      - tunneling
+      - service
+      - stop
+    restart:
+      - tunneling
       - service
       - restart

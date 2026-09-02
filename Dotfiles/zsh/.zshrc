@@ -60,3 +60,7 @@ done
 # sops+age (LocalKubernetes vault.sops.yaml) — macOS default lookup path is
 # ~/Library/Application Support/sops/age/keys.txt, not ~/.config/...
 export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+
+# LM Studio CLI (lms). Installer-generated block, with its hardcoded
+# /Users/<name> replaced by $HOME so the file stays portable.
+export PATH="$PATH:$HOME/.lmstudio/bin"

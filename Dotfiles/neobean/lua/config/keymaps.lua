@@ -4646,4 +4646,22 @@ end, { desc = "[P]Present markdown file with presenterm" })
 --   "<cmd>silent !tmux neww ~/github/dotfiles-latest/tmux/tools/prime/tmux-sessionizer.sh<CR>"
 -- )
 
+-- Quick-capture: create a new Inbox note (Inbox/YYYY-MM-DD_Title.md) from
+-- Templates/note.md, after asking for a title
+vim.keymap.set("n", "<leader>nn", function()
+  require("config.modules.inbox_note").create_note()
+end, { desc = "[P]Create new inbox note from template" })
+
+-- Fuzzy-find a Hub (Hubs/*.md) and insert `[[Hub]]` at the cursor, so you
+-- don't have to remember which hubs exist or how they're spelled
+vim.keymap.set("n", "<leader>nh", function()
+  require("config.modules.inbox_note").pick_hub()
+end, { desc = "[P]Insert hub link" })
+
+-- Fuzzy-find a canonical Tag (Tags/*.md) and insert it at the cursor, same
+-- idea as <leader>nh but for the `tags:` frontmatter field
+vim.keymap.set("n", "<leader>nt", function()
+  require("config.modules.inbox_note").pick_tag()
+end, { desc = "[P]Insert tag" })
+
 return M

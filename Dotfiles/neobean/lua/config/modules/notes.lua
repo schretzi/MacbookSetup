@@ -87,6 +87,32 @@ end
 -- the notes root. Keep this in sync with `template` in .obsidian/daily-notes.json
 local daily_template = "Templates/daily.md"
 
+-- NOTE: The Obsidian template applied to new inbox notes, see `M.render_note_template`
+local note_template = "Templates/note.md"
+
+-- Subdirectories of the root that hold quick-capture notes, hub pages, and
+-- canonical tag pages, used by the `<leader>nn`/`<leader>nh`/`<leader>nt`
+-- keymaps (config/keymaps.lua and config/modules/inbox_note.lua)
+local inbox_subdir = "Inbox"
+local hubs_subdir = "Hubs"
+local tags_subdir = "Tags"
+
+-- Directory that holds quick-capture notes, used by `<leader>nn`
+function M.inbox_dir()
+  return M.root() .. "/" .. inbox_subdir
+end
+
+-- Directory that holds hub pages (topic index notes), used by `<leader>nh`
+function M.hubs_dir()
+  return M.root() .. "/" .. hubs_subdir
+end
+
+-- Directory that holds canonical tag pages, used by `<leader>nt` as a
+-- spelling/lookup reference for the `tags:` frontmatter field
+function M.tags_dir()
+  return M.root() .. "/" .. tags_subdir
+end
+
 -- Render the Obsidian daily template for the given date, substituting the
 -- template variables Obsidian itself supports, so a note created from nvim
 -- looks the same as one created from Obsidian
@@ -115,6 +141,35 @@ function M.render_daily_template(date)
   for i, line in ipairs(lines) do
     lines[i] = line:gsub("{{(%w+)}}", function(name)
       -- Unknown variables are left untouched rather than blanked out
+      return values[name:lower()]
+    end)
+  end
+
+  return lines
+end
+
+-- Render the Obsidian note template for a new inbox note, substituting
+-- {{date}} and {{title}}, so a note created from nvim looks the same as one
+-- created from Obsidian's "New note from template" command
+--
+-- Returns a list of lines, or nil when the template is missing or unreadable
+function M.render_note_template(title, date)
+  date = date or os.date("%Y-%m-%d")
+
+  local path = M.root() .. "/" .. note_template
+  if vim.fn.filereadable(path) == 0 then
+    return nil
+  end
+
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok or type(lines) ~= "table" then
+    return nil
+  end
+
+  local values = { date = date, title = title }
+
+  for i, line in ipairs(lines) do
+    lines[i] = line:gsub("{{(%w+)}}", function(name)
       return values[name:lower()]
     end)
   end

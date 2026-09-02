@@ -6,7 +6,11 @@ local_proxy:
     - 127.0.0.1
     - ::1
     - kubernetes
+    # The cluster's short name. Go's no_proxy matching is label-suffix based,
+    # so `kiac` covers `kiac` and `*.kiac` only - the Gateway hosts are
+    # `<app>.apps.main.kiac.schretzi.net` and need the FQDN suffix as well.
     - kiac
+    - .kiac.schretzi.net
   # Agents that read the proxy from their launchd environment. launchd does not
   # source the shell's rc files, so they only see a proxy because macswitcher
   # publishes one with `launchctl setenv` - and only ever the value that was
@@ -49,6 +53,7 @@ filter_proxy:
   fail_open: true
   direct:
     - .kiac
+    - .kiac.schretzi.net
     - .ts.net
     - localhost
     - kubernetes

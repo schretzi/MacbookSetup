@@ -79,9 +79,9 @@ deny       = +block{Blocked by privoxy user.action.}
 # ---------------------------------------------------------------------------
 # 3. URL blocking
 # ---------------------------------------------------------------------------
-# Deliberately empty. privoxy's default.action already covers the usual
-# ad/tracker surface; this section is for the paths *this* machine should not
-# reach, which is a decision, not a default. Two worked examples:
+# privoxy's default.action already covers the usual ad/tracker surface; this
+# section is for the paths *this* machine should not reach, which is a
+# decision, not a default. Two worked examples:
 #
 #   {deny}
 #   .example.com/ads/
@@ -91,3 +91,13 @@ deny       = +block{Blocked by privoxy user.action.}
 #
 #   {-block}
 #   .example.com/ads/thing-i-actually-want
+
+# n8n (LocalKubernetes/roles/host_n8n) is reached via a schretzi.net-rooted
+# alias so Gmail's OAuth2 redirect URI passes Google's public-suffix check;
+# .kiac itself bypasses this proxy entirely (see NO_PROXY/proxy bypass
+# domains), so kiac.schretzi.net is the only one that actually reaches here.
+# Its Vite-bundled asset filenames (PopoverTrigger-*.js, PopperContent-*.js)
+# false-positive default.action's generic ad-blocking path pattern
+# `pop[-_]?(up|over|under|open)`, which was blocking the editor UI outright.
+{-block}
+.kiac.schretzi.net

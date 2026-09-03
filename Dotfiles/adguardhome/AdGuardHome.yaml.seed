@@ -281,11 +281,11 @@ dhcp:
 # Logging
 # ---------------------------------------------------------------------------
 # CONVENTIONS.md says nothing rotates itself and newsyslog owns rotation. This
-# is the documented exception, for the same reason as corp-vpn: AdGuard Home is
-# a third-party binary that holds its log fd open and cannot be taught to
-# reopen after newsyslog renames the file, so its own rotation stays on and
-# newsyslog only covers adguardhome.err.log (which launchd writes and which
-# stays a few KB).
+# is the documented exception, for the same reason as the work overlay's VPN
+# agent: AdGuard Home is a third-party binary that holds its log fd open and
+# cannot be taught to reopen after newsyslog renames the file, so its own
+# rotation stays on and newsyslog only covers adguardhome.err.log (which
+# launchd writes and which stays a few KB).
 log:
   file: /Library/Logs/adguardhome.log
   max_backups: 5

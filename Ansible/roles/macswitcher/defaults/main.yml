@@ -6,8 +6,12 @@
 
 macswitcher_config_dir: "{{ ansible_facts.env.HOME }}/.config/macswitcher"
 
-# The global config is generic and belongs to this repository.
-macswitcher_config_src: Dotfiles/macswitcher/config.yaml
+# The global config is generic and belongs to this repository. It is a
+# template only so that the VPN daemon - the one entry an overlay owns - can
+# be filled in from work_vpn_label, or left out entirely when no overlay
+# contributes one. Rendered with [[ ]] / [% %] because the file also carries
+# macswitcher's own {{ }} placeholders, which must survive verbatim.
+macswitcher_config_src: Dotfiles/macswitcher/config.yaml.j2
 
 # Neutral shell proxy defaults, seeded to ~/.zsh/rcs/proxy. Deliberately NOT
 # in Dotfiles/zsh/.zsh/rcs/: that directory is a dotfiles merge dir, every

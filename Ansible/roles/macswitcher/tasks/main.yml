@@ -62,11 +62,15 @@
     # force: false - macswitcher rewrites this file, so it is seeded once and
     # the live copy wins from then on.
     - name: Macswitcher | seed the global configuration
-      ansible.builtin.copy:
+      ansible.builtin.template:
         src: "{{ repo_root }}/{{ macswitcher_config_src }}"
         dest: "{{ macswitcher_config_dir }}/config.yaml"
         mode: "0644"
         force: false
+        variable_start_string: "[["
+        variable_end_string: "]]"
+        block_start_string: "[%"
+        block_end_string: "%]"
 
     # ----------------------------------------------------------------------
     # Contexts, contributed by the overlays

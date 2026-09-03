@@ -80,9 +80,11 @@ daemons:
     label: com.schretzi.kerberoskeepalive
   omt:
     label: com.schretzi.omt
+[% if work_vpn_label | default('') | length > 0 %]
   vpn:
-    label: com.schretzi.corp-vpn
+    label: [[ work_vpn_label ]]
     interface: utun99
+[% endif %]
   tunneling:
     label: com.schretzi.tunneling
   privoxy:
@@ -123,7 +125,7 @@ applications:
   # script-based agents - see docs/networking-tools.md), so contexts control
   # them with raw launchctl against the gui domain. bootout/bootstrap, not
   # kill/kickstart, are used for start/stop: bootout is what actually removes
-  # the job so KeepAlive does not just restart it (see the corp-vpn plist
+  # the job so KeepAlive does not just restart it (see the VPN plist
   # comment). `sh -c` (not a bare argv) so `$(id -u)` and `~` expand per-user.
   #
   # Both RunAtLoad, so they are already bootstrapped at login - a plain
@@ -144,19 +146,21 @@ applications:
       - sh
       - -c
       - launchctl kickstart -k gui/$(id -u)/com.schretzi.privoxy
+[% if work_vpn_label | default('') | length > 0 %]
   vpn:
     start:
       - sh
       - -c
-      - launchctl print gui/$(id -u)/com.schretzi.corp-vpn >/dev/null 2>&1 || launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.schretzi.corp-vpn.plist
+      - launchctl print gui/$(id -u)/[[ work_vpn_label ]] >/dev/null 2>&1 || launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/[[ work_vpn_label ]].plist
     stop:
       - sh
       - -c
-      - launchctl print gui/$(id -u)/com.schretzi.corp-vpn >/dev/null 2>&1 && launchctl bootout gui/$(id -u)/com.schretzi.corp-vpn || true
+      - launchctl print gui/$(id -u)/[[ work_vpn_label ]] >/dev/null 2>&1 && launchctl bootout gui/$(id -u)/[[ work_vpn_label ]] || true
     restart:
       - sh
       - -c
-      - launchctl kickstart -k gui/$(id -u)/com.schretzi.corp-vpn
+      - launchctl kickstart -k gui/$(id -u)/[[ work_vpn_label ]]
+[% endif %]
   # kerberoskeepalive ships its own `service` subcommand - prefer it over raw
   # launchctl so plist path/label details stay owned by that tool.
   kerberos_keep_alive:

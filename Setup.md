@@ -38,43 +38,48 @@ Privacy & Security** and reboot when asked:
 systemextensionsctl list | grep littlesnitch   # [activated enabled]
 ```
 
-At this time I don't have a ruleset ready to be used, so starting with a blank
-list of rules can be very hard for the first minutes/hours. You might
-considering setting the firewall to operation mode "silent allow" and check the
-added rules a day or two later and approve the major systems like Microsoft,
-Google, Apple. From this on you should set it back to Alert for new accesses.
+There is no ruleset to import yet, so the first hours on an empty rule list are
+brutal — every process asks, and you approve blindly. Start in **Silent Mode —
+Allow Connections** instead: Little Snitch records the rules without prompting.
+A day or two later, review what accumulated, keep the obvious ones (Apple,
+Microsoft, Google), and drop the rest. Then switch back to **Alert Mode** so new
+connections ask again.
 
 ### DisplayLink (docks)
 
-Docks that drive external displays over USB need Synaptics' driver. There is no
-cask, so it is a manual download:
+Docks that drive external displays over USB need Synaptics' driver, and there is
+no cask for it — download DisplayLink Manager by hand:
 <https://www.synaptics.com/products/displaylink-graphics/downloads/macos>
 
-DisplayLink Manager needs **Screen Recording** permission — it captures the
-desktop to push it over USB — granted in System Settings → Privacy & Security.
-Without it the external screens stay black.
+It then needs **Screen & System Audio Recording** permission (the pane older
+notes still call _Screen Recording_), granted in **System Settings → Privacy &
+Security** — it captures the desktop to push those pixels over USB. Without it
+the external screens stay black.
 
 ### Karabiner DriverKit VirtualHIDDevice
 
 kanata, installed by Ansible later, drives the keyboard through this virtual HID
-driver. It needs **package version 6.2.0**; the driver bundled with full
-Karabiner-Elements is newer and breaks kanata.
+driver. Take **package version 6.2.0** specifically — the newer driver bundled
+with full Karabiner-Elements breaks kanata.
 
-Download the `.pkg` from
-<https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice>, install it,
-then activate the driver and approve the extension in **System Settings →
-Privacy & Security**:
+Download that release's `.pkg` from
+<https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases> and
+install it. Installing only places the Manager app; the driver stays dormant
+until you activate it, which is what triggers the approval prompt in **System
+Settings → Privacy & Security**:
 
 ```bash
 /Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager activate
 ```
 
-Two version numbers are in play and they never match: the pqrs _package_ is
-6.2.0 (readable from the Manager app's `Info.plist`), while the extension it
-registers reports **1.8.0** — which is the only one `systemextensionsctl` ever
-shows:
+Expect two version numbers that never match. The pqrs _package_ is 6.2.0, which
+only the Manager app's `Info.plist` reports; the _extension_ it registers calls
+itself 1.8.0, and that is the only number `systemextensionsctl` will ever show:
 
 ```bash
+plutil -p /Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/Info.plist | grep ShortVersion
+# "CFBundleShortVersionString" => "6.2.0"
+
 systemextensionsctl list | grep Karabiner
 # ...VirtualHIDDevice (1.8.0/1.8.0) ... [activated enabled]
 ```
@@ -346,7 +351,7 @@ default, on their own second line:
   default in Starship.
 
 ```
-MacbookSetup on  main [!] on ☁️  user@corp.example
+MacbookSetup on  main [!] on ☁️
 proxy: filtered on ⛵ APL-GCP-2-Staging
 ❯
 ```
@@ -1226,7 +1231,7 @@ Not automated yet — no wrapper script exists here for
 
   ```bash
   ssh -p <port from the tunnel> <gcp-username>@localhost
-  # e.g. ssh -p 12022 ext_user_corp@localhost
+  # e.g. ssh -p 12022 <gcp_ssh_username>@localhost
   ```
 
   Accept/refresh the host key there, then retry whatever was using the tunnel.
@@ -1684,10 +1689,10 @@ for 30 s and then fail with `No server or forwarder response received`. The
 
 ## Improvment Ideas
 
-- [ ] When session-kitty stopped focus goes to finder, I want the last active session to get the focus
-- [ ] Tunneling script modernization
-- [ ] Work configs into overlay and search for repo to push
-- [ ] Regularly vulnerability check and how to keep track of my project status
-- [ ] ssh config - now everything is one big file combined private and work,
+- □ When session-kitty stopped focus goes to finder, I want the last active session to get the focus
+- □ Tunneling script modernization
+- □ Work configs into overlay and search for repo to push
+- □ Regularly vulnerability check and how to keep track of my project status
+- □ ssh config - now everything is one big file combined private and work,
   need to adapt and split
-- [ ] look into checkmate.nvim (https://github.com/bngarren/checkmate.nvim)
+- □ look into checkmate.nvim (https://github.com/bngarren/checkmate.nvim)

@@ -12,8 +12,9 @@ writer and the `service` command tree — lives in the
 skill. Change the skill first; this file records only what is specific to *this*
 machine (my owner prefix, my job list, my paths).
 
-Migrating an existing machine onto these conventions:
-`Scripts/MacOS/migrate-launchd-conventions.sh` (dry run by default), then
+The migration onto these conventions is complete: every job below already
+carries its final name, and the one-shot script that tore down the old
+identities has been removed. Setting up a machine now needs only
 `ansible-playbook site.yml --ask-become-pass`.
 
 Third-party jobs are out of scope: `com.google.*`, `homebrew.mxcl.*`,
@@ -23,7 +24,7 @@ Third-party jobs are out of scope: `com.google.*`, `homebrew.mxcl.*`,
 ## 1. Naming
 
 `<name>` is the binary name for a Go CLI, or a short kebab-case job name for a
-script (`offlineimap-sync`, `corp-vpn`, `vmnet-nat-refresh`).
+script (`offlineimap-sync`, `vmnet-nat-refresh`).
 
 | thing | convention |
 | --- | --- |
@@ -113,10 +114,11 @@ Two consequences:
   which re-stats the path (at most once a second) and reopens when the inode
   it holds is no longer the one at that path.
 
-The one accepted exception is `corp-vpn`: it ends in `exec sudo openconnect`,
-so the fd belongs to a third-party binary that cannot be taught to reopen. Its
-logs are a few KB after weeks and the job restarts on every network flap, so
-size-based rotation realistically never fires. Documented, not fixed.
+The one accepted exception is the work overlay's VPN agent: it ends in
+`exec sudo openconnect`, so the fd belongs to a third-party binary that cannot
+be taught to reopen. Its logs are a few KB after weeks and the job restarts on
+every network flap, so size-based rotation realistically never fires.
+Documented, not fixed.
 
 ## 4. CLI surface
 

@@ -8,3 +8,11 @@ work_certificate_cn: "{{ git_user_name | default('') }}"
 # this path so commits there use the work identity. The overlay overrides it
 # with the employer-specific directory name.
 work_workspace_dir: "{{ ansible_facts.env.HOME }}/Workspace/Work"
+
+# The VPN LaunchAgent the work overlay contributes. The plist, the script it
+# execs and the rotation conf are employer-specific and live in the overlay,
+# so their names do too - this repository only knows that a VPN job may exist.
+# Empty by default: without an overlay there is nothing to install.
+work_vpn_plist: ""
+work_vpn_label: ""
+work_vpn_newsyslog_conf: ""

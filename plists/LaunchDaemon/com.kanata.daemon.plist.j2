@@ -40,11 +40,29 @@
     </dict>
     <key>RunAtLoad</key>
     <true/>
+    <!--
+      Dict form, not a bare <true/>: bare true restarts the job even after a
+      clean exit, so `launchctl stop` never actually stops anything and the
+      only way out is bootout. SuccessfulExit=false means "restart only if it
+      failed", which is what a crash-loop guard is for.
+
+      The remaining gap - kanata exiting 0 and then staying down - is bounded:
+      com.schretzi.kanata-wake kickstarts the job on every wake, and a reboot
+      loads it again. For a keymapper, coming back is the important direction.
+    -->
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <!--
+      /Library/Logs, matching every other daemon in this repo, rather than
+      /tmp. See etc/newsyslog.d/kanata.conf for the rotation caveat this
+      move introduces.
+    -->
     <key>StandardOutPath</key>
-    <string>/tmp/kanata.out.log</string>
+    <string>/Library/Logs/kanata.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/kanata.err.log</string>
+    <string>/Library/Logs/kanata.err.log</string>
 </dict>
 </plist>

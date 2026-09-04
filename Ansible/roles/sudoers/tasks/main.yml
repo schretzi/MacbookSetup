@@ -30,6 +30,16 @@
   become: true
   when: not (sudoers_passwordless_enabled | bool)
 
+# Deliberately not gated on sudoers_passwordless_enabled: a rule that should
+# be gone should be gone either way. Gating it would mean the only run that
+# deletes a withdrawn rule is one that also switches passwordless sudo off.
+- name: Sudoers | remove rule files that are no longer declared
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item }}"
+    state: absent
+  loop: "{{ sudoers_rules_removed | default([]) }}"
+  become: true
+
 - name: Sudoers | install passwordless rule files
   ansible.builtin.template:
     src: rule.j2

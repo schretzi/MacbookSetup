@@ -41,9 +41,35 @@ sudoers_rules:
     commands:
       - /usr/local/bin/adguardhome_zones_refresh
 
-  - name: kanata-restart
-    comment: restart the kanata daemon (kanata_restart alias, re-grabs keyboard after cable/Bluetooth switch)
+  # Every launchctl verb `macswitcher observe` needs for kanata, plus the one
+  # the kanata_restart alias uses. They live in one rule because they are one
+  # concern - the daemon's lifecycle - and splitting them would mean two files
+  # to audit for the same privilege.
+  #
+  # Why bootout/bootstrap and not `launchctl stop`: the plist sets KeepAlive,
+  # so a stopped-but-loaded job is restarted at once. Worse, com.schretzi.kanata-wake
+  # kickstarts the daemon on every system wake and guards only on `launchctl
+  # print` - which still succeeds for a loaded job - so a `stop` would be
+  # silently undone the next time the lid opens. bootout unloads the job, the
+  # guard then fails, and the stop survives sleep/wake. A reboot brings kanata
+  # back, which for a keymapper is the wanted safety net.
+  #
+  # Why these need to be listed at all, given `sudo` would prompt anyway:
+  # macswitcher's generic system-scope path builds `sudo sh -c "launchctl ..."`,
+  # and sudo then matches on /bin/sh, which no rule here can name. The daemons
+  # entry in macswitcher's config.yaml therefore uses explicit start/stop/
+  # restart_command overrides that call /bin/launchctl directly - those are the
+  # command lines below.
+  #
+  # Note this grants root to whoever can write ~/.cargo/bin/kanata, since that
+  # is what the plist execs. That is not new - the kickstart rule already did -
+  # and it is called out in plists/LaunchDaemon/com.kanata.daemon.plist.j2.
+  # Moving the binary to a root-owned /usr/local/bin would close it.
+  - name: kanata-service
+    comment: start/stop/restart the kanata daemon (macswitcher observe, kanata_restart alias)
     commands:
+      - /bin/launchctl bootout system /Library/LaunchDaemons/com.kanata.daemon.plist
+      - /bin/launchctl bootstrap system /Library/LaunchDaemons/com.kanata.daemon.plist
       - /bin/launchctl kickstart -k system/com.kanata.daemon
 
   - name: dns-flush
@@ -61,6 +87,20 @@ sudoers_rules:
     comment: manually re-run the kiac vmnet NAT interface refresh (pf_vmnet_nat role) without waiting for the LaunchDaemon watcher
     commands:
       - /usr/local/bin/vmnet_nat_refresh
+
+# Names of rule files this role used to manage and must now delete.
+#
+# The install task only ever writes the files named in sudoers_rules, and the
+# cleanup task above only removes those same names - so renaming or dropping an
+# entry leaves its old file behind, still granting NOPASSWD, indefinitely. For
+# a file whose only purpose is granting privilege, "left behind" is the one
+# outcome that must not be possible.
+#
+# An entry stays here until every machine has run the role at least once;
+# removing a path that is already gone is a no-op.
+sudoers_rules_removed:
+  # Folded into kanata-service, which also covers bootout/bootstrap.
+  - kanata-restart
 
 # Master switch: set to false to refuse passwordless sudo entirely. Any
 # rule files this role previously installed are removed and none are

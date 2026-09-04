@@ -1,0 +1,14 @@
+---
+# What this role installs, and where it stops.
+#
+# It schedules a recovery, it does not define the workload. Which containers
+# exist is LocalKubernetes' business (inventory `global_hosts`), and the script
+# starts whatever is there rather than carrying a second copy of that list -
+# a duplicated list drifts, and the failure is a container that silently never
+# comes back.
+
+# The wrapper LocalKubernetes installs for `ansible-playbook dns-update.yml`.
+# Named here only so the role can say something useful when it is missing:
+# without it the containers still start, but the AdGuard Home zone keeps
+# yesterday's addresses.
+container_autostart_dns_wrapper: "{{ ansible_facts.env.HOME }}/bin/kiac-dns-update"

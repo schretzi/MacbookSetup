@@ -231,6 +231,13 @@
       when: enable_kerberoskeepalive | bool
       tags: [kerberoskeepalive, kerberos, krb]
 
+    # after adguardhome, whose bind-refresh script it calls the moment it
+    # starts a container, and after macswitcher, whose ~/.zsh/rcs/proxy it
+    # reads to give the container API server the current network's proxy.
+    - role: container_autostart
+      when: enable_container_autostart | bool
+      tags: [container_autostart, kiac, containers]
+
     - role: gcloud
       when: enable_gcloud | bool
       tags: [gcloud]

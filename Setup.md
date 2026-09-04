@@ -139,26 +139,27 @@ locations: `sudoers`, `localhost_alias`, `adguardhome`, `java`, `kanata`,
 instead — see [sudo](#sudo) below — but it is switched off until Touch ID for
 sudo works.
 
-| Role / tag        | Switch                   | What it does                                                      |
-| ----------------- | ------------------------ | ----------------------------------------------------------------- |
-| `base_dirs`       | `enable_base_dirs`       | `~/bin`, `~/tmp`, `~/Workspace`                                   |
-| `homebrew`        | `enable_homebrew`        | `brew bundle` per Brewfile, each file individually toggleable     |
-| `dotfiles`        | `enable_dotfiles`        | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`     |
-| `git`             | `enable_git`             | links the shared git ignore file, checks the signing key          |
-| `ssh`             | `enable_ssh`             | links `~/.ssh/config`, fixes permissions                          |
-| `gitlab`          | `enable_gitlab`          | renders instance list for `gl`, checks tokens are in the keychain |
-| `kubeconfig`      | `enable_kubeconfig`      | creates `~/.kube/configs` for `kubeconfig-add`/`kubeconfig-merge` |
-| `sudoers`         | `enable_sudoers`         | Touch ID for sudo, the shared credential cache, NOPASSWD rules    |
-| `java`            | `enable_java`            | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines`  |
-| `kanata`          | `enable_kanata`          | builds kanata with `cmd`, installs both daemons + log rotation    |
-| `windowmanager`   | `enable_windowmanager`   | yabai + skhd LaunchAgents                                         |
-| `mail`            | `enable_mail`            | maildir, notmuch index, offlineimap/omt agents, mail dotfiles     |
-| `localhost_alias` | `enable_localhost_alias` | the extra 127.0.0.x addresses on lo0                              |
-| `adguardhome`     | `enable_adguardhome`     | the resolver: pinned release, seeded config, zones, daemons       |
-| `macswitcher`     | `enable_macswitcher`     | seeds `~/.config/macswitcher` and the shell proxy variables       |
-| `gcloud`          | `enable_gcloud`          | gcloud components                                                 |
-| `ai`              | `enable_ai`              | links `schretzi-skills` into every assistant, assistant configs   |
-| `work`            | `enable_work`            | employer profile, supplied by the work overlay                    |
+| Role / tag            | Switch                       | What it does                                                                |
+| --------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `base_dirs`           | `enable_base_dirs`           | `~/bin`, `~/tmp`, `~/Workspace`                                             |
+| `homebrew`            | `enable_homebrew`            | `brew bundle` per Brewfile, each file individually toggleable               |
+| `dotfiles`            | `enable_dotfiles`            | symlinks `~/.config/*` and the home dotfiles into `Dotfiles/`               |
+| `git`                 | `enable_git`                 | links the shared git ignore file, checks the signing key                    |
+| `ssh`                 | `enable_ssh`                 | links `~/.ssh/config`, fixes permissions                                    |
+| `gitlab`              | `enable_gitlab`              | renders instance list for `gl`, checks tokens are in the keychain           |
+| `kubeconfig`          | `enable_kubeconfig`          | creates `~/.kube/configs` for `kubeconfig-add`/`kubeconfig-merge`           |
+| `sudoers`             | `enable_sudoers`             | Touch ID for sudo, the shared credential cache, NOPASSWD rules              |
+| `java`                | `enable_java`                | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines`            |
+| `kanata`              | `enable_kanata`              | builds kanata with `cmd`, installs both daemons + log rotation              |
+| `windowmanager`       | `enable_windowmanager`       | yabai + skhd LaunchAgents                                                   |
+| `mail`                | `enable_mail`                | maildir, notmuch index, offlineimap/omt agents, mail dotfiles               |
+| `localhost_alias`     | `enable_localhost_alias`     | the extra 127.0.0.x addresses on lo0                                        |
+| `adguardhome`         | `enable_adguardhome`         | the resolver: pinned release, seeded config, zones, daemons                 |
+| `macswitcher`         | `enable_macswitcher`         | seeds `~/.config/macswitcher` and the shell proxy variables                 |
+| `container_autostart` | `enable_container_autostart` | restarts the container runtime + service containers, refreshes the DNS zone |
+| `gcloud`              | `enable_gcloud`              | gcloud components                                                           |
+| `ai`                  | `enable_ai`                  | links `schretzi-skills` into every assistant, assistant configs             |
+| `work`                | `enable_work`                | employer profile, supplied by the work overlay                              |
 
 Two helper roles are never run directly: `link` (backup-then-symlink) and
 `launchd` (copy or render plist + `bootout`/`bootstrap`).
@@ -1049,6 +1050,55 @@ container system dns list
 That writes `/etc/resolver/mydomain`, which mDNSResponder consults _before_ the
 configured nameserver — so those names resolve on the host regardless of which
 resolver the system points at.
+
+### After a reboot or a crash, nothing brings the containers back
+
+Three separate things are broken once the machine comes up again, and only the
+last one had an owner before:
+
+1. **The runtime does not return.** `container system start` writes its
+   LaunchAgent to `~/Library/Application Support/com.apple.container/apiserver/`
+   and bootstraps it from there — outside `~/Library/LaunchAgents`, the only
+   place launchd loads from by itself. After a reboot the job is simply not
+   registered and every `container` command ends in
+   `XPC connection error: Connection invalid`. The plist it writes also pins the
+   versioned Cellar path (`/opt/homebrew/Cellar/container/<version>/libexec/…`),
+   so a `brew upgrade container` breaks the registered job as well.
+2. **Nothing starts the containers.** apple/container has no restart policy —
+   there is no `--restart` flag. Every container stays `stopped`.
+3. **The addresses are new.** See above: DHCP in start order, so
+   `/etc/adguardhome/zones/kiac.txt` names yesterday's addresses.
+
+`container_autostart` — a LaunchAgent, `RunAtLoad` plus a 300s safety net —
+does all three. It calls `container system start` unconditionally, which also
+rewrites the pinned path and so heals point 1 on every login. It reads
+`~/.zsh/rcs/proxy` first, because the API server inherits the environment of
+whoever started it and would otherwise run with no proxy at all, or with a
+stale one.
+
+Then it starts every stopped container **except cluster nodes**, and refreshes
+the zone only when an address actually changed.
+
+**Cluster node VMs are deliberately left alone.** A bare
+`container start kiac-main-control-plane` boots a cluster that _looks_ healthy
+and is not: the node address moved, `~/.kube/config` points nowhere, the kubeadm
+certificates need healing and Cilium needs a Helm upgrade with a fresh
+`k8sServiceHost`. That is what LocalKubernetes' `playbooks/resume.yml` is for.
+Autostarting them would produce a broken cluster that no longer reports itself
+as broken, so the script logs them and stops:
+
+```bash
+cd ~/Workspace/Schretzi/LocalKubernetes
+ansible-playbook playbooks/resume.yml --limit main
+```
+
+It keeps no list of containers or nodes — both would drift. Nodes come from
+`kiac get clusters -o json` at run time; everything else is "whatever the
+runtime reports, minus the nodes, minus `buildkit`" (which `container build`
+starts on demand and which costs 2 GB sitting idle).
+
+Logs are `~/Library/Logs/container-autostart.log`, and empty output means it
+found nothing to do.
 
 ### DNSSEC — not validated here any more
 

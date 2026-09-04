@@ -6,7 +6,11 @@ brew "koekeishiya/formulae/yabai"
 
 # Keymappers
 brew "koekeishiya/formulae/skhd" # for yabai
-brew "kanata"
+# No brew "kanata" here on purpose. kanata comes from `cargo install kanata
+# --features cmd` (kanata role) because the Homebrew bottle is built without
+# the cmd feature, which the keymap relies on. Having both installed only
+# means /opt/homebrew/bin shadows ~/.cargo/bin in PATH, so an interactive
+# `kanata` would run a different build than the daemon does.
 # Wake-event watcher: re-grabs the keyboard for kanata after sleep/wake, since
 # kanata's macOS backend never rescans devices on its own (kanata role,
 # com.schretzi.kanata-wake LaunchDaemon).

@@ -33,24 +33,53 @@ one was automated before this script existed:
    AdGuard Home to the vmnet gateway on its own 60s timer; it does not know
    anything about which name maps to which container.
 
-Cluster node VMs are deliberately NOT started here. `container start
-kiac-main-control-plane` boots the VM and produces a cluster that looks up and
-is not: the node's address changed, so ~/.kube/config points at nothing, the
-kubeadm certs need healing and Cilium needs a helm upgrade with a fresh
-k8sServiceHost. That is what LocalKubernetes' playbooks/resume.yml is for, and
-it ends by refreshing DNS itself. Starting them here would produce a broken
-cluster that no longer announces itself as broken.
+Cluster node VMs are never started with `container start`. That boots the VM
+and produces a cluster that looks up and is not: the node's address changed, so
+~/.kube/config points at nothing, the kubeadm certs need healing and Cilium
+needs a helm upgrade with a fresh k8sServiceHost. LocalKubernetes'
+playbooks/resume.yml does all of that in order (and ends by refreshing DNS and
+unsealing OpenBao), so a cluster is either resumed through that playbook or
+left alone.
+
+Which clusters get resumed is not a list kept here. LocalKubernetes already
+draws the distinction, in inventory/host_vars/<cluster>.yml:
+
+    cluster_role: main    -> "meant to run continuously (hosts OpenBao +
+                             ArgoCD)"
+    cluster_role: test    -> "disposable test clusters, stopped/resumed on
+                             demand"
+
+(README, "Design"). So `cluster_role: main` is read at run time and only those
+clusters are resumed - a new test cluster is correctly ignored the day it is
+created, without anything here being edited.
+
+Two further limits on that, because a resume is expensive (main is 3 node VMs,
+12 GB of memory, and a playbook that takes minutes) and unattended:
+
+- Only on the first run after a boot, never on the periodic tick. The tick
+  exists to catch a stopped container, not to fight a human who just ran
+  `kiac stop cluster`.
+- Only if the cluster was still running when this script last looked. A
+  deliberate `kiac stop cluster main` is recorded within one tick and then
+  respected forever; a crash is not, because the crash left the state saying
+  "running". The one case that gets this wrong is stopping a cluster and
+  powering the machine off inside the same tick - it comes back once.
+
+A failed resume raises a notification rather than only a log line: a
+half-resumed cluster is otherwise noticed hours later, as something unreachable.
 
 Exit status is the interface:
 
     0   nothing to do, or everything done
-    1   the runtime could not be started (nothing else was attempted)
+    1   the runtime could not be started, or the container list was unreadable
+        (nothing else was attempted)
 """
 
 import fcntl
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -68,6 +97,16 @@ SKIP = {"buildkit"}
 
 STATE_FILE = HOME / ".local/state/container-autostart/addresses.json"
 LOCK_FILE = HOME / ".local/state/container-autostart/lock"
+
+# Where LocalKubernetes lives. Read from the kiac-dns-update wrapper, which is
+# Ansible-managed and already carries the answer, so the path is not stated
+# twice; the constant is only the fallback for a machine without the wrapper.
+DNS_WRAPPER_REPO_RE = re.compile(r'^REPO_ROOT="([^"]+)"', re.MULTILINE)
+LOCALKUBERNETES = HOME / "Workspace/Schretzi/LocalKubernetes"
+
+# A resume boots node VMs, heals kubeadm state, runs a Cilium helm upgrade,
+# re-renders DNS and unseals OpenBao with retries. Minutes, legitimately.
+RESUME_TIMEOUT = 1800
 
 # Long enough for a container to be handed a DHCP address, short enough that a
 # login is not visibly delayed by it. A container that takes longer is simply
@@ -91,23 +130,53 @@ def which(name):
 def run(args, timeout=120, **kwargs):
     """Run a command, capturing output, never raising.
 
-    Always bounded. Every tool here can hang: a `container` call whose XPC
-    peer died blocks forever, and that is precisely the state this script
-    exists to recover from. An unbounded child would be worse than useless -
-    launchd does not start a second instance while the first is alive, so one
-    hung run silently retires the 300s safety net, and the hung process keeps
-    the lock so manual runs bail out too.
+    Always bounded, and bounded for real. Every tool here can hang: a
+    `container` call whose XPC peer died blocks forever, and that is precisely
+    the state this script exists to recover from. An unbounded child would be
+    worse than useless - launchd does not start a second instance while the
+    first is alive, so one hung run silently retires the 300s safety net, and
+    the hung process keeps the lock so manual runs bail out too.
 
-    A timeout is reported the same way a non-zero exit is, so callers need no
-    extra branch: returncode 124, matching timeout(1).
+    Not subprocess.run(timeout=...): on a timeout that kills only the direct
+    child and then waits, with no timeout of its own, for the stdout pipe to
+    close - which needs every process holding it to exit. ansible-playbook
+    forks workers that inherit it, so killing the parent is not enough and the
+    "bounded" call blocks anyway. Running the child in its own session lets the
+    whole group be signalled instead.
+
+    A timeout is reported the way a non-zero exit is, so callers need no extra
+    branch: returncode 124, matching timeout(1).
     """
     try:
-        return subprocess.run(
-            args, capture_output=True, text=True, check=False, timeout=timeout, **kwargs
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+            **kwargs,
         )
-    except subprocess.TimeoutExpired as exc:
+    except OSError as exc:
+        return subprocess.CompletedProcess(args, 127, "", str(exc))
+
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except OSError:
+            proc.kill()
+        try:
+            stdout, stderr = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+            stdout, stderr = "", ""
         return subprocess.CompletedProcess(
-            args, 124, exc.stdout or "", f"timed out after {timeout}s"
+            args, 124, stdout or "", f"timed out after {timeout}s\n{stderr or ''}"
         )
 
 
@@ -337,16 +406,199 @@ def update_dns(any_cluster_running):
     return True
 
 
-def read_state():
+def boot_time():
+    """The current boot's identity, so a boot run can be told from a tick.
+
+    kern.boottime is stable for the life of a boot and changes across one, which
+    is exactly the question - unlike an uptime threshold, which guesses.
+    """
+    result = run(["/usr/sbin/sysctl", "-n", "kern.boottime"])
+    if result.returncode != 0:
+        return None
+    match = re.search(r"sec\s*=\s*(\d+)", result.stdout)
+    return match.group(1) if match else None
+
+
+def notify(message):
+    """A notification, because a log line nobody reads is not a report.
+
+    Best effort: this is a user-session agent so osascript is available, but a
+    failure to notify must never fail the run.
+    """
+    log(message)
+    osascript = which("osascript")
+    if not osascript:
+        return
+    script = (
+        'display notification {} with title "Container autostart"'.format(
+            json.dumps(message)
+        )
+    )
+    run([osascript, "-e", script], timeout=15)
+
+
+def localkubernetes_root():
+    wrapper = which("kiac-dns-update")
+    if wrapper:
+        try:
+            match = DNS_WRAPPER_REPO_RE.search(Path(wrapper).read_text())
+        except OSError:
+            match = None
+        if match:
+            return Path(match.group(1))
+    return LOCALKUBERNETES
+
+
+def continuous_clusters(root):
+    """Clusters whose host_vars say `cluster_role: main`.
+
+    Read at run time rather than configured here: LocalKubernetes already
+    distinguishes the cluster that is meant to run continuously from the
+    disposable test ones, and a second copy of that decision would drift the
+    first time a cluster is added.
+
+    Parsed with a regex rather than a YAML library on purpose - this runs as a
+    root-owned script, and PyYAML is installed in the user's site-packages
+    where root cannot see it. The files are Ansible-authored `key: value`.
+    """
+    found = set()
+    host_vars = root / "inventory/host_vars"
     try:
-        return json.loads(STATE_FILE.read_text())
+        candidates = sorted(host_vars.glob("*.yml"))
+    except OSError:
+        return found
+    for path in candidates:
+        try:
+            text = path.read_text()
+        except OSError:
+            continue
+        match = re.search(r"^cluster_role:\s*(\S+)", text, re.MULTILINE)
+        if match and match.group(1) == "main":
+            found.add(path.stem)
+    return found
+
+
+def cluster_states(containers, cluster_nodes):
+    """cluster name -> True if any of its node VMs is running.
+
+    Derived from the node containers rather than asked of kiac, so it stays
+    right when kiac cannot answer.
+    """
+    states = {}
+    for entry in containers:
+        name = entry.get("configuration", {}).get("id", "")
+        if not is_cluster_node(name, cluster_nodes):
+            continue
+        cluster = re.sub(r"^kiac-", "", name)
+        cluster = re.sub(r"-(control-plane|worker-\d+)$", "", cluster)
+        running = entry.get("status", {}).get("state") == "running"
+        states[cluster] = states.get(cluster, False) or running
+    return states
+
+
+def resume_cluster(root, name):
+    """Hand the cluster to the playbook that knows how to heal it."""
+    playbook = which("ansible-playbook")
+    if not playbook:
+        notify(f"ansible-playbook not found; cannot resume cluster {name}")
+        return False
+
+    log("resuming cluster {} (this takes minutes)".format(name))
+    result = run(
+        [playbook, "playbooks/resume.yml", "--limit", name],
+        cwd=str(root),
+        timeout=RESUME_TIMEOUT,
+    )
+    if result.returncode != 0:
+        notify(
+            "resume of cluster {} failed - it may be half up. "
+            "Check ~/Library/Logs/container-autostart.log".format(name)
+        )
+        log(f"{result.stdout.strip()}\n{result.stderr.strip()}")
+        return False
+    log(f"cluster {name} resumed")
+    return True
+
+
+def read_state():
+    """The previous run's view of the world.
+
+    Shape:
+        {"addresses": {name: ipv4}, "clusters": {name: bool}, "boot": "<sec>"}
+
+    The first version of this file was a bare {name: ipv4} map. Migrate it
+    rather than discard it, so the upgrade does not force one pointless DNS
+    re-render, and so a cluster is not resumed on the strength of a missing key.
+    """
+    try:
+        state = json.loads(STATE_FILE.read_text())
     except (OSError, json.JSONDecodeError):
-        return {}
+        return {"addresses": {}, "clusters": {}, "boot": None}
+    if "addresses" not in state:
+        return {"addresses": state, "clusters": {}, "boot": None}
+    state.setdefault("addresses", {})
+    state.setdefault("clusters", {})
+    state.setdefault("boot", None)
+    return state
 
 
-def write_state(current):
+def write_state(state):
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(current, indent=2, sort_keys=True))
+    STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+
+def resume_clusters(containers, cluster_nodes, state, first_run_this_boot):
+    """Resume the continuously-running clusters that a crash took down.
+
+    Returns (resumed_any, failed) - `failed` being the clusters that were
+    attempted and did not come up, which the caller must keep marked as
+    "was running" so the next boot tries again.
+    """
+    if not first_run_this_boot:
+        return False, set()
+
+    down = {
+        name: running
+        for name, running in cluster_states(containers, cluster_nodes).items()
+        if not running
+    }
+    if not down:
+        return False, set()
+
+    root = localkubernetes_root()
+    if not root.is_dir():
+        return False, set()
+
+    wanted = continuous_clusters(root)
+    resumed = False
+    failed = set()
+    for name in sorted(down):
+        if name not in wanted:
+            continue
+        if not state["clusters"].get(name, False):
+            # It was already down when this script last looked, so it was
+            # stopped on purpose rather than lost. Leave it.
+            log(f"cluster {name} was stopped before the last shutdown; leaving it")
+            continue
+        if resume_cluster(root, name):
+            resumed = True
+        else:
+            failed.add(name)
+    return resumed, failed
+
+
+def report_stopped_nodes(containers, cluster_nodes):
+    stopped = [
+        entry["configuration"]["id"]
+        for entry in containers
+        if entry.get("status", {}).get("state") != "running"
+        and is_cluster_node(entry.get("configuration", {}).get("id", ""), cluster_nodes)
+    ]
+    if stopped:
+        log(
+            f"{len(stopped)} cluster node(s) are stopped and were left alone; "
+            "recover a cluster with `ansible-playbook playbooks/resume.yml --limit <name>`"
+        )
 
 
 def main():
@@ -375,6 +627,22 @@ def main():
     if not container:
         log("the container CLI is not installed; nothing to do")
         return 0
+
+    state = read_state()
+    boot = boot_time()
+    first_run_this_boot = boot is not None and boot != state["boot"]
+    if first_run_this_boot:
+        # Claim the boot now, before any work, rather than recording it at the
+        # end. Every early return below - a playbook already running, an
+        # unreadable container list, a runtime that will not start - would
+        # otherwise leave the marker unadvanced, so the next 300s tick would
+        # still look like the first run after a boot. That is not cosmetic:
+        # the resume decision is gated on it, so a cluster the user stopped by
+        # hand ten minutes into the session would be read as "lost in the
+        # crash" and brought back against their wishes. Losing one resume to a
+        # failed boot run is the far cheaper mistake, and it says so in the log.
+        state["boot"] = boot
+        write_state(state)
 
     if playbook_running():
         log("a LocalKubernetes playbook is running; standing down")
@@ -406,40 +674,63 @@ def main():
                 break
             time.sleep(ADDRESS_SETTLE_INTERVAL)
 
+    resumed, resume_failed = resume_clusters(
+        containers, cluster_nodes, state, first_run_this_boot
+    )
+
     containers = list_containers(container)
     if containers is None:
         return 1
     current = addresses(containers, cluster_nodes)
+    clusters_now = cluster_states(containers, cluster_nodes)
 
-    if current == read_state():
+    # A cluster whose resume failed keeps its old "was running" flag. Recording
+    # the state we can see would say "stopped", which on the next boot is
+    # indistinguishable from the user having stopped it deliberately - so one
+    # transient failure would silently retire the cluster from autostart
+    # forever. This matters most for a failure early in resume.yml, before kiac
+    # has booted the node VMs, because then the nodes really are still down.
+    for name in resume_failed:
+        clusters_now[name] = True
+
+    # Recorded on every run, not only the ones that touch DNS: this is the
+    # answer to "was it running before the crash", and it has to be current.
+    state["clusters"] = clusters_now
+
+    if current == state["addresses"]:
+        write_state(state)
+        report_stopped_nodes(containers, cluster_nodes)
         return 0
 
-    # Again, not only at the top. Starting the containers above is serial and
-    # the settle poll adds up to ADDRESS_SETTLE_TIMEOUT on top, so a minute or
-    # more has passed since the first check - ample time for a resume.yml to
-    # have started and reached its own closing DNS refresh. This is the point
-    # the guard actually protects, and pgrep is cheap.
+    # Again, not only at the top. Starting the containers above is serial, the
+    # settle poll adds up to ADDRESS_SETTLE_TIMEOUT on top, and a resume takes
+    # minutes - so a long time has passed since the first check, ample for a
+    # resume.yml to have been started by hand and to have reached its own
+    # closing DNS refresh. This is the point the guard actually protects.
     if playbook_running():
         log("a LocalKubernetes playbook started meanwhile; leaving DNS to it")
+        write_state(state)
+        return 0
+
+    if resumed:
+        # resume.yml ends with its own host_dns pass, with wait_for_gateway
+        # enabled - a strictly better render than the one here, because it also
+        # carries the per-app Gateway records. Re-running it would only risk
+        # replacing that with a skeleton, so just adopt the result.
+        log(f"addresses changed: {json.dumps(current, sort_keys=True)}")
+        log("DNS already refreshed by resume.yml")
+        write_state(state | {"addresses": current})
+        report_stopped_nodes(containers, cluster_nodes)
         return 0
 
     log(f"addresses changed: {json.dumps(current, sort_keys=True)}")
     if update_dns(clusters_running(containers, cluster_nodes)):
         # Only on success: a failed refresh must not be remembered as applied,
         # or the zone stays stale until the next address change.
-        write_state(current)
+        state["addresses"] = current
+    write_state(state)
 
-    stopped_nodes = [
-        entry["configuration"]["id"]
-        for entry in containers
-        if entry.get("status", {}).get("state") != "running"
-        and is_cluster_node(entry.get("configuration", {}).get("id", ""), cluster_nodes)
-    ]
-    if stopped_nodes:
-        log(
-            f"{len(stopped_nodes)} cluster node(s) are stopped and were left alone; "
-            "recover a cluster with `ansible-playbook playbooks/resume.yml --limit <name>`"
-        )
+    report_stopped_nodes(containers, cluster_nodes)
     return 0
 
 

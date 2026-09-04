@@ -144,10 +144,13 @@ enable_pf_vmnet_proxy: true
 # owner: `container system start` registers its LaunchAgent outside
 # ~/Library/LaunchAgents so launchd never loads it, apple/container has no
 # restart policy so nothing starts the containers, and every vmnet address is
-# handed out afresh. Cluster node VMs are deliberately left alone - they need
-# LocalKubernetes' resume.yml, not a bare `container start`. Safe to leave
-# enabled on a machine with no containers; it exits as soon as it finds no
-# container CLI.
+# handed out afresh. Cluster nodes are never started with `container start`:
+# a cluster is either resumed through LocalKubernetes' resume.yml or left
+# alone. Only clusters whose host_vars say `cluster_role: main` are resumed,
+# only on the first run after a boot, and only if they were still running when
+# the script last looked - so a deliberate `kiac stop cluster` is respected.
+# Safe to leave enabled on a machine with no containers; it exits as soon as it
+# finds no container CLI.
 enable_container_autostart: true
 
 

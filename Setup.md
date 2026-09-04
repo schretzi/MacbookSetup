@@ -156,7 +156,7 @@ sudo works.
 | `localhost_alias`     | `enable_localhost_alias`     | the extra 127.0.0.x addresses on lo0                                        |
 | `adguardhome`         | `enable_adguardhome`         | the resolver: pinned release, seeded config, zones, daemons                 |
 | `macswitcher`         | `enable_macswitcher`         | seeds `~/.config/macswitcher` and the shell proxy variables                 |
-| `container_autostart` | `enable_container_autostart` | restarts the container runtime + service containers, refreshes the DNS zone |
+| `container_autostart` | `enable_container_autostart` | restarts the container runtime, service containers and `main`, refreshes DNS|
 | `gcloud`              | `enable_gcloud`              | gcloud components                                                           |
 | `ai`                  | `enable_ai`                  | links `schretzi-skills` into every assistant, assistant configs             |
 | `work`                | `enable_work`                | employer profile, supplied by the work overlay                              |
@@ -1079,23 +1079,55 @@ stale one.
 Then it starts every stopped container **except cluster nodes**, and refreshes
 the zone only when an address actually changed.
 
-**Cluster node VMs are deliberately left alone.** A bare
-`container start kiac-main-control-plane` boots a cluster that _looks_ healthy
-and is not: the node address moved, `~/.kube/config` points nowhere, the kubeadm
-certificates need healing and Cilium needs a Helm upgrade with a fresh
-`k8sServiceHost`. That is what LocalKubernetes' `playbooks/resume.yml` is for.
-Autostarting them would produce a broken cluster that no longer reports itself
-as broken, so the script logs them and stops:
+**Cluster nodes are never started with `container start`.** That boots the VM
+and produces a cluster that _looks_ healthy and is not: the node address moved,
+`~/.kube/config` points nowhere, the kubeadm certificates need healing and
+Cilium needs a Helm upgrade with a fresh `k8sServiceHost`. A cluster is
+therefore either resumed through LocalKubernetes' `playbooks/resume.yml`, which
+does all of that in order, or left alone.
+
+Which clusters get resumed is not configured here. LocalKubernetes already
+draws the line, in `inventory/host_vars/<cluster>.yml`:
+
+| `cluster_role` | README | autostart |
+| -------------- | ----------------------------------------- | --------- |
+| `main`         | "meant to run continuously"               | resumed   |
+| `test`         | "disposable ... stopped/resumed on demand" | left alone |
+
+So `cluster_role: main` is read at run time, and a new test cluster is
+correctly ignored the day it is created without anything here being edited.
+
+Two limits on that, because a resume is expensive — `main` is three node VMs,
+12 GB of memory, and a playbook that takes a good minute — and unattended:
+
+- **Only on the first run after a boot**, never on the 300s tick. The tick is
+  there to catch a stopped container, not to fight a human who just ran
+  `kiac stop cluster`.
+- **Only if the cluster was still running when the script last looked.** A
+  deliberate stop is recorded within one tick and then respected; a crash is
+  not, because the crash left the state saying "running". The one case this
+  gets wrong is stopping a cluster and powering off inside the same tick — it
+  comes back once.
+
+A failed resume raises a macOS notification, not just a log line: a half-resumed
+cluster is otherwise noticed hours later as something unreachable. Recover by
+hand with:
 
 ```bash
 cd ~/Workspace/Schretzi/LocalKubernetes
 ansible-playbook playbooks/resume.yml --limit main
 ```
 
-It keeps no list of containers or nodes — both would drift. Nodes come from
-`kiac get clusters -o json` at run time; everything else is "whatever the
-runtime reports, minus the nodes, minus `buildkit`" (which `container build`
-starts on demand and which costs 2 GB sitting idle).
+It keeps no list of containers, nodes or clusters — all three would drift.
+Nodes come from `kiac get clusters -o json` at run time (plus the `kiac-` name
+prefix, since kiac reports `[]` for a node whose name it cannot parse);
+everything else is "whatever the runtime reports, minus the nodes, minus
+`buildkit`" (which `container build` starts on demand and which costs 2 GB
+sitting idle).
+
+State lives in `~/.local/state/container-autostart/addresses.json`: the address
+fingerprint, the per-cluster running flags, and the boot ID that distinguishes
+a boot run from a tick.
 
 Logs are `~/Library/Logs/container-autostart.log`, and empty output means it
 found nothing to do.

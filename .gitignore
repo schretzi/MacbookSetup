@@ -9,3 +9,9 @@ Dotfiles/raycast/extensions/
 
 # lazy.nvim's plugin lockfile: rewritten on every `:Lazy update`.
 Dotfiles/neobean/lazy-lock.json
+
+# Per-machine personal config: real identity and feature selection. Never
+# meant to be shared/committed - copy the *.example.yml instead, or generate
+# features.yml with Scripts/select-features.py.
+Ansible/local/identity.yml
+Ansible/local/features.yml

@@ -91,6 +91,35 @@ daemons:
     label: com.schretzi.privoxy
   lsrules:
     label: com.schretzi.lsrules
+  # kanata, the keymapper. macswitcher has no built-in knowledge of it; the
+  # entry alone is enough to observe and control it.
+  #
+  # status_command uses an ABSOLUTE path on purpose. It runs through `sh -c`
+  # from whatever process hosts the TUI, whose PATH is not guaranteed to be
+  # the interactive shell's - and a status_command that misses only produces a
+  # bare "status_command failed" in observe. The awk keeps the device table
+  # (lines starting with a device hash) and drops kanata's configuration
+  # example, which is the bulk of --list's output and not what we want here.
+  #
+  # The three *_command overrides exist because the generic system-scope path
+  # builds `sudo sh -c "launchctl ..."`, which sudo matches as /bin/sh - so no
+  # targeted sudoers rule could ever apply and every action would prompt for a
+  # password. Called directly like this they match the kanata-service rule
+  # (Ansible/roles/sudoers/defaults/main.yml) and run unattended.
+  #
+  # stop is bootout rather than `launchctl stop`: KeepAlive would restart a
+  # stopped-but-loaded job immediately, and com.schretzi.kanata-wake would
+  # kickstart it on the next wake regardless, since its guard only asks
+  # whether the job is loaded.
+  kanata:
+    label: com.kanata.daemon
+    scope: system
+    status_command: >-
+      [[ ansible_facts.env.HOME ]]/.cargo/bin/kanata --list 2>&1 |
+      awk '/^0x/ { hash = $1; $1 = $2 = $3 = ""; sub(/^ +/, ""); printf "%-20s %s\n", hash, $0 }'
+    start_command: sudo -n /bin/launchctl bootstrap system /Library/LaunchDaemons/com.kanata.daemon.plist
+    stop_command: sudo -n /bin/launchctl bootout system /Library/LaunchDaemons/com.kanata.daemon.plist
+    restart_command: sudo -n /bin/launchctl kickstart -k system/com.kanata.daemon
 applications:
   docker:
     start:

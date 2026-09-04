@@ -117,3 +117,47 @@
   vars:
     launchd_plist: com.kanata.daemon.plist.j2
     launchd_label: com.kanata.daemon
+
+# kanata never rescans keyboard devices on its own (macOS backend limitation -
+# see Scripts/MacOS/kanata_wake_refresh.sh), so a Bluetooth keyboard that was
+# absent when the daemon last started stays ungrabbed until a restart. This
+# wires that restart to every system wake, automatically.
+- name: Kanata | check the sleepwatcher binary is present
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/opt/sleepwatcher/sbin/sleepwatcher"
+  register: kanata_sleepwatcher_bin
+
+- name: Kanata | warn when sleepwatcher is missing
+  ansible.builtin.debug:
+    msg: >-
+      {{ homebrew_prefix }}/opt/sleepwatcher/sbin/sleepwatcher not found.
+      Install it with `brew install sleepwatcher` (Brewfiles/00_base.brew) -
+      skipping the wake-triggered kanata restart. `kanata_restart` (see
+      ~/.zsh/aliases/general) still works as a manual fallback.
+  when: not kanata_sleepwatcher_bin.stat.exists
+
+- name: Kanata | wake handling
+  when: kanata_sleepwatcher_bin.stat.exists
+  block:
+    - name: Kanata | install the wake-refresh script
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/Scripts/MacOS/kanata_wake_refresh.sh"
+        dest: /usr/local/bin/kanata_wake_refresh
+        owner: root
+        group: wheel
+        mode: "0755"
+      become: true
+
+    - name: Kanata | install the wake-watcher LaunchDaemon
+      ansible.builtin.include_role:
+        name: launchd
+        tasks_from: daemon
+      vars:
+        launchd_plist: com.schretzi.kanata-wake.plist
+        launchd_label: com.schretzi.kanata-wake
+
+    - name: Kanata | rotate the wake-watcher logs
+      ansible.builtin.include_role:
+        name: newsyslog
+      vars:
+        newsyslog_conf: kanata-wake.conf

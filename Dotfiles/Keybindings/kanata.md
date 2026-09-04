@@ -3,6 +3,8 @@
 **Config:** [`../kanata/kanata.kbd`](../kanata/kanata.kbd)
 Runs as a LaunchDaemon ([`../kanata/com.kanata.daemon.plist`](../kanata/com.kanata.daemon.plist)) and intercepts keys system-wide, before any app (including kitty) sees them. German QWERTZ layout; key names below are kanata's physical-position names, not printed characters.
 
+**Status/troubleshooting:** `kanata --list` shows the keyboards macOS currently exposes for grabbing; `sudo launchctl print system/com.kanata.daemon` shows whether the daemon is loaded; `tail -f /tmp/kanata.out.log` is the live log. kanata never rescans devices after startup, so a keyboard that reconnects later (Bluetooth after wake, cable ↔ Bluetooth switches) needs the daemon restarted to be grabbed — `com.schretzi.kanata-wake` (a `sleepwatcher`-backed LaunchDaemon) does this automatically on every system wake; `kanata_restart` (`~/.zsh/aliases/general`) does it on demand. See Setup.md → "Kanata" for details.
+
 ## Defaults
 
 Kanata has no keybindings of its own to fall back on. Once it loads, it

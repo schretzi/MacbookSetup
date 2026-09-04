@@ -7,6 +7,10 @@ brew "koekeishiya/formulae/yabai"
 # Keymappers
 brew "koekeishiya/formulae/skhd" # for yabai
 brew "kanata"
+# Wake-event watcher: re-grabs the keyboard for kanata after sleep/wake, since
+# kanata's macOS backend never rescans devices on its own (kanata role,
+# com.schretzi.kanata-wake LaunchDaemon).
+brew "sleepwatcher"
 
 # Neovim
 brew "neovim"

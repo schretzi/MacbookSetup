@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Re-grabs the keyboard for kanata after sleep/wake.
+
+    kanata's macOS backend never rescans input devices on its own - it grabs
+    whatever is present once, at startup - so a keyboard that reconnects later
+    (Bluetooth after wake, cable <-> Bluetooth switches) is invisible to it
+    until com.kanata.daemon restarts. macOS gives no launchd key for "system
+    woke up"; sleepwatcher supplies that by registering for the IOKit power
+    notification directly and running its own -s/-w callbacks. Wiring here
+    uses -w only: kanata does not need a sleep-time action, only a wake-time
+    kickstart.
+
+    A LaunchDaemon, not a LaunchAgent: com.kanata.daemon runs as root
+    (Ansible/roles/kanata), and only root can `launchctl kickstart` a system-
+    domain job without the NOPASSWD sudo rule the interactive `kanata_restart`
+    alias relies on. Also means this keeps working across fast user switching
+    and before any GUI session exists.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.kanata-wake</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/opt/sleepwatcher/sbin/sleepwatcher</string>
+        <string>-V</string>
+        <string>-w</string>
+        <string>/usr/local/bin/kanata_wake_refresh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- sleepwatcher itself is a long-running watcher process, not a
+         one-shot job - unlike the script it calls out to. -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/kanata-wake.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/kanata-wake.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

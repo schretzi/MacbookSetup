@@ -406,6 +406,29 @@ kanata --features cmd` — the Homebrew build lacks it, so it cannot start or
 switch applications), installs `com.kanata.daemon` and the Karabiner daemon,
 and installs the newsyslog rule that rotates `/tmp/kanata.*.log`.
 
+**Automatic recovery after Bluetooth reconnect**: kanata's macOS backend grabs
+every keyboard device once at startup and never rescans - a Bluetooth keyboard
+that was absent when `com.kanata.daemon` last started (e.g. worked a day
+without it, on-site) stays invisible to kanata even after it reconnects, until
+the daemon restarts. `sleepwatcher` (Brewfiles/00_base.brew) plus the
+`com.schretzi.kanata-wake` LaunchDaemon (`kanata` Ansible role) now does that
+restart automatically on every system wake -
+`Scripts/MacOS/kanata_wake_refresh.sh` is sleepwatcher's `-w` callback, waits a
+few seconds for Bluetooth to actually reconnect, then runs the same
+`launchctl kickstart -k system/com.kanata.daemon` as the manual `kanata_restart`
+alias (`~/.zsh/aliases/general`). Runs as root, same as `com.kanata.daemon`, so
+no sudo/interactive session is needed. `kanata_restart` still exists for the
+immediate case (right after unplugging a cable, or if the wake-triggered
+restart lost the race with Bluetooth reconnecting).
+
+CLI to inspect kanata's state directly:
+- `kanata --list` - keyboards macOS currently exposes for grabbing (works
+  independent of whether the daemon is running).
+- `sudo launchctl print system/com.kanata.daemon` - whether the daemon is
+  loaded/running and its last exit status.
+- `tail -f /tmp/kanata.out.log` - live log, including
+  `virtual_hid_keyboard_ready` and layer-change lines.
+
 The keymap itself is `Dotfiles/kanata/kanata.kbd`, symlinked to
 `~/.config/kanata/`. Keybindings are documented in
 [Dotfiles/Keybindings/keybindings.md](Dotfiles/Keybindings/keybindings.md).

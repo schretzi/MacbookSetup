@@ -73,93 +73,34 @@
         block_end_string: "%]"
 
     # ----------------------------------------------------------------------
-    # Contexts, contributed by the overlays
+    # Contexts
     # ----------------------------------------------------------------------
-    - name: Macswitcher | inspect the overlay context sources
-      ansible.builtin.stat:
-        path: "{{ (item.root | default(repo_root)) ~ '/' ~ item.src }}"
-      loop: "{{ macswitcher_contexts_overlay }}"
-      loop_control:
-        label: "{{ item.name }}"
-      register: macswitcher_context_sources
-
-    - name: Macswitcher | seed the overlay contexts
+    # Real contexts are linked in by the overlays (dotfiles_links_overlay),
+    # not seeded here - see the note in defaults/main.yml for why. The one
+    # thing this role installs is the documented template, so a machine with
+    # no overlay still has something to copy from.
+    - name: Macswitcher | seed the documented context template
       ansible.builtin.copy:
-        src: "{{ item.stat.path }}"
-        dest: "{{ macswitcher_config_dir }}/contexts/{{ item.item.name }}.yaml"
+        src: "{{ repo_root }}/{{ macswitcher_context_template_src }}"
+        dest: "{{ macswitcher_config_dir }}/contexts/{{ macswitcher_context_template_dest }}"
         mode: "0644"
-        force: false
-      loop: "{{ macswitcher_context_sources.results | selectattr('stat.exists') | list }}"
-      loop_control:
-        label: "{{ item.item.name }}"
 
-    # ----------------------------------------------------------------------
-    # No overlay contexts at all - let macswitcher render its own templates
-    # ----------------------------------------------------------------------
     - name: Macswitcher | look for context files
       ansible.builtin.find:
         paths: "{{ macswitcher_config_dir }}/contexts"
         patterns: "*.yaml"
       register: macswitcher_contexts_present
 
-    # `macswitcher config init` refuses to run when a config.yaml already
-    # exists ("error: config already exists"), and it writes config.yaml,
-    # state.json and the starter contexts together. Rendering into a throwaway
-    # directory is the only way to get the context templates without letting it
-    # overwrite the global config this repo owns.
-    - name: Macswitcher | render starter contexts when no overlay supplied any
+    # macswitcher refuses to load a config with no contexts at all ("no
+    # context files found"), so say so here rather than letting the validate
+    # step below report it as a mystery.
+    - name: Macswitcher | warn when no context is installed
+      ansible.builtin.debug:
+        msg: >-
+          No macswitcher contexts in {{ macswitcher_config_dir }}/contexts.
+          Contexts come from an overlay; without one, copy
+          {{ macswitcher_context_template_dest }} to <name>.yaml and fill it in.
       when: macswitcher_contexts_present.matched | int == 0
-      block:
-        - name: Macswitcher | create a scratch directory for the templates
-          ansible.builtin.tempfile:
-            state: directory
-            suffix: macswitcher-init
-          register: macswitcher_scratch
-
-        - name: Macswitcher | render the starter templates
-          ansible.builtin.command:
-            cmd: >-
-              {{ homebrew_prefix }}/bin/macswitcher
-              --config {{ macswitcher_scratch.path }}/config.yaml config init
-          changed_when: true
-
-        - name: Macswitcher | collect the rendered contexts
-          ansible.builtin.find:
-            paths: "{{ macswitcher_scratch.path }}/contexts"
-            patterns: "*.yaml"
-          register: macswitcher_rendered
-
-        - name: Macswitcher | install the rendered contexts
-          ansible.builtin.copy:
-            src: "{{ item.path }}"
-            dest: "{{ macswitcher_config_dir }}/contexts/{{ item.path | basename }}"
-            mode: "0644"
-            remote_src: true
-            force: false
-          loop: "{{ macswitcher_rendered.files }}"
-          loop_control:
-            label: "{{ item.path | basename }}"
-          register: macswitcher_installed
-
-        # `config init` fills mac_network_location from the first line of
-        # `scselect`, which is its header - "Defined sets include: (* == current
-        # set)" - rather than a location name. Switching to that would fail, so
-        # blank it out and let the location be filled in deliberately. Only
-        # files this run actually created are touched.
-        - name: Macswitcher | repair the bogus network location in rendered contexts
-          ansible.builtin.replace:
-            path: "{{ item.dest }}"
-            regexp: '^mac_network_location:.*Defined sets include.*$'
-            replace: 'mac_network_location: ""'
-          loop: "{{ macswitcher_installed.results | selectattr('changed') | list }}"
-          loop_control:
-            label: "{{ item.dest | basename }}"
-      always:
-        - name: Macswitcher | discard the scratch directory
-          ansible.builtin.file:
-            path: "{{ macswitcher_scratch.path }}"
-            state: absent
-          when: macswitcher_scratch.path is defined
 
     # ----------------------------------------------------------------------
     # Shell proxy variables

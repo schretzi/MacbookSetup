@@ -1,8 +1,8 @@
 ---
-# macswitcher owns everything under ~/.config/macswitcher at runtime: it
-# rewrites config.yaml, the context files and state.json on every switch. So
-# none of them may be a symlink back into a repository - Ansible seeds them
-# once as real files and never touches them again.
+# macswitcher owns config.yaml and state.json under ~/.config/macswitcher at
+# runtime: it rewrites both on every switch, so neither may be a symlink back
+# into a repository - Ansible seeds them once as real files and never touches
+# them again. Context files are different; see the note further down.
 
 macswitcher_config_dir: "{{ ansible_facts.env.HOME }}/.config/macswitcher"
 
@@ -20,9 +20,19 @@ macswitcher_config_src: Dotfiles/macswitcher/config.yaml.j2
 macswitcher_proxy_rc_src: Dotfiles/macswitcher/proxy.zsh
 macswitcher_proxy_rc_dest: .zsh/rcs/proxy
 
-# Contexts are environment-specific, so they come from the overlays:
-# home + remote from the private overlay, work from the work overlay. Each
-# entry is { src: <path within the overlay>, name: <context name>,
-# root: <overlay checkout> }. When this ends up empty, the role falls back to
-# `macswitcher config init` to render starter templates instead.
-macswitcher_contexts_overlay: []
+# Contexts are NOT seeded. They are environment-specific, they belong in an
+# overlay, and the overlays symlink them in through dotfiles_links_overlay -
+# so their values stay in git and an edit in the repo is live immediately.
+#
+# Linking is safe: macswitcher only rewrites a context file in `config init`
+# (internal/app/config.go, saveConfig is reached from initConfig and nowhere
+# else). Switching writes runtime state, not the context. Seeding cost more
+# than it protected - a seeded copy drifted from its repository original, and
+# `force: false` cannot tell "never seeded" from "deliberately deleted", so a
+# context removed on purpose came back on the next run.
+#
+# The single documented template below is the one and only thing seeded.
+# ".yaml.template", not ".yaml", because macswitcher loads every .yaml here as
+# a real context and a half-filled one would become silently switchable.
+macswitcher_context_template_src: Dotfiles/macswitcher/contexts/example.yaml.template
+macswitcher_context_template_dest: example.yaml.template

@@ -1347,20 +1347,28 @@ _Role: `firefox_enterprise_roots`_ — `enable_firefox_enterprise_roots`
 
 _Role: `macswitcher`_ — `enable_macswitcher`
 
-**Nothing under `~/.config/macswitcher` is a symlink, by design.** macswitcher
-rewrites `config.yaml`, the context files and `state.json` in place on every
-switch. Linking any of them back into a repository means the runtime writes its
-live values into the source tree — the same trap `dotfiles_real_dirs` documents
-and the same one the adguardhome role avoids for `upstreams.conf`. So the role
-_seeds_ each file once (`copy` with `force: false`) and never touches it again.
+**`config.yaml` and `state.json` are never symlinks, by design.** macswitcher
+rewrites both in place on every switch, so linking them back into a repository
+means the runtime writes its live values into the source tree — the same trap
+`dotfiles_real_dirs` documents and the same one the adguardhome role avoids for
+`upstreams.conf`. The role _seeds_ them once (`copy` with `force: false`) and
+never touches them again.
+
+**Context files are the exception: they are linked, not seeded.** Switching
+does not rewrite them — `saveConfig` is reached only from `config init` — so a
+link is safe, and it is what keeps their values in git. Seeding them cost more
+than it protected: `force: false` cannot tell "never installed" from
+"deliberately deleted", so the superseded `home` context reappeared on every
+run, and seeded copies drifted from their repository originals unnoticed.
 
 Where each file comes from:
 
 | File                                                                                                                                   | Source                                        | Notes                                       |
 | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------- |
 | `config.yaml`                                                                                                                          | this repo, `Dotfiles/macswitcher/config.yaml` | generic, no addresses                       |
-| `contexts/no-filter.yaml`, `contexts/full-direct.yaml`, `contexts/remote-vpn.yaml`, `contexts/home-alone.yaml`, `contexts/remote.yaml` | private overlay                               | via `macswitcher_contexts_overlay`          |
-| `contexts/office.yaml`, `contexts/home-vpn.yaml`                                                                                       | work overlay                                  | same, follows `enable_work`                 |
+| `contexts/example.yaml.template`                                                                                                       | this repo, `Dotfiles/macswitcher/contexts/`   | the only seeded context file                |
+| `contexts/home-alone.yaml`, `contexts/remote.yaml`, `contexts/no-filter.yaml`, `contexts/full-direct.yaml`                             | private overlay                               | linked via `dotfiles_links_overlay`         |
+| `contexts/office.yaml`, `contexts/home-vpn.yaml`, `contexts/vpn-debug.yaml`, `contexts/smartgadget.yaml`, `contexts/remote-vpn.yaml`   | work overlay                                  | same, follows `enable_work`                 |
 | `state.json`                                                                                                                           | macswitcher itself                            | never versioned                             |
 | `~/.zsh/rcs/proxy`                                                                                                                     | this repo, `Dotfiles/macswitcher/proxy.zsh`   | neutral defaults, then owned by the runtime |
 
@@ -1369,12 +1377,18 @@ Where each file comes from:
 it is force-symlinked into `$HOME`, and there is no per-file exclusion, so
 macswitcher would write its runtime proxy values straight back into this repo.
 
-When no overlay supplies a context — a fresh machine with neither overlay
-cloned — the role falls back to `macswitcher config init`. That command refuses
-to run when a `config.yaml` already exists and writes the global config,
-`state.json` and the starter contexts together, so the role renders it into a
-throwaway directory and copies out only the context templates. The global
-config this repo owns is left alone either way.
+The one context file this repo seeds is `contexts/example.yaml.template` — a
+blank context with every key documented, to copy from. Its extension is
+`.yaml.template` rather than `.yaml` on purpose: macswitcher loads *every*
+`.yaml` in that directory as a context, so a half-filled template would become
+a real, switchable context that silently does nothing.
+
+A machine with neither overlay cloned therefore has no contexts at all, and
+macswitcher says so (`no context files found`). The role warns about it in the
+same run rather than leaving it to be discovered later. That is deliberate: the
+previous fallback rendered starter contexts through `macswitcher config init`,
+which filled `mac_network_location` from the header line of `scselect` and
+produced contexts that could not be switched to.
 
 Each context is a separate `.yaml` file; the global file holds no context
 definitions or proxy profiles. Contexts default to `proxy_mode: direct`; an

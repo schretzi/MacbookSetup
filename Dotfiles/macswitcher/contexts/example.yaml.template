@@ -1,0 +1,146 @@
+# macswitcher context template - every key, what it does, and what it costs
+# to get wrong. Copy it to a real context and fill it in:
+#
+#     cp ~/.config/macswitcher/contexts/example.yaml.template \
+#        ~/.config/macswitcher/contexts/mynetwork.yaml
+#     macswitcher config validate
+#
+# The context name is the file name without ".yaml" - there is no `name:` key.
+#
+# The extension is ".yaml.template", not ".yaml", and that is deliberate:
+# macswitcher loads *every* .yaml in this directory as a context (see
+# internal/app/config.go, loadConfig). A half-filled template with an empty
+# mac_network_location would therefore become a real, switchable context that
+# silently does nothing. The template is documentation; it is not a context
+# until you copy it under a name of your own.
+#
+# Real contexts are not seeded - they are symlinked in from the private or
+# work overlay, so their values live in git and edits are live immediately.
+# This template is the one and only thing the macswitcher role seeds.
+
+# ---------------------------------------------------------------------------
+# Required
+# ---------------------------------------------------------------------------
+
+# macOS Network Location to activate, exactly as `networksetup -listlocations`
+# prints it. Leave "" to keep whatever location is active - but then this
+# context cannot carry per-location settings such as manual IPs or the service
+# order, so prefer naming one.
+mac_network_location: ""
+
+# ---------------------------------------------------------------------------
+# DNS
+# ---------------------------------------------------------------------------
+dns:
+  # Which network services the resolvers are written to, as
+  # `networksetup -listallnetworkservices` names them (it truncates them to 32
+  # characters, and the truncated form is what must be used here). Empty means
+  # every active service.
+  #
+  # Name every service you might actually be on, not just today's: a resolver
+  # set on Wi-Fi does nothing once you dock over Ethernet, and the symptom is
+  # a machine that resolves fine until you plug it in.
+  network_services: []
+  #   - Wi-Fi
+  #   - Thunderbolt Bridge
+
+  # Resolvers, in order. 127.0.0.3 is the local AdGuard Home. An empty list
+  # leaves DHCP's resolvers in place - which is what you want in an emergency
+  # fallback context, and what you never want in a normal one.
+  resolvers:
+    - 127.0.0.3
+
+  # Search domains, appended to unqualified names. Needed when something
+  # nominates a host by short name - a corporate PAC saying "PROXY proxy:8080"
+  # resolves only with the right suffix here. On a DHCP network these usually
+  # arrive on their own; when the resolvers are set by hand, as they are here,
+  # macOS carries nothing across and they have to be stated.
+  #
+  # `dig proxy` will NOT prove this - dig ignores the search list. Test it the
+  # way applications resolve: `dscacheutil -q host -a name proxy`.
+  search_domains: []
+
+# Upstream resolvers AdGuard Home forwards to for anything it does not answer
+# locally. Written to its upstream_dns_file, so these are the servers this
+# network's queries actually leave through. On a corporate network use that
+# network's resolvers, or its internal names will not resolve at all.
+upstreams:
+  - 9.9.9.9
+  - 8.8.8.8
+
+# ---------------------------------------------------------------------------
+# Proxy
+# ---------------------------------------------------------------------------
+
+# off | direct | forward
+#
+#   off     - no system proxy at all. Nothing reaches Alpaca, so nothing
+#             reaches privoxy behind it either. The emergency setting.
+#   direct  - Alpaca runs and goes straight out, with privoxy filtering
+#             behind it. The normal setting off corporate networks.
+#   forward - Alpaca hands everything to the corporate proxy named in
+#             forwarder_proxy below. Required for that block to be used at
+#             all; setting one without the other does nothing.
+proxy_mode: direct
+
+# AdGuard Home's filtering, on or off, for this context.
+#
+# Always state it. It is global state that survives a switch, so a context
+# that leaves it out inherits whatever the last one set - and a corporate
+# context turns filtering off to break a bootstrap deadlock (filter lists are
+# unreachable until the proxy works, the proxy needs DNS, DNS is AdGuard
+# Home). Omit this key and you come back from the office silently unfiltered.
+protection_enabled: true
+
+# Only used when proxy_mode is `forward`. No passwords here - put them in the
+# Keychain with `macswitcher proxy password-set` and name the item instead.
+#
+# forwarder_proxy:
+#   proxy_server: proxy.example.com
+#   port: 8080
+#   username: myuser
+#   password_keychain_service: My AD User
+#   password_keychain_account: myuser
+#   pac_file: http://pac.example.com/default.pac
+#   # Hosts allowed to receive proxy credentials. Keep it strict: it is what
+#   # stops a tampered PAC from redirecting authenticated requests elsewhere.
+#   auth_allowlist:
+#     - example.com
+
+# ---------------------------------------------------------------------------
+# Preflight
+# ---------------------------------------------------------------------------
+
+# Names that must resolve BEFORE this context is applied. If one does not, the
+# switch stops and nothing is changed.
+#
+# This exists for contexts that start a VPN: the tunnel resolves its own
+# gateway through the network the machine is still on, because the resolvers
+# are repointed only afterwards. Without the check, `openconnect` dies with
+# "getaddrinfo failed" halfway through a switch, leaving the machine between
+# two networks. macswitcher retries once against DHCP's own resolvers before
+# giving up, so a stale resolver from the previous context does not read as a
+# dead network.
+#
+# Name only what the switch genuinely depends on - each entry is a chance to
+# block a switch that would otherwise have worked.
+preflight_hosts: []
+#   - vpn-gateway.example.com
+
+# ---------------------------------------------------------------------------
+# Daemons
+# ---------------------------------------------------------------------------
+
+# What to do with the managed daemons when entering this context. Names come
+# from `daemons:` in ~/.config/macswitcher/config.yaml (privoxy, vpn,
+# kerberos_keep_alive, kanata, ...); `macswitcher observe` shows their live
+# state.
+#
+# Say what this network needs, not what differs from the last context: these
+# lists are the entire instruction, and anything left out keeps whatever the
+# previous context happened to leave running.
+apps:
+  start: []
+  stop: []
+  restart: []
+  reload: []

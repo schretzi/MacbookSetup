@@ -41,17 +41,15 @@ playbooks/resume.yml does all of that in order (and ends by refreshing DNS and
 unsealing OpenBao), so a cluster is either resumed through that playbook or
 left alone.
 
-Which clusters get resumed is not a list kept here. LocalKubernetes already
-draws the distinction, in inventory/host_vars/<cluster>.yml:
+Which clusters get resumed is an explicit opt-in, per cluster, in
+LocalKubernetes' inventory/host_vars/<cluster>.yml:
 
-    cluster_role: main    -> "meant to run continuously (hosts OpenBao +
-                             ArgoCD)"
-    cluster_role: test    -> "disposable test clusters, stopped/resumed on
-                             demand"
+    cluster_autostart: true    -> resumed on the first run after a boot
+    cluster_autostart: false   -> never resumed (same as leaving it out)
 
-(README, "Design"). So `cluster_role: main` is read at run time and only those
-clusters are resumed - a new test cluster is correctly ignored the day it is
-created, without anything here being edited.
+No key means off. A new cluster is therefore never resumed by surprise, and
+turning autostart off for a cluster is one line, in the same file that already
+describes it - no second list here to drift.
 
 Two further limits on that, because a resume is expensive (main is 3 node VMs,
 12 GB of memory, and a playbook that takes minutes) and unattended:
@@ -449,13 +447,21 @@ def localkubernetes_root():
     return LOCALKUBERNETES
 
 
-def continuous_clusters(root):
-    """Clusters whose host_vars say `cluster_role: main`.
+def autostart_clusters(root):
+    """Clusters whose host_vars say `cluster_autostart: true`.
 
-    Read at run time rather than configured here: LocalKubernetes already
-    distinguishes the cluster that is meant to run continuously from the
-    disposable test ones, and a second copy of that decision would drift the
-    first time a cluster is added.
+    An explicit opt-in, per cluster, and the only thing that gets a cluster
+    resumed. No key means no autostart, so a new cluster is never resumed by
+    surprise and the switch is off until someone deliberately turns it on.
+
+    This used to be derived from `cluster_role: main` on the grounds that the
+    README calls that cluster "meant to run continuously". That was a proxy for
+    the real question and it was the wrong one: whether a cluster should be
+    running continuously is a statement about its purpose, whether it should be
+    resumed unattended after a reboot is a statement about whether its memory
+    is worth spending while nobody asked for it. `main` is a continuous cluster
+    that is currently not worth 12 GB at every boot, and there was no way to
+    say that without lying about its role.
 
     Parsed with a regex rather than a YAML library on purpose - this runs as a
     root-owned script, and PyYAML is installed in the user's site-packages
@@ -472,8 +478,10 @@ def continuous_clusters(root):
             text = path.read_text()
         except OSError:
             continue
-        match = re.search(r"^cluster_role:\s*(\S+)", text, re.MULTILINE)
-        if match and match.group(1) == "main":
+        match = re.search(r"^cluster_autostart:\s*(\S+)", text, re.MULTILINE)
+        # YAML 1.1 spells "true" several ways and Ansible accepts all of them;
+        # anything else, including a missing key, means off.
+        if match and match.group(1).strip('"\'').lower() in ("true", "yes", "on"):
             found.add(path.stem)
     return found
 
@@ -569,7 +577,7 @@ def resume_clusters(containers, cluster_nodes, state, first_run_this_boot):
     if not root.is_dir():
         return False, set()
 
-    wanted = continuous_clusters(root)
+    wanted = autostart_clusters(root)
     resumed = False
     failed = set()
     for name in sorted(down):

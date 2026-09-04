@@ -1086,19 +1086,28 @@ Cilium needs a Helm upgrade with a fresh `k8sServiceHost`. A cluster is
 therefore either resumed through LocalKubernetes' `playbooks/resume.yml`, which
 does all of that in order, or left alone.
 
-Which clusters get resumed is not configured here. LocalKubernetes already
-draws the line, in `inventory/host_vars/<cluster>.yml`:
+Autostart is off by default and opted into per cluster, in LocalKubernetes'
+`inventory/host_vars/<cluster>.yml`:
 
-| `cluster_role` | README | autostart |
-| -------------- | ----------------------------------------- | --------- |
-| `main`         | "meant to run continuously"               | resumed   |
-| `test`         | "disposable ... stopped/resumed on demand" | left alone |
+```yaml
+cluster_autostart: true     # resumed on the first boot after a crash/reboot
+cluster_autostart: false    # never resumed — same as leaving the key out
+```
 
-So `cluster_role: main` is read at run time, and a new test cluster is
-correctly ignored the day it is created without anything here being edited.
+**Currently every cluster has it off**, `main` included: it is three node VMs
+and 12 GB, and it is only needed while actually being worked on. Bringing it up
+by hand is one command (below), which is cheaper than 12 GB resident at every
+boot.
 
-Two limits on that, because a resume is expensive — `main` is three node VMs,
-12 GB of memory, and a playbook that takes a good minute — and unattended:
+The key lives beside the cluster's own definition rather than in a list here,
+so there is nothing to keep in sync, and a new cluster is never resumed by
+surprise. It replaces an earlier rule that derived autostart from
+`cluster_role: main` — a proxy for the wrong question, since whether a cluster
+is *meant* to run continuously says nothing about whether its memory is worth
+spending while nobody asked for it.
+
+Two limits on a cluster that *is* opted in, because a resume is expensive and
+unattended:
 
 - **Only on the first run after a boot**, never on the 300s tick. The tick is
   there to catch a stopped container, not to fight a human who just ran
@@ -1110,8 +1119,9 @@ Two limits on that, because a resume is expensive — `main` is three node VMs,
   comes back once.
 
 A failed resume raises a macOS notification, not just a log line: a half-resumed
-cluster is otherwise noticed hours later as something unreachable. Recover by
-hand with:
+cluster is otherwise noticed hours later as something unreachable.
+
+Start a cluster by hand — the normal case now — with:
 
 ```bash
 cd ~/Workspace/Schretzi/LocalKubernetes

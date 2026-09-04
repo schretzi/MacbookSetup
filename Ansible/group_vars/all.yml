@@ -146,9 +146,12 @@ enable_pf_vmnet_proxy: true
 # restart policy so nothing starts the containers, and every vmnet address is
 # handed out afresh. Cluster nodes are never started with `container start`:
 # a cluster is either resumed through LocalKubernetes' resume.yml or left
-# alone. Only clusters whose host_vars say `cluster_role: main` are resumed,
-# only on the first run after a boot, and only if they were still running when
-# the script last looked - so a deliberate `kiac stop cluster` is respected.
+# alone. Resume is opt-in per cluster via `cluster_autostart: true` in its
+# LocalKubernetes host_vars (off everywhere right now, main included - 12 GB
+# is not worth holding for a cluster that is only needed while worked on),
+# only on the first run after a boot, and only if the cluster was still
+# running when the script last looked - so a deliberate `kiac stop cluster`
+# is respected.
 # Safe to leave enabled on a machine with no containers; it exits as soon as it
 # finds no container CLI.
 enable_container_autostart: true

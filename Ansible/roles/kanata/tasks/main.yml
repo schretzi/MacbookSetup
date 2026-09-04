@@ -90,7 +90,8 @@
   ansible.builtin.debug:
     var: kanata_version_out.stdout
 
-# Log rotation: kanata is chatty and writes to /tmp/kanata.*.log forever.
+# Log rotation: kanata is chatty and writes to /Library/Logs/kanata.*.log
+# forever. See the conf itself for the rename-trap caveat this carries.
 - name: Kanata | install newsyslog rotation rule
   ansible.builtin.copy:
     src: "{{ repo_root }}/etc/newsyslog.d/kanata.conf"

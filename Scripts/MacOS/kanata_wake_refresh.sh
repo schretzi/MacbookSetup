@@ -11,7 +11,17 @@
 # ~/.zsh/aliases/general for the manual equivalent of what this automates, and
 # Dotfiles/Keybindings/kanata.md for the CLI to inspect state
 # (`kanata --list`, `launchctl print system/com.kanata.daemon`, the
-# /tmp/kanata.*.log files).
+# /Library/Logs/kanata.*.log files).
+#
+# This script is load-bearing beyond device re-grabbing, in two ways that are
+# easy to undo by accident:
+#   - The kickstart hands kanata fresh log fds, which is what bounds the
+#     newsyslog rename trap described in etc/newsyslog.d/kanata.conf.
+#   - The guard below asks `launchctl print`, i.e. "is the job LOADED", not
+#     "is it running". That is deliberate: `macswitcher observe` stops kanata
+#     with `launchctl bootout`, which unloads it, so a deliberate stop is
+#     respected here. Loosening the guard to also revive a merely stopped job
+#     would make that stop silently undo itself at the next wake.
 #
 # Invoked by sleepwatcher (`-w` callback) from the com.schretzi.kanata-wake
 # LaunchDaemon on every system wake. Runs as root - same user as

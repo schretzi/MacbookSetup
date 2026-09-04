@@ -404,7 +404,7 @@ Ansible then does the rest: it verifies the driver is active and the right
 version, builds kanata **from source with the `cmd` feature** (`cargo install
 kanata --features cmd` — the Homebrew build lacks it, so it cannot start or
 switch applications), installs `com.kanata.daemon` and the Karabiner daemon,
-and installs the newsyslog rule that rotates `/tmp/kanata.*.log`.
+and installs the newsyslog rule that rotates `/Library/Logs/kanata.*.log`.
 
 **Automatic recovery after Bluetooth reconnect**: kanata's macOS backend grabs
 every keyboard device once at startup and never rescans - a Bluetooth keyboard
@@ -426,8 +426,13 @@ CLI to inspect kanata's state directly:
   independent of whether the daemon is running).
 - `sudo launchctl print system/com.kanata.daemon` - whether the daemon is
   loaded/running and its last exit status.
-- `tail -f /tmp/kanata.out.log` - live log, including
-  `virtual_hid_keyboard_ready` and layer-change lines.
+- `tail -f /Library/Logs/kanata.log` - live log, including
+  `virtual_hid_keyboard_ready` and layer-change lines. The former prints about
+  once a second and is >99% of the volume; see `etc/newsyslog.d/kanata.conf`
+  for why `--quiet` is not the answer.
+- `macswitcher observe` lists kanata alongside the other daemons, shows the
+  grabbed devices as its status, tails both logs, and can start/stop/restart
+  it without a password prompt (the `kanata-service` sudoers rule).
 
 The keymap itself is `Dotfiles/kanata/kanata.kbd`, symlinked to
 `~/.config/kanata/`. Keybindings are documented in

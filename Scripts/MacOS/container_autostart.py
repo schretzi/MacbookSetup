@@ -55,13 +55,18 @@ Two further limits on that, because a resume is expensive (main is 3 node VMs,
 12 GB of memory, and a playbook that takes minutes) and unattended:
 
 - Only on the first run after a boot, never on the periodic tick. The tick
-  exists to catch a stopped container, not to fight a human who just ran
-  `kiac stop cluster`.
+  exists to catch a stopped container, not to fight a human who just stopped
+  a cluster by hand.
 - Only if the cluster was still running when this script last looked. A
-  deliberate `kiac stop cluster main` is recorded within one tick and then
-  respected forever; a crash is not, because the crash left the state saying
-  "running". The one case that gets this wrong is stopping a cluster and
-  powering the machine off inside the same tick - it comes back once.
+  deliberate stop is recorded within one tick and then respected forever; a
+  crash is not, because the crash left the state saying "running". The one
+  case that gets this wrong is stopping a cluster and powering the machine
+  off inside the same tick - it comes back once.
+
+(kiac has no "stop cluster" verb, only `kiac stop node <node>` for failure
+testing; putting a whole cluster away is LocalKubernetes'
+`playbooks/stop.yml --limit <name>`, which leaves the same state a reboot does
+and which resume.yml heals.)
 
 A failed resume raises a notification rather than only a log line: a
 half-resumed cluster is otherwise noticed hours later, as something unreachable.

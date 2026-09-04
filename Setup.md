@@ -1110,8 +1110,8 @@ Two limits on a cluster that *is* opted in, because a resume is expensive and
 unattended:
 
 - **Only on the first run after a boot**, never on the 300s tick. The tick is
-  there to catch a stopped container, not to fight a human who just ran
-  `kiac stop cluster`.
+  there to catch a stopped container, not to fight a human who just stopped a
+  cluster by hand.
 - **Only if the cluster was still running when the script last looked.** A
   deliberate stop is recorded within one tick and then respected; a crash is
   not, because the crash left the state saying "running". The one case this
@@ -1127,6 +1127,19 @@ Start a cluster by hand — the normal case now — with:
 cd ~/Workspace/Schretzi/LocalKubernetes
 ansible-playbook playbooks/resume.yml --limit main
 ```
+
+Stopping one again frees the memory. `kiac` has no `stop cluster` verb — only
+`kiac stop node <node>`, a chaos-testing tool that refuses to stop a cluster's
+only node. LocalKubernetes wraps the real thing:
+
+```bash
+ansible-playbook playbooks/stop.yml --limit main
+```
+
+That stops every node VM of one cluster — exactly the state a reboot leaves
+behind, and the state `resume.yml` is built to heal, so the cluster keeps its
+data. Do not use `container system stop`: it halts every VM system-wide,
+across every cluster and the service containers too.
 
 It keeps no list of containers, nodes or clusters — all three would drift.
 Nodes come from `kiac get clusters -o json` at run time (plus the `kiac-` name

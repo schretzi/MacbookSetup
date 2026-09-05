@@ -20,8 +20,12 @@
 #     A `PARAMETER num_ctx` baked into the model is only a *default*. Any
 #     client that sends its own `num_ctx` in the request options overrides it,
 #     and one that sends nothing gets whatever `OLLAMA_CONTEXT_LENGTH` says.
-#     This script owns the model-side half; the client-side half for aider
-#     lives in ~/.aider.model.settings.yml.
+#     This script owns the model-side half. Whether a client can override it
+#     depends on which endpoint it speaks to: goose uses ollama's native API
+#     and sends num_ctx via GOOSE_INPUT_LIMIT, while opencode's
+#     OpenAI-compatible /v1 has no such field and can only inherit the tag.
+#     That split is why the tags are named for their context - for one client
+#     the tag is merely a default, for the other it is the whole setting.
 #
 #   ollama-import-model.sh [options] <model>
 #
@@ -229,8 +233,9 @@ ollama create "$NAME" -f "$TMP/Modelfile" || die "ollama create failed"
 if ollama show "$NAME" --modelfile 2>/dev/null | grep -q "num_ctx $CTX"; then
 	note ""
 	note "$NAME created with num_ctx $CTX"
-	note "Clients that send their own num_ctx still override this - for aider,"
-	note "set it in ~/.aider.model.settings.yml as well."
+	note "A client that sends its own num_ctx still overrides this. Clients on"
+	note "the OpenAI-compatible endpoint cannot, so for those the tag is the"
+	note "setting - which is why the name carries the number."
 else
 	die "$NAME was created but num_ctx $CTX is not in its Modelfile"
 fi

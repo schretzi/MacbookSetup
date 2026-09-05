@@ -13,6 +13,8 @@ brew "ollama"
 cask "lm-studio"
 
 brew "opencode"
-# aider is NOT here: the formula builds gcc/openblas/freetype/jpeg-turbo just
-# to reach a Python 3.12 it can build wheels against. It comes from
-# `uv tool install aider-chat` instead (Ansible/roles/uv_tools).
+
+# goose. The formula is `block-goose-cli`, not `goose` - that name belongs to
+# an unrelated database migration tool and the two conflict over the same
+# binary, so installing the wrong one silently shadows this.
+brew "block-goose-cli"

@@ -20,11 +20,15 @@
 # NODE_EXTRA_CA_CERTS names a file that is not there.
 #
 # Scope is deliberately Node only. Python has its own knobs
-# (REQUESTS_CA_BUNDLE, SSL_CERT_FILE) and is not set here: aider was the only
-# Python tool that tripped over this, and it no longer makes the two outbound
-# calls that did. azure-cli needed it too, briefly, until the calendar work
-# that pulled it in settled on EventKit instead - uv is the only Python left
-# behind the proxy, and it takes UV_SYSTEM_CERTS from its own callers.
+# (REQUESTS_CA_BUNDLE, SSL_CERT_FILE) and is not set here, because nothing
+# Python-side needs them any more. aider did, and has been removed in favour
+# of goose; azure-cli needed it too, briefly, until the calendar work that
+# pulled it in settled on EventKit instead - uv is the only Python left behind
+# the proxy, and it takes UV_SYSTEM_CERTS from its own callers.
+#
+# goose itself needs nothing from this file. It is Rust with a first-class
+# ollama provider, so a model call never leaves the loopback and never meets
+# an inspected certificate. opencode remains the reason the file exists.
 if [[ -r "$HOME/.local/state/privoxy/trusted-cas.pem" ]]; then
   export NODE_EXTRA_CA_CERTS="$HOME/.local/state/privoxy/trusted-cas.pem"
 fi

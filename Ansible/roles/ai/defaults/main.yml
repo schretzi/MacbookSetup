@@ -53,13 +53,12 @@ ai_optional_links:
   - { src: Dotfiles/copilot/AGENTS.md, dest: .copilot/AGENTS.md }
   # --- Gemini CLI ---
   - { src: Dotfiles/gemini/settings.json, dest: .gemini/settings.json }
-  # --- aider (local models through ollama) ---
-  # Both halves of the context window: the .conf picks the model, the
-  # .model.settings sends the num_ctx that litellm would otherwise default.
-  - { src: Dotfiles/aider/aider.conf.yml, dest: .aider.conf.yml }
-  - { src: Dotfiles/aider/aider.model.settings.yml, dest: .aider.model.settings.yml }
   # --- opencode (same ollama model, different transport) ---
   - { src: Dotfiles/opencode/opencode.json, dest: .config/opencode/opencode.json }
+  # --- goose (same ollama model, native provider) ---
+  # `goose configure` rewrites this file in place and follows the symlink, so
+  # an interactive reconfigure edits the repo copy rather than detaching it.
+  - { src: Dotfiles/goose/config.yaml, dest: .config/goose/config.yaml }
 
 # ---------------------------------------------------------------------------
 # Deliberately NOT versioned

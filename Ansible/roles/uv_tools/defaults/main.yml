@@ -16,9 +16,11 @@
 #
 # It is the worse home when either of these is true:
 #
-#   * the formula drags in a build toolchain. aider pulls gcc, openblas,
-#     freetype and jpeg-turbo, none of which the CLI needs at runtime - they
-#     are there so pip can build wheels the bottle could not reuse.
+#   * the formula drags in a build toolchain. The case that established this
+#     rule was aider (since removed in favour of goose): its formula pulled
+#     gcc, openblas, freetype and jpeg-turbo, none of which the CLI needed at
+#     runtime - they were there so pip could build wheels the bottle could not
+#     reuse. Worth checking for before moving anything back to a Brewfile.
 #   * the tool needs a Python that is not the one Homebrew currently ships.
 #     Homebrew has exactly one `python@latest` for its formulae; uv pins a
 #     managed interpreter per tool, so `python:` below is a real answer rather
@@ -46,12 +48,11 @@ uv_tools_system_certs: true
 #   package  what to install, i.e. the PyPI distribution name
 #   command  the executable it puts in ~/.local/bin, used to verify the install
 #   python   optional interpreter pin, passed to `uv tool install --python`
-uv_tools_packages:
-  - package: aider-chat
-    command: aider
-    # aider does not support 3.13+ yet; Homebrew's own formula pins 3.12 for
-    # the same reason, it just has to build a whole toolchain to get there.
-    python: "3.12"
+# Empty in the base repository: aider was the only entry and has been replaced
+# by goose and plandex, neither of which is a Python CLI. The role stays because
+# the machinery is generic and the overlays append to it - see
+# uv_tools_packages_overlay below.
+uv_tools_packages: []
 
 # Tools contributed by the overlays, same shape. Appended rather than merged,
 # so both overlays can add their own without one replacing the other - the

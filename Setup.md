@@ -1319,7 +1319,7 @@ Conversation content and caches: `~/.claude/projects/`,
 `paste-cache/`, `shell-snapshots/`, `plugins/cache|data|marketplaces/`,
 `~/.gemini/google_accounts.json`, `~/.copilot/logs/`, and every `auth.db*`.
 
-### Local models — ollama and aider
+### Local models — ollama, goose and opencode
 
 LM Studio and ollama do **not** share models, and the reason is format, not
 configuration. Everything LM Studio downloaded here is MLX — Apple-silicon
@@ -1340,21 +1340,28 @@ Scripts/ollama-import-model.sh --pull --name devstral:32k Devstral-Small-2
 ```
 
 The two model sets are independent copies. LM Studio does **not** need to be
-running for ollama or aider — nothing in this path talks to port 1234.
+running for any of this — nothing in this path talks to port 1234.
 
-#### num_ctx has to be set twice
+#### The tag carries the context, because not every client can set it
 
-A `PARAMETER num_ctx` in the ollama model is only a *default*. litellm sends
-its own options block on every request and that wins, so the number lives in
-two files that have to agree:
+A `PARAMETER num_ctx` in the ollama model is only a *default*, and whether a
+client can override it depends on which endpoint it speaks to:
 
-| half | file | set by |
-| --- | --- | --- |
-| model | the Modelfile's `PARAMETER num_ctx` | `Scripts/ollama-import-model.sh --ctx` |
-| client | `extra_params.num_ctx` | `Dotfiles/aider/aider.model.settings.yml` |
+| client | endpoint | can send num_ctx? | context declared in |
+| --- | --- | --- | --- |
+| goose | ollama native | yes, as `GOOSE_INPUT_LIMIT` | `Dotfiles/goose/config.yaml` |
+| opencode | OpenAI-compatible `/v1` | no such field | `limit.context` |
 
-Setting only the first is the failure that looks like it worked: aider runs,
-and quietly gets 4096 tokens.
+That asymmetry is why the tags are named for their window — `devstral:32k`,
+`:64k`, `:128k`. For opencode the tag *is* the setting; for goose it is the
+default that the client then has to agree with.
+
+Both failure modes are silent. A client that declares more than the model was
+built with does not get an error: llama.cpp truncates the over-long prompt, so
+context is quietly dropped instead. Measured on a fresh goose session before
+this was set: goose reported `13k/128k` while ollama had the model loaded at
+32768, because `GOOSE_CONTEXT_LIMIT` defaults to 128000 for a model it does
+not recognise.
 
 #### Context size and what it costs
 
@@ -1379,12 +1386,32 @@ ollama shares the weights blob and only the Modelfile differs.
 
 ```bash
 ollama_service start                    # the agent never starts itself
-aider                                   # ~/.aider.conf.yml picks the model
+goose session                           # ~/.config/goose/config.yaml picks the model
 ```
 
-To use a bigger window, point `model:` and `weak-model:` in
-`Dotfiles/aider/aider.conf.yml` at `devstral:64k` or `devstral:128k` and add a
-matching block to `Dotfiles/aider/aider.model.settings.yml`.
+To use a bigger window, point the client at `devstral:64k` or `devstral:128k`
+and move its declared context to match in the same commit — the two numbers
+are a pair, and splitting them is the silent failure above.
+
+#### goose
+
+`Dotfiles/goose/config.yaml`. goose has a first-class ollama provider, so
+there is no compatibility shim, no API key, and nothing for it in
+`~/.zsh/rcs/ca` — a model call never leaves the loopback.
+
+Three settings are not defaults and each is deliberate:
+
+- `GOOSE_CONTEXT_LIMIT` — goose's own budgeting number, i.e. when it compacts.
+- `GOOSE_INPUT_LIMIT` — mapped onto ollama's `num_ctx` on the wire.
+- `GOOSE_MODE: smart_approve` — goose defaults to `auto`, which executes tool
+  calls without asking. That is a reasonable default for a frontier model and a
+  poor one for a 24B with shell access: `goose doctor` on this very setup
+  produced a confidently invented `go install github.com/AAIF/goose@latest`.
+  `smart_approve` lets read-only calls through and asks before anything with
+  consequences.
+
+`goose configure` rewrites the config in place and follows the symlink, so an
+interactive reconfigure edits the repo copy rather than detaching it.
 
 #### opencode against the same model
 
@@ -1392,7 +1419,7 @@ matching block to `Dotfiles/aider/aider.model.settings.yml`.
 is JSONC — the config schema sets `allowComments`, so the file is commented
 like everything else here.
 
-The transport differs from aider's in a way that matters. opencode drives
+The transport is the thing that matters here. opencode drives
 ollama through `@ai-sdk/openai-compatible` against `/v1`, the OpenAI-shaped
 endpoint, which **has no `num_ctx` field**. So opencode cannot set the context
 window at all — it inherits whatever the Modelfile baked in. opencode's own
@@ -1405,16 +1432,9 @@ uses that number to decide when to compact a session rather than discovering
 it from the server. `small_model` is pinned to the same model so session
 titles do not quietly reach for a cloud provider.
 
-| | aider | opencode |
-| --- | --- | --- |
-| transport | litellm, native `/api/chat` | `@ai-sdk/openai-compatible`, `/v1` |
-| sets num_ctx? | yes, overrides the model | no, inherits the tag |
-| context declared in | `.aider.model.settings.yml` | `limit.context` |
-
-Tool calling is hungrier than aider's diff editing — the system prompt and
-tool definitions are resident in every request — so 32k is tighter here than
-it is for aider. `devstral:64k` is the first thing to try if tool calls start
-failing.
+Tool calling is hungry — the system prompt and tool definitions are resident
+in every request — so 32k is tight for an agentic loop. `devstral:64k` is the
+first thing to try if tool calls start failing.
 
 ##### It needs a CA bundle to install its provider package
 

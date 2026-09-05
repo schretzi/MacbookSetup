@@ -31,9 +31,9 @@
         "chunkTimeout": 900000
       },
 
-      // Unlike aider, opencode cannot set the context window. litellm sends
-      // num_ctx in an options block; the OpenAI-compatible endpoint has no
-      // such field, so whatever the Modelfile baked in is what applies. That
+      // opencode cannot set the context window at all. The OpenAI-compatible
+      // endpoint has no num_ctx field - only clients on ollama's native API
+      // can send one - so whatever the Modelfile baked in is what applies. That
       // is why the tag is named for its context and why "limit.context" below
       // must match it - opencode uses this number to decide when to compact,
       // and a wrong one either wastes the window or overruns it silently.

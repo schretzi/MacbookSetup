@@ -57,9 +57,12 @@ for fn_file in ~/.zsh/functions/*(-.N); do
   source "$fn_file"
 done
 
-# sops+age (LocalKubernetes vault.sops.yaml) — macOS default lookup path is
-# ~/Library/Application Support/sops/age/keys.txt, not ~/.config/...
-export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+# sops+age (LocalKubernetes vault.sops.yaml). The identity lives in the login
+# keychain, not in a file - sops runs this command and reads the key off its
+# stdout. Created once with `security add-generic-password -s sops-age -a
+# "$USER" -D "age identity" -w`, typing the key at the prompt; see
+# LocalKubernetes/inventory/group_vars/all/main.yml for the reasoning.
+export SOPS_AGE_KEY_CMD="security find-generic-password -w -s sops-age"
 
 # LM Studio CLI (lms). Installer-generated block, with its hardcoded
 # /Users/<name> replaced by $HOME so the file stays portable.

@@ -12,9 +12,25 @@ mail_home: "{{ ansible_facts.env.HOME }}"
 mail_mutt_static_files:
   - neo.muttrc
   - switch.muttrc
-  - bulk-handling-patterns.muttrc
   - mailcap
   - openfile
+
+# The bulk-handling macros are deliberately NOT in the list above, and the
+# distinction is not cosmetic. This list is linked from `repo_root`, i.e.
+# always out of this repository - but those macros name individual senders, so
+# they only ever exist in an overlay. Listing one here produced a link to a
+# base path that has never held the file, and neo.muttrc's `source` guard
+# (`[ -r $f ]`) turns a dangling link into a silent no-op, so the macros never
+# loaded and nothing reported it.
+#
+# Each overlay now declares its own, under its own name, with `root` pointing
+# at its checkout - the treatment `accounts/` already gets, for the same
+# reason:
+#   bulk-handling-work.muttrc     work overlay,    binds F9
+#   bulk-handling-private.muttrc  private overlay, binds F10
+# Separate names rather than one shared file: both overlays link into the same
+# ~/.config/mutt, so a shared name would let whichever ran last win and
+# silently replace the other's macro.
 
 # --- omt (OAuth token manager) -------------------------------------------
 mail_omt_debug: true

@@ -841,6 +841,37 @@ Scripts/verify-mail-config.sh baseline    # before
 Scripts/verify-mail-config.sh check       # after
 ```
 
+### Bulk triage macros — one file per overlay
+
+Two neomutt macros sweep the mailboxes: **F9** bulk-deletes work noise, **F10**
+files personal receipts into `=Belege` and deletes the rest. Both name
+individual senders, so neither can live in this public repository. Each comes
+from the overlay that owns those senders:
+
+| File | Overlay | Key |
+| --- | --- | --- |
+| `bulk-handling-work.muttrc` | work | F9 |
+| `bulk-handling-private.muttrc` | private | F10 |
+
+`neo.muttrc` sources each through a guarded `source` that echoes `/dev/null`
+when the file is absent, so a machine with only one overlay binds only that
+key and one with neither binds nothing — without an error either way.
+
+Two traps are worth recording, because both fail silently:
+
+- **The names must differ per overlay.** Both overlays link into the same
+  `~/.config/mutt`, so one shared filename would let whichever ran last win and
+  quietly replace the other's macro.
+- **The link must be declared by the overlay, not by `mail_mutt_static_files`.**
+  That list is linked from `repo_root`, always this repository. A macro listed
+  there resolves to a base path that never holds it, and the `[ -r $f ]` guard
+  turns the resulting dangling symlink into a no-op — the macros just never
+  load, with nothing reported. That is exactly how F9/F10 sat broken.
+
+Under kanata the F-row is media keys on a bare press, so these are reached with
+**Shift+F9 / Shift+F10** or `^`+F9 / `^`+F10 — see
+[`Dotfiles/Keybindings/kanata.md`](Dotfiles/Keybindings/kanata.md).
+
 Set `enable_mail: false` to skip the whole stack, including the mail dotfiles.
 
 _Role: `mail`_

@@ -15,3 +15,10 @@ Dotfiles/neobean/lazy-lock.json
 # features.yml with Scripts/select-features.py.
 Ansible/local/identity.yml
 Ansible/local/features.yml
+.aider*
+
+# Raycast runtime state. ~/.config/raycast is a symlink into Dotfiles/raycast,
+# so Raycast writes its installed extensions and node compile cache straight
+# into this working tree - 918M of it, none of it configuration. Same category
+# as the caches listed in Ansible/roles/ai/defaults/main.yml.
+Dotfiles/raycast/

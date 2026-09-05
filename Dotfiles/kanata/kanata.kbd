@@ -65,8 +65,15 @@
 ;;     listed in defsrc is passed through as raw literal input, which is
 ;;     why the F-row stopped acting as media keys once kanata started
 ;;     managing this keyboard. Explicitly mapping F1-F12 restores stock
-;;     macOS behaviour: bare F-key = media action, "^" + F-key = literal
-;;     F1-F12 (mapped in the apps layer). Note fn itself is no longer in
+;;     macOS behaviour, and there are now three ways to reach the row:
+;;       bare F-key           media action (brightness, volume, ...)
+;;       Shift + F-key        the literal F1-F12
+;;       "^" + F-key          the literal F1-F12 (apps layer)
+;;     Shift is the access modifier, not part of the output: the fk1-fk12
+;;     aliases wrap the function key in `unshift`, so an app sees a clean F5
+;;     rather than Shift+F5. A genuinely shifted function key is still
+;;     available as "^" + Shift + F-key, since the apps layer passes the row
+;;     through untouched. Note fn itself is no longer in
 ;;     defsrc at all, so it's passed straight through unmodified - it may
 ;;     or may not regain its native macOS behaviour (emoji picker/
 ;;     dictation/etc.) depending on how kanata's virtual keyboard reports
@@ -157,6 +164,40 @@
   ;; to type a literal "^".
   caret_apps (tap-hold-press $tap-timeout $hold-timeout nubs @apps_layer)
 
+  ;; F-row: bare key = media action, Shift + key = the literal F-key.
+  ;;
+  ;; `fork` activates its right-hand action when any of the trigger keys is
+  ;; active, so each of these sends its media key normally and the function
+  ;; key while shift is held.
+  ;;
+  ;; Shift is deliberately NOT added to defsrc for this. fork tests kanata's
+  ;; own active key outputs rather than raw hardware, and a shift that is
+  ;; merely passed through still counts as one - but only because
+  ;; `process-unmapped-keys yes` is set in defcfg above. The config reference
+  ;; calls out that exact dependency for modifiers used this way, so that
+  ;; setting is load-bearing here and not just a convenience.
+  ;;
+  ;; The `unshift` wrapper is what makes Shift+F5 arrive as a real F5 rather
+  ;; than as Shift+F5: it releases lsft/rsft for the duration of the press
+  ;; only. It releases nothing else, so Ctrl+Shift+F5 still arrives as
+  ;; Ctrl+F5 - shift is the access modifier here, not part of the output.
+  ;;
+  ;; Genuinely shifted function keys are therefore unreachable this way, and
+  ;; are not lost: the apps layer passes the F-row through untouched, so
+  ;; "^" + Shift + F5 is still Shift+F5.
+  fk1    (fork brdn (unshift f1)     (lsft rsft))
+  fk2    (fork brup (unshift f2)     (lsft rsft))
+  fk3    (fork mctl (unshift f3)     (lsft rsft))
+  fk4    (fork sls  (unshift f4)     (lsft rsft))
+  fk5    (fork dtn  (unshift f5)     (lsft rsft))
+  fk6    (fork dnd  (unshift f6)     (lsft rsft))
+  fk7    (fork prev (unshift f7)     (lsft rsft))
+  fk8    (fork pp   (unshift f8)     (lsft rsft))
+  fk9    (fork next (unshift f9)     (lsft rsft))
+  fk10   (fork mute (unshift f10)    (lsft rsft))
+  fk11   (fork vold (unshift f11)    (lsft rsft))
+  fk12   (fork volu (unshift f12)    (lsft rsft))
+
   ;; App launch/switch shortcuts, active only while the apps layer is held
 
   hyper-z    (cmd open -a "Zen")
@@ -189,7 +230,7 @@
 
 (deflayer default
   @oe  @ae  @ue  @hyper  @caret_apps  _  _  _  _  _  _  _  _  _  _
-  brdn brup mctl sls  dtn  dnd  prev  pp  next mute vold volu
+  @fk1 @fk2 @fk3 @fk4 @fk5 @fk6 @fk7 @fk8 @fk9 @fk10 @fk11 @fk12
 )
 
 (deflayer apps

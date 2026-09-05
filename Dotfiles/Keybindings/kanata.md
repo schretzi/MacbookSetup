@@ -38,11 +38,25 @@ which would otherwise silently break the moment kanata claimed the keyboard.
 | `^` + o | Go to (or launch) the **obsidian** dedicated kitty instance ([`../kitty/sessions/obsidian.kitty-session`](../kitty/sessions/obsidian.kitty-session)): cwd `~/Obsidian/Documents/Schretzi`, opens neobean |
 | `^` + r | Go to (or launch) the **work-network** dedicated kitty instance: three shells (VPN / Proxy / Tunneling). Session file and binding come from the work overlay; without it this key does nothing. |
 | `^` + m | Go to (or launch) the **mail** dedicated kitty instance ([`../kitty/sessions/mail.kitty-session`](../kitty/sessions/mail.kitty-session)): runs neomutt; quitting neomutt closes the whole instance |
-| `^` + F1 … `^` + F12 | Literal **F1–F12** (see the F-row table below for what these keys do *without* `^` held) |
+| `^` + F1 … `^` + F12 | Literal **F1–F12**, shift passed through — so `^` + Shift + F5 is a genuine Shift+F5, which the Shift-only route below cannot produce (see the F-row table) |
 
 Notes baked into the config itself: `^` + s / `^` + d call [`kitty-focus-or-launch.sh`](../kitty/scripts/kitty-focus-or-launch.sh) / [`open-daily-note.sh`](../kitty/scripts/open-daily-note.sh) — see [kitty.md](kitty.md) "Dedicated instances" for how those work and why plain `open -a kitty --args --session <file>` doesn't. fn is no longer listed in `defsrc` at all, so it's passed straight through unmodified — it may or may not regain its native macOS behavior (emoji picker/dictation/etc.), not verified. Hyper (Caps Lock hold) is consumed by skhd — see [skhd.md](skhd.md).
 
-**F-row (bare, `^` not held)** — F1-F12 are listed explicitly in `defsrc` and mapped to their stock macOS media-key actions, restoring the standard "bare F-key = media action, `^` + F-key = literal function key" behavior (kanata takes over the whole keyboard, so any key not listed in `defsrc` is passed through as a raw literal - this is what silently broke brightness/mute once kanata started managing this keyboard):
+**F-row** — F1-F12 are listed explicitly in `defsrc` and mapped to their stock macOS media-key actions, restoring the behavior that kanata otherwise breaks (it takes over the whole keyboard, so any key not listed in `defsrc` passes through as a raw literal — this is what silently broke brightness/mute once kanata started managing this keyboard).
+
+There are three ways to reach the row:
+
+| Press | Result |
+|---|---|
+| bare F-key | The media action in the table below |
+| **Shift + F-key** | The literal **F1–F12** |
+| `^` + F-key | The literal **F1–F12** (apps layer) |
+
+Shift is only the access modifier here, not part of the output: the `fk1`–`fk12` aliases are `fork`s that wrap the function key in `unshift`, releasing `lsft`/`rsft` for that press alone. So an app receives a clean `F5`, not `Shift+F5` — and `Ctrl+Shift+F5` arrives as `Ctrl+F5`, since `unshift` touches nothing but shift. The consequence is that a genuinely *shifted* function key is unreachable this way; use `^` + Shift + F-key for that, which passes the row through untouched.
+
+`fork` tests kanata's own active key outputs rather than the raw hardware, so a shift that is merely passed through still counts — but only because `process-unmapped-keys yes` is set. That setting is load-bearing for this, not a convenience; the kanata config reference calls out the dependency explicitly for modifiers used this way.
+
+Media actions on a bare press:
 
 | Key | Action |
 |---|---|

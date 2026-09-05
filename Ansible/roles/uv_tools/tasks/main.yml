@@ -1,0 +1,67 @@
+---
+# See defaults/main.yml for what belongs here and what belongs in a Brewfile.
+
+- name: UV tools | locate uv
+  ansible.builtin.stat:
+    path: "{{ uv_tools_bin }}"
+  register: uv_tools_uv_bin
+
+# Same shape as the homebrew role: say what is missing and why, rather than
+# failing with a bare "command not found" from the task below.
+- name: UV tools | warn when uv is missing
+  ansible.builtin.debug:
+    msg: >-
+      {{ uv_tools_bin }} not found. It comes from Brewfiles/35_python.brew -
+      run `ansible-playbook site.yml --tags homebrew` first, then re-run
+      --tags uv_tools.
+  when: not uv_tools_uv_bin.stat.exists
+
+- name: UV tools | install
+  when: uv_tools_uv_bin.stat.exists
+  block:
+    # `uv tool install` is idempotent on its own: an already-installed tool
+    # at the requested version is left alone and reported as such. No
+    # --upgrade here on purpose, matching `brew bundle --no-upgrade` - a run
+    # of this play should not silently move a CLI to a new major version.
+    - name: UV tools | install the tools
+      ansible.builtin.command:
+        cmd: >-
+          {{ uv_tools_bin }} tool install
+          {{ ('--python ' ~ item.python) if item.python is defined else '' }}
+          {{ item.package }}
+      environment:
+        UV_SYSTEM_CERTS: "{{ '1' if uv_tools_system_certs | bool else '0' }}"
+      loop: "{{ uv_tools_packages + uv_tools_packages_overlay }}"
+      loop_control:
+        label: "{{ item.package }}"
+      register: uv_tools_install
+      # uv reports an unchanged install as "`x` is already installed"; it
+      # prints "Installed N executable" only when it actually did work.
+      changed_when: "'Installed' in uv_tools_install.stderr"
+
+    # `uv tool install` succeeding answers "is there a venv", not "can I run
+    # this". The entry point also has to be on PATH, and ~/.local/bin comes
+    # *after* /opt/homebrew/bin there - so a leftover Homebrew formula of the
+    # same name keeps shadowing the uv one and nothing looks wrong.
+    - name: UV tools | check each command resolves
+      ansible.builtin.command: "command -v {{ item.command }}"
+      loop: "{{ uv_tools_packages + uv_tools_packages_overlay }}"
+      loop_control:
+        label: "{{ item.command }}"
+      register: uv_tools_which
+      changed_when: false
+      failed_when: false
+
+    - name: UV tools | report a command that is shadowed or missing
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item.command }} resolves to
+          {{ item.stdout | default('nothing', true) }}, not to
+          {{ ansible_facts.env.HOME }}/.local/bin/{{ item.item.command }}.
+          {{ 'Remove the Homebrew formula that shadows it.'
+             if item.stdout | default('') is search(homebrew_prefix)
+             else 'Check that ~/.local/bin is on PATH.' }}
+      loop: "{{ uv_tools_which.results }}"
+      loop_control:
+        label: "{{ item.item.command }}"
+      when: not (item.stdout | default('')) is search('/.local/bin/')

@@ -113,6 +113,11 @@
       when: enable_homebrew | bool
       tags: [homebrew, brew]
 
+    # after homebrew, which is where uv itself comes from
+    - role: uv_tools
+      when: enable_uv_tools | bool
+      tags: [uv_tools, uv, python]
+
     - role: dotfiles
       when: enable_dotfiles | bool
       tags: [dotfiles]
@@ -251,6 +256,12 @@
     - role: ai
       when: enable_ai | bool
       tags: [ai, skills]
+
+    # after macswitcher, whose config.yaml lists this agent under `daemons`
+    # so `observe` can start and stop it
+    - role: ollama
+      when: enable_ollama | bool
+      tags: [ollama, ai]
 
     - role: work
       when: enable_work | bool

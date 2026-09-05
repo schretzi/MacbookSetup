@@ -101,3 +101,12 @@ deny       = +block{Blocked by privoxy user.action.}
 # `pop[-_]?(up|over|under|open)`, which was blocking the editor UI outright.
 {-block}
 .kiac.schretzi.net
+
+# PyPI serves every artifact from a blake2-hash path,
+# /packages/<2 hex>/<2 hex>/<64 hex>/<name>.whl. When the second pair happens
+# to be the two letters "ad", default.action's generic ad-path pattern matches
+# and privoxy returns 403 - so roughly one package in 256 fails to download,
+# with no relation to which package it is. Measured: certifi is one of them,
+# which is enough to break every `uv tool install` (see the uv_tools role).
+# Same class of false positive as the kiac entry above.
+.pythonhosted.org

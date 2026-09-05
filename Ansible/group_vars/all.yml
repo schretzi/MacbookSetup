@@ -54,6 +54,11 @@ enable_base_dirs: true
 # brew bundle for the Brewfiles selected in roles/homebrew/defaults/main.yml
 enable_homebrew: true
 
+# Python CLIs installed with `uv tool install` rather than from a Brewfile -
+# see roles/uv_tools/defaults/main.yml for the list and for which way round
+# the brew-vs-uv decision goes.
+enable_uv_tools: true
+
 # Symlink ~/.config/* and the home dotfiles back into Dotfiles/
 enable_dotfiles: true
 
@@ -237,6 +242,12 @@ enable_gcloud: true
 # Shared AI skills (Claude / Copilot / anything reading ~/.agents/skills) plus
 # the assistant configs worth versioning
 enable_ai: true
+
+# ollama's LaunchAgent and its log rotation. Registered at login but never
+# started on its own - a loaded model holds several GB, so it is a per-session
+# thing driven from `macswitcher observe` or the `ollama_service` shell
+# function. The binary itself comes from the homebrew role.
+enable_ollama: true
 
 # Employer-specific configuration, supplied by the work overlay.
 # This also gates the work mail account: with it off, msmtp/notmuch/offlineimap

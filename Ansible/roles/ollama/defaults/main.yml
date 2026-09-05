@@ -1,0 +1,10 @@
+---
+# ollama, the local LLM server. The binary comes from
+# Brewfiles/20_AI_coding.brew, so this role owns only what brew does not: the
+# LaunchAgent and its log rotation.
+
+ollama_bin: "{{ homebrew_prefix }}/bin/ollama"
+
+ollama_label: com.schretzi.ollama
+ollama_plist: com.schretzi.ollama.plist
+ollama_newsyslog_conf: ollama.conf

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    ollama, the local LLM server (Brewfiles/20_AI_coding.brew).
+
+    An agent, not a daemon: it binds 11434 on loopback and serves this user.
+
+    Deliberately NOT started on its own - this is the whole point of the job.
+    A loaded model holds several GB resident, and a machine that also runs a
+    kiac cluster does not have that to spare for something used a few times a
+    day. So:
+
+      RunAtLoad  false   launchd registers the job at login and runs nothing.
+      KeepAlive  false   a stop stays stopped; a crash is not papered over.
+
+    "Registered but idle" is what makes start fast: the plist is already
+    parsed, so `launchctl kickstart` is the whole start path - no bootstrap,
+    no sudo, no `brew services`. Stop is `launchctl kill SIGTERM` against the
+    same label, and the job stays loaded and ready for the next kickstart.
+    That is the difference from privoxy/vpn in macswitcher's config, which are
+    RunAtLoad jobs and therefore use bootstrap/bootout instead.
+
+    Reach it through `macswitcher observe`, or the `ollama_service` shell
+    function (Dotfiles/zsh/.zsh/aliases/general).
+
+    On the proxy: launchd does not source the shell's rc files, so this job
+    sees a proxy only through what macswitcher published with
+    `launchctl setenv` before it started. Because it is started by hand rather
+    than at login, that is always the current context's value - which is why
+    it needs no entry in config.yaml's local_proxy.restart_agents.
+
+    The two environment variables are Homebrew's own recommended pair for
+    `ollama serve` and both trade a little quality for a lot of memory, which
+    is the right side of that trade here. OLLAMA_KEEP_ALIVE is the other knob
+    worth knowing about: it is how long an idle model stays resident (default
+    5m) and it is not set, so the default applies.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.ollama</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/ollama</string>
+        <string>serve</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OLLAMA_FLASH_ATTENTION</key>
+        <string>1</string>
+        <key>OLLAMA_KV_CACHE_TYPE</key>
+        <string>q8_0</string>
+    </dict>
+
+    <!-- The two keys this job exists for. See the comment above. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>KeepAlive</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/schretzi/Library/Logs/ollama.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/schretzi/Library/Logs/ollama.err.log</string>
+</dict>
+</plist>

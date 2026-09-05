@@ -91,6 +91,33 @@ daemons:
     label: com.schretzi.privoxy
   lsrules:
     label: com.schretzi.lsrules
+  # ollama, the local LLM server (Ansible/roles/ollama). Listed here purely so
+  # `observe` can see and control it - macswitcher has no built-in knowledge
+  # of it, same as kanata below.
+  #
+  # All three *_command overrides are needed because this agent is
+  # RunAtLoad=false: launchd keeps it registered and idle, so the generic
+  # gui-scope path's bootstrap/bootout would only load and unload the job
+  # without ever running the server. kickstart/kill act on the job that is
+  # already loaded, which is also what makes start fast.
+  #
+  # status_command is `ollama ps` rather than a launchctl query for the same
+  # reason: `launchctl print` succeeds for a loaded-but-idle job, so it would
+  # report a server that is not listening as up. `ollama ps` answers the
+  # question that matters - and its output names the model currently holding
+  # RAM, which is the number worth seeing before starting anything else.
+  #
+  # Both trailing fallbacks are there so observe never shows a bare
+  # "status_command failed" / "stop failed" for the ordinary case: `ollama ps`
+  # exits 1 when the server is down, and `launchctl kill` exits 3 ("No process
+  # to signal") when asked to stop something already stopped. Neither is an
+  # error worth surfacing - stopped is a normal state for this job.
+  ollama:
+    label: com.schretzi.ollama
+    status_command: [[ homebrew_prefix ]]/bin/ollama ps 2>/dev/null || echo "stopped"
+    start_command: launchctl kickstart gui/$(id -u)/com.schretzi.ollama
+    stop_command: launchctl kill SIGTERM gui/$(id -u)/com.schretzi.ollama 2>/dev/null || true
+    restart_command: launchctl kickstart -k gui/$(id -u)/com.schretzi.ollama
   # kanata, the keymapper. macswitcher has no built-in knowledge of it; the
   # entry alone is enough to observe and control it.
   #

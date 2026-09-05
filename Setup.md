@@ -1319,6 +1319,116 @@ Conversation content and caches: `~/.claude/projects/`,
 `paste-cache/`, `shell-snapshots/`, `plugins/cache|data|marketplaces/`,
 `~/.gemini/google_accounts.json`, `~/.copilot/logs/`, and every `auth.db*`.
 
+### Local models — ollama and aider
+
+LM Studio and ollama do **not** share models, and the reason is format, not
+configuration. Everything LM Studio downloaded here is MLX — Apple-silicon
+`.safetensors` quantised with MLX's own affine scheme. ollama runs llama.cpp
+and reads GGUF. It cannot load MLX in any form, and its `FROM <safetensors>`
+path only takes *unquantised* fp16/bf16 weights, so a 4-bit MLX directory is
+rejected there too. Converting locally is not worth it either: de-quantising
+4-bit back to fp16 and re-quantising to GGUF loses more than downloading a
+GGUF built from the original weights.
+
+So `Scripts/ollama-import-model.sh` imports a GGUF straight from LM Studio's
+directory, and for an MLX model it finds the matching GGUF build of the *same*
+release and pulls that instead:
+
+```bash
+Scripts/ollama-import-model.sh --list          # format of every LM Studio model
+Scripts/ollama-import-model.sh --pull --name devstral:32k Devstral-Small-2
+```
+
+The two model sets are independent copies. LM Studio does **not** need to be
+running for ollama or aider — nothing in this path talks to port 1234.
+
+#### num_ctx has to be set twice
+
+A `PARAMETER num_ctx` in the ollama model is only a *default*. litellm sends
+its own options block on every request and that wins, so the number lives in
+two files that have to agree:
+
+| half | file | set by |
+| --- | --- | --- |
+| model | the Modelfile's `PARAMETER num_ctx` | `Scripts/ollama-import-model.sh --ctx` |
+| client | `extra_params.num_ctx` | `Dotfiles/aider/aider.model.settings.yml` |
+
+Setting only the first is the failure that looks like it worked: aider runs,
+and quietly gets 4096 tokens.
+
+#### Context size and what it costs
+
+The KV cache is 81920 elements per token (40 layers x 8 KV heads x 128 dim,
+K and V). The LaunchAgent's `OLLAMA_KV_CACHE_TYPE=q8_0` and
+`OLLAMA_FLASH_ATTENTION=1` nearly halve it against f16:
+
+| ctx | KV cache (q8_0) | resident with 24B Q4_K_M |
+| --- | --- | --- |
+| 32k | 2.85 GB | ~18.7 GB |
+| 64k | 5.70 GB | ~21.5 GB |
+| 128k | 11.4 GB | ~27.2 GB |
+| 256k | 22.8 GB | ~38.6 GB — over the default GPU limit |
+
+`iogpu.wired_limit_mb` is 0, which on 48 GB means roughly 36 GB available to
+Metal, so 128k is the practical ceiling. llama.cpp allocates the whole KV
+cache **at load time**, so a 128k tag holds 27 GB resident for the entire
+`OLLAMA_KEEP_ALIVE` window even for a two-line prompt — which is the cost the
+RunAtLoad=false plist exists to avoid. Hence 32k as the default, with larger
+tags created for when a job actually needs them. Extra tags are free on disk:
+ollama shares the weights blob and only the Modelfile differs.
+
+```bash
+ollama_service start                    # the agent never starts itself
+aider                                   # ~/.aider.conf.yml picks the model
+```
+
+To use a bigger window, point `model:` and `weak-model:` in
+`Dotfiles/aider/aider.conf.yml` at `devstral:64k` or `devstral:128k` and add a
+matching block to `Dotfiles/aider/aider.model.settings.yml`.
+
+#### opencode against the same model
+
+`Dotfiles/opencode/opencode.json` points opencode at the same ollama tag. It
+is JSONC — the config schema sets `allowComments`, so the file is commented
+like everything else here.
+
+The transport differs from aider's in a way that matters. opencode drives
+ollama through `@ai-sdk/openai-compatible` against `/v1`, the OpenAI-shaped
+endpoint, which **has no `num_ctx` field**. So opencode cannot set the context
+window at all — it inherits whatever the Modelfile baked in. opencode's own
+docs say as much sideways ("if tool calls aren't working, try increasing
+num_ctx in Ollama"), and it is the reason the tags are named for their
+context: with opencode the tag *is* the setting.
+
+`limit.context` in the config therefore has to match the tag, since opencode
+uses that number to decide when to compact a session rather than discovering
+it from the server. `small_model` is pinned to the same model so session
+titles do not quietly reach for a cloud provider.
+
+| | aider | opencode |
+| --- | --- | --- |
+| transport | litellm, native `/api/chat` | `@ai-sdk/openai-compatible`, `/v1` |
+| sets num_ctx? | yes, overrides the model | no, inherits the tag |
+| context declared in | `.aider.model.settings.yml` | `limit.context` |
+
+Tool calling is hungrier than aider's diff editing — the system prompt and
+tool definitions are resident in every request — so 32k is tighter here than
+it is for aider. `devstral:64k` is the first thing to try if tool calls start
+failing.
+
+##### It needs a CA bundle to install its provider package
+
+opencode fetches `@ai-sdk/openai-compatible` from npm on first use, and its
+runtime carries its own trust store — the case "Anything with its own trust
+store" warns about under HTTPS inspection below. Unfixed it fails with
+`UNABLE_TO_VERIFY_LEAF_SIGNATURE`. The bundle the privoxy role already
+assembles is the answer, since it carries both the local root and the
+inspection intermediate:
+
+```bash
+export NODE_EXTRA_CA_CERTS=~/.local/state/privoxy/trusted-cas.pem
+```
+
 ## Google Cloud
 
 The SDK comes from `41_clouds.brew`. The role installs the components

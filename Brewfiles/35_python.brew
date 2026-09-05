@@ -1,3 +1,4 @@
 brew "ansible"
 brew "ansible-lint"
 brew "uv"
+brew "pipx"

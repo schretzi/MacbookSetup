@@ -11,6 +11,22 @@ kanata_restart() {
 
 alias flush_dns="sudo -n /usr/bin/dscacheutil -flushcache; sudo -n /usr/bin/killall -HUP mDNSResponder"
 
+# ollama's LaunchAgent is RunAtLoad=false on purpose - a resident model costs
+# several GB - so it is registered at login and started by hand for a session.
+# kickstart/kill rather than bootstrap/bootout: the job is already loaded, and
+# acting on it directly is what makes this fast. `macswitcher observe` drives
+# the same label. See plists/LaunchAgents/com.schretzi.ollama.plist.
+ollama_service() {
+  local label="gui/$(id -u)/com.schretzi.ollama"
+  case "$1" in
+    start)   launchctl kickstart "$label" && echo "ollama starting" ;;
+    stop)    launchctl kill SIGTERM "$label" 2>/dev/null && echo "ollama stopped" || echo "ollama was not running" ;;
+    restart) launchctl kickstart -k "$label" && echo "ollama restarted" ;;
+    status|"") ollama ps 2>/dev/null || echo "ollama is not running" ;;
+    *) echo "usage: ollama_service [start|stop|restart|status]" >&2; return 2 ;;
+  esac
+}
+
 alias ws="cd ~/Workspace"
 alias wss="cd ~/Workspace/Schretzi"
 alias wsd="cd ~/Workspace/Schretzi/MacbookSetup/Dotfiles"

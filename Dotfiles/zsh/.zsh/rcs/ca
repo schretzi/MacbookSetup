@@ -1,0 +1,30 @@
+# Certificate trust for runtimes that do not read the macOS keychain.
+#
+# privoxy inspects HTTPS and signs with this machine's own CA — see Setup.md,
+# "HTTPS inspection, and what it costs". Safari, Chrome, macOS curl, Firefox
+# and Zen all follow the keychain and need nothing. Runtimes that ship their
+# own trust store do not benefit from that, which is the case the same section
+# already calls out. Measured here: npm fails with
+# UNABLE_TO_VERIFY_LEAF_SIGNATURE, and opencode — whose runtime is in the same
+# family — therefore cannot install the provider package it needs to talk to
+# ollama at all.
+#
+# The bundle is not a new one. It is what the privoxy role already assembles
+# for privoxy's own client side: Homebrew's ca-certificates plus this
+# machine's keychain roots, so it carries both the LocalKubernetes root and
+# the Privoxy HTTPS Inspection intermediate.
+#
+# Guarded on existence rather than exported blind. It is machine state under
+# ~/.local/state, which CONVENTIONS.md §2a defines as safe to delete and
+# rewritten by its owner — and Node warns on every start when
+# NODE_EXTRA_CA_CERTS names a file that is not there.
+#
+# Scope is deliberately Node only. Python has its own knobs
+# (REQUESTS_CA_BUNDLE, SSL_CERT_FILE) and is not set here: aider was the only
+# Python tool that tripped over this, and it no longer makes the two outbound
+# calls that did. azure-cli needed it too, briefly, until the calendar work
+# that pulled it in settled on EventKit instead - uv is the only Python left
+# behind the proxy, and it takes UV_SYSTEM_CERTS from its own callers.
+if [[ -r "$HOME/.local/state/privoxy/trusted-cas.pem" ]]; then
+  export NODE_EXTRA_CA_CERTS="$HOME/.local/state/privoxy/trusted-cas.pem"
+fi

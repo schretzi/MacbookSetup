@@ -1,0 +1,70 @@
+{
+  // opencode, pointed at the local ollama server.
+  //
+  // Linked to ~/.config/opencode/opencode.json by Ansible/roles/ai. Comments
+  // are legal here: the config schema sets allowComments and
+  // allowTrailingCommas, so this is JSONC rather than strict JSON.
+  //
+  // The model has to exist before this is any use:
+  //
+  //   Scripts/ollama-import-model.sh --pull --name devstral:32k Devstral-Small-2
+  //
+  // ollama is a RunAtLoad=false LaunchAgent, so `ollama_service start` first.
+  "$schema": "https://opencode.ai/config.json",
+
+  "provider": {
+    // The provider ID is free-form; "ollama" is what the model string below
+    // refers to. @ai-sdk/openai-compatible drives ollama's OpenAI-shaped
+    // endpoint - note the /v1 suffix, which the native ollama API does not use.
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        // By IP, not "localhost": on a dual-stack machine localhost can resolve
+        // to ::1 first and ollama binds 127.0.0.1 only. NO_PROXY already covers
+        // it, so this never goes through privoxy.
+        "baseURL": "http://127.0.0.1:11434/v1",
+        // A local 24B on Metal is far slower to first token than a hosted API,
+        // and the first request of a session also pays ~15GB of model load.
+        // The defaults (300s) are for hosted latency, not for that.
+        "headerTimeout": 900000,
+        "chunkTimeout": 900000
+      },
+
+      // Unlike aider, opencode cannot set the context window. litellm sends
+      // num_ctx in an options block; the OpenAI-compatible endpoint has no
+      // such field, so whatever the Modelfile baked in is what applies. That
+      // is why the tag is named for its context and why "limit.context" below
+      // must match it - opencode uses this number to decide when to compact,
+      // and a wrong one either wastes the window or overruns it silently.
+      "models": {
+        "devstral:32k": {
+          "name": "Devstral Small 2 24B (32k, local)",
+          "tool_call": true,
+          "reasoning": false,
+          "attachment": false,
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          },
+          // Local inference is free. Stated explicitly so `opencode stats`
+          // reports 0 rather than inheriting a guess from models.dev.
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        }
+      }
+    }
+  },
+
+  // provider/model. Both are pinned so nothing silently reaches for a cloud
+  // model: small_model is what opencode uses for session titles, and left
+  // unset it picks its own.
+  "model": "ollama/devstral:32k",
+  "small_model": "ollama/devstral:32k",
+
+  // Upgrades come from Homebrew here (Brewfiles/20_AI_coding.brew), so
+  // opencode must not replace its own binary behind brew's back.
+  "autoupdate": false
+}

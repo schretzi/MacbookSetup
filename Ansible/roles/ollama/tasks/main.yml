@@ -1,0 +1,84 @@
+---
+# ollama - the local LLM server, as a LaunchAgent that never starts itself.
+#
+# `brew services start ollama` is the alternative and is not used: it writes
+# its own plist under homebrew.mxcl.ollama with RunAtLoad true, which is the
+# one thing this job must not do - a resident model costs several GB. The
+# plist here (plists/LaunchAgents/com.schretzi.ollama.plist) sets RunAtLoad
+# and KeepAlive to false, so launchd registers the job at login and runs
+# nothing until something kickstarts it.
+#
+# Control it from `macswitcher observe` (the daemons.ollama entry in
+# Dotfiles/macswitcher/config.yaml.j2) or with the `ollama_service` shell
+# function.
+
+- name: Ollama | check the binary is installed
+  ansible.builtin.stat:
+    path: "{{ ollama_bin }}"
+  register: ollama_binary
+  changed_when: false
+  check_mode: false
+
+- name: Ollama | warn when the formula is missing
+  ansible.builtin.debug:
+    msg: >-
+      ollama is not installed at {{ ollama_bin }} - run the homebrew role
+      first (Brewfiles/20_AI_coding.brew). Skipping the LaunchAgent.
+  when: not ollama_binary.stat.exists
+
+- name: Ollama | configure
+  when: ollama_binary.stat.exists
+  block:
+    # `brew services` and this role would both want port 11434. Nothing here
+    # removes a brew-managed service - that would be a surprise on a machine
+    # where it was set up on purpose - so say which one is in the way.
+    - name: Ollama | look for a competing brew service
+      ansible.builtin.command: "{{ homebrew_prefix }}/bin/brew services list"
+      register: ollama_brew_services
+      changed_when: false
+      check_mode: false
+      failed_when: false
+
+    - name: Ollama | report a competing brew service
+      ansible.builtin.debug:
+        msg: >-
+          `brew services` is managing ollama as well. Both bind 11434, so the
+          second one to start fails. Hand it over with
+          `brew services stop ollama`, then re-run --tags ollama.
+      when: >-
+        ollama_brew_services.stdout_lines
+        | default([])
+        | select('match', '^ollama\s+(started|scheduled)')
+        | list | length > 0
+
+    # Loads the job. With RunAtLoad false that means "registered and idle",
+    # which is the state a kickstart can start from without any further setup.
+    - name: Ollama | install the LaunchAgent
+      ansible.builtin.include_role:
+        name: launchd
+        tasks_from: agent
+      vars:
+        launchd_plist: "{{ ollama_plist }}"
+        launchd_label: "{{ ollama_label }}"
+
+    - name: Ollama | rotate its logs
+      ansible.builtin.include_role:
+        name: newsyslog
+      vars:
+        newsyslog_conf: "{{ ollama_newsyslog_conf }}"
+
+    # Loaded is not running, and that is the intended resting state - so
+    # report it rather than leaving `changed`/`ok` to imply the server is up.
+    - name: Ollama | check whether the server is up
+      ansible.builtin.command: "{{ ollama_bin }} ps"
+      register: ollama_ps
+      changed_when: false
+      check_mode: false
+      failed_when: false
+
+    - name: Ollama | report
+      ansible.builtin.debug:
+        msg: >-
+          {{ ollama_label }} is registered and
+          {{ 'running' if ollama_ps.rc == 0 else 'idle (start it with `ollama_service start`)' }}.
+          It does not start on its own, by design.

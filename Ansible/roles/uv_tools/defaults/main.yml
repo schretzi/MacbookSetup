@@ -1,0 +1,59 @@
+---
+# ============================================================================
+# uv tools - Python CLIs that do not belong in a Brewfile
+# ============================================================================
+# `uv tool install` puts each CLI in its own virtualenv under
+# ~/.local/share/uv/tools and links its entry points into ~/.local/bin. That
+# is the same shape pipx gives, minus a second package manager: uv is already
+# here (Brewfiles/35_python.brew) because it is the fast resolver.
+#
+# When to reach for this role instead of a Brewfile
+# -------------------------------------------------
+# Homebrew is the better home for a Python CLI whose dependency tree is thin -
+# `certifi` plus the current `python@3.x` formula - because then the bottle is
+# just as light and one tool manages one more thing. Look at
+# `brew info --formula <name>` before moving anything here.
+#
+# It is the worse home when either of these is true:
+#
+#   * the formula drags in a build toolchain. aider pulls gcc, openblas,
+#     freetype and jpeg-turbo, none of which the CLI needs at runtime - they
+#     are there so pip can build wheels the bottle could not reuse.
+#   * the tool needs a Python that is not the one Homebrew currently ships.
+#     Homebrew has exactly one `python@latest` for its formulae; uv pins a
+#     managed interpreter per tool, so `python:` below is a real answer rather
+#     than a version to fight with.
+#
+# Deliberately NOT moved here (checked, and Homebrew wins):
+#   ansible, ansible-lint   this playbook needs ansible before it can run, so
+#                           bootstrapping it from a role it runs is circular
+#   weasyprint              needs the native pango/cairo/pillow stack, which
+#                           is exactly what Homebrew is good at
+#   httpie, offlineimap     dependency tree is certifi + python and nothing
+#   aiven-client, vpn-slice else; nothing to gain
+
+# uv comes from Homebrew, so this is where it is.
+uv_tools_bin: "{{ homebrew_prefix }}/bin/uv"
+
+# Trust the certificates in the login/System keychain rather than only uv's
+# bundled root store. This machine sends everything through privoxy with
+# HTTPS inspection (privoxy + local_ca roles), so PyPI arrives under a
+# locally-issued certificate that a bundled store has never heard of - and
+# uv fails the handshake instead of installing.
+uv_tools_system_certs: true
+
+# One entry per CLI.
+#   package  what to install, i.e. the PyPI distribution name
+#   command  the executable it puts in ~/.local/bin, used to verify the install
+#   python   optional interpreter pin, passed to `uv tool install --python`
+uv_tools_packages:
+  - package: aider-chat
+    command: aider
+    # aider does not support 3.13+ yet; Homebrew's own formula pins 3.12 for
+    # the same reason, it just has to build a whole toolchain to get there.
+    python: "3.12"
+
+# Tools contributed by the overlays, same shape. Appended rather than merged,
+# so both overlays can add their own without one replacing the other - the
+# same arrangement homebrew_brewfiles_overlay has.
+uv_tools_packages_overlay: []

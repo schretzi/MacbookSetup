@@ -12,3 +12,7 @@ cask "deepl"
 brew "ollama"
 cask "lm-studio"
 
+brew "opencode"
+# aider is NOT here: the formula builds gcc/openblas/freetype/jpeg-turbo just
+# to reach a Python 3.12 it can build wheels against. It comes from
+# `uv tool install aider-chat` instead (Ansible/roles/uv_tools).

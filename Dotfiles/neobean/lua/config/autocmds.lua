@@ -296,6 +296,21 @@ require("config.modules.task_review").setup_autofold()
 -- shown in a window
 require("config.modules.task_carryover").setup_autofold()
 
+-- Neo-tree draws its own indented tree and must never fold. It inherits
+-- window options from whatever window it is opened next to, so any stray
+-- foldmethod=indent + foldlevel=N leaves the deeper rows of a directory
+-- inside a closed fold -- and because 'foldtext' is "" a closed fold is
+-- drawn as its own first line, so those rows do not merely collapse, they
+-- vanish without a trace. The leak that caused this is fixed at the source
+-- in task_carryover.lua, but the tree has no business folding either way,
+-- so pin it here rather than relying on nothing ever setting it again.
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "neo-tree",
+  callback = function()
+    vim.opt_local.foldenable = false
+  end,
+})
+
 -- Clear jumps when I open Neovim, otherwise there'a lot of crap that links to
 -- different files, trying this and will see if it works out or not
 vim.api.nvim_create_autocmd("BufWinEnter", {

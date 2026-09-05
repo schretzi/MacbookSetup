@@ -1,7 +1,7 @@
 -- Filename: ~/.config/neobean/lua/config/modules/task_carryover.lua
 --
 -- When today's daily note is created (config/keymaps.lua's create_daily_note()),
--- sweep every *other* daily note for unfinished tasks (any not-done state --
+-- sweep every *older* daily note for unfinished tasks (any not-done state --
 -- open, in-progress, on-hold, ..., same set task_review.lua treats as "not
 -- done") and really move them: deleted from the old note, inserted into
 -- today's "### Open Tasks for Today" section. Small stray to-dos jotted in a
@@ -28,16 +28,38 @@ local task_tags = require("config.modules.task_tags")
 -- tasks are inserted. Keep in sync if the template heading text changes.
 M.section_heading = "### Open Tasks for Today"
 
--- Scan every daily note under notes.daily_dir() (excluding `exclude_file`,
--- today's own note) for "not done" task lines. Returns a table keyed by
--- absolute file path -> list of { line_number, text }, plus an ordered list
--- of the file paths touched (so deletions/reporting have a stable order).
+-- Date a daily note is *for*, read from its filename
+-- (Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md) as a plain YYYY-MM-DD string --
+-- ISO dates compare correctly with `<`, so no parsing into a timestamp is
+-- needed. nil for any file not shaped like a daily note.
+local function note_date(path)
+  return vim.fn.fnamemodify(path, ":t"):match("^(%d%d%d%d%-%d%d%-%d%d)")
+end
+
+-- Scan the daily notes under notes.daily_dir() for "not done" task lines and
+-- return a table keyed by absolute file path -> list of { line_number, text },
+-- plus an ordered list of the file paths touched (so deletions/reporting have
+-- a stable order).
+--
+-- Two kinds of note are skipped: `exclude_file` (the target itself), and any
+-- note dated AFTER it. That second rule is what stops the carryover fighting
+-- daily_prepare.lua. Preparing Monday's note on Friday evening moves Friday's
+-- open tasks into Monday deliberately -- but without this guard, opening
+-- Friday's note afterwards and running the carryover again swept those very
+-- tasks straight back out of Monday, leaving the prepared note holding empty
+-- `#### <client>` headings and the two notes trading the same tasks back and
+-- forth on every run. Tasks follow you *forward* until done; a note you have
+-- already prepared for a future day is ahead of today, not behind it.
+--
+-- Notes whose filename carries no date are never treated as future, so a
+-- hand-named file in the daily tree keeps being swept as before.
 local function scan_daily_notes(exclude_file)
   local daily_dir = notes.daily_dir()
   -- Matches both on-disk task forms (`- [ ]` and checkmate's rendered `- □`),
   -- see config/modules/task_states.lua -- daily notes really do contain both
   local pattern = task_states.rg_task_prefix(task_states.not_done_chars())
   local exclude_path = exclude_file and vim.fn.fnamemodify(exclude_file, ":p") or nil
+  local cutoff = exclude_file and note_date(exclude_file) or nil
 
   local cmd = {
     "rg",
@@ -68,7 +90,9 @@ local function scan_daily_notes(exclude_file)
     local decode_ok, decoded = pcall(vim.json.decode, json_line)
     if decode_ok and decoded.type == "match" then
       local abs = vim.fn.fnamemodify(decoded.data.path.text, ":p")
-      if abs ~= exclude_path then
+      local abs_date = note_date(abs)
+      local is_future = cutoff ~= nil and abs_date ~= nil and abs_date > cutoff
+      if abs ~= exclude_path and not is_future then
         if not by_file[abs] then
           by_file[abs] = {}
           table.insert(file_order, abs)
@@ -343,7 +367,17 @@ local function apply_default_folds(bufnr, winid)
     -- (config/keymaps.lua) uses the heading depth as the fold level, so
     -- `section_level - 1` is literally "one level above `### <section>`"
     pcall(vim.cmd, "normal! zx")
-    vim.wo[winid].foldlevel = section_level - 1
+    -- vim.opt_local, NOT vim.wo[winid]. 'foldlevel' is window-local, but
+    -- assigning it through `vim.wo[winid]` writes the GLOBAL default too
+    -- (confirmed on 0.12.5: after `vim.wo[0].foldlevel = 2`, vim.go.foldlevel
+    -- is 2), and every window opened afterwards inherits it. That leaked out
+    -- of daily notes and into neo-tree, which draws an indented tree: with
+    -- the inherited foldmethod=indent, foldlevel=2 and foldtext="" a closed
+    -- fold renders as its own first line, so a directory silently showed its
+    -- first entry and swallowed the rest -- Daily/2026/09-Sep displayed one
+    -- note out of five, while yanking the buffer still produced all five.
+    -- We are already inside nvim_win_call(winid), so opt_local is this window.
+    vim.opt_local.foldlevel = section_level - 1
 
     -- Reopen the tasks section itself, then only the default client's group
     -- inside it -- the rest stay closed by virtue of 'foldlevel'

@@ -72,6 +72,16 @@ return {
         -- jumping around to random dirs when I opened a dir
         follow_current_file = { enabled = false },
 
+        -- Watch directories with libuv and refresh when they change on disk.
+        -- Off by default in neo-tree, which means the tree only ever shows
+        -- the listing it cached when a directory was first expanded. Every
+        -- daily note is created behind nvim's back -- scripts/open-daily-note.sh
+        -- writes the note with sed/mv, and config/modules/daily_prepare.lua and
+        -- task_carryover.lua write with vim.fn.writefile -- so without this the
+        -- Daily/YYYY/MM-Mon folder keeps showing yesterday's contents and a note
+        -- you just created looks like it was never written at all.
+        use_libuv_file_watcher = true,
+
         -- ###################################################################
         --                     custom delete command
         -- ###################################################################

@@ -4,6 +4,29 @@
 yabai -m signal --add event=dock_did_restart action="sudo yabai --load-sa"
 sudo yabai --load-sa
 
+# Keep focus on a kitty session when another one quits.
+#
+# kitty sessions are separate application instances (Dotfiles/Keybindings/
+# kitty.md), so quitting one empties its space - and macOS then switches to
+# another space and focuses whatever it finds. Measured: 22ms after
+# window_destroyed, focus had landed on Zen two spaces away. Finder is the
+# version of that you get when nothing better is around.
+#
+# scripts/kitty-focus-mru.sh keeps its own most-recently-used list, because
+# yabai's `recent` selector means the previously focused *window*, which right
+# after a destroy is as likely to be the corpse or whatever macOS just grabbed.
+#
+# No app= filter on purpose. make-session-apps.sh gives each session its own
+# bundle with a copy of kitty's launcher named after the session, so yabai
+# reports the app as "Work Network" rather than "kitty" - an app="^kitty$"
+# filter matched only a raw kitty instance and missed every real session, which
+# is precisely the case this is meant to fix. The script decides ownership from
+# the process's executable path instead.
+yabai -m signal --add label=kitty_mru_record event=window_focused \
+  action="$HOME/.config/yabai/scripts/kitty-focus-mru.sh record"
+yabai -m signal --add label=kitty_mru_restore event=window_destroyed \
+  action="$HOME/.config/yabai/scripts/kitty-focus-mru.sh restore"
+
 ###############################################################################
 #                                Defaults
 ###############################################################################

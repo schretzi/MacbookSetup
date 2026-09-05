@@ -42,6 +42,8 @@ set -euo pipefail
 
 session_file="$1"
 kitty_bin="/Applications/kitty.app/Contents/MacOS/kitty"
+yabai_bin="/opt/homebrew/bin/yabai"
+jq_bin="/usr/bin/jq"
 
 # Hardcoded rather than $HOME: this is also invoked by kanata's root
 # LaunchDaemon via `cmd`, which does not set HOME for its children (with
@@ -147,6 +149,53 @@ find_pid() {
   return 1
 }
 
+# Run a command as the logged-in user. Same reasoning as the focus-window IPC
+# call above: yabai's socket is per-user, so a root invocation (kanata's
+# LaunchDaemon) has to drop to `schretzi` or the query silently finds nothing.
+run_as_user() {
+  if [[ "$(id -u)" == "0" ]]; then
+    sudo -u schretzi "$@"
+  else
+    "$@"
+  fi
+}
+
+# Put focus on the window belonging to `pid`, crossing spaces if needed.
+#
+# Why this is needed at all: `open` activates the *application*, and that is
+# where macOS stops. yabai then applies its space rule - session apps are
+# pinned to desk9, see Dotfiles/yabai/yabairc - and yabai does not follow a
+# rule-driven move. The result is a session that opens on another desktop
+# while focus stays behind on the one you launched it from.
+#
+# The window is polled for rather than assumed: it does not exist the instant
+# `open` returns. The focus is then verified and retried, because focusing
+# before yabai has finished moving the window just leaves focus on the old
+# space again.
+focus_via_yabai() {
+  local pid="${1:-}" wid="" current deadline attempt
+  [[ -z "$pid" || ! -x "$yabai_bin" ]] && return 1
+
+  deadline=$((SECONDS + 5))
+  while (( SECONDS < deadline )); do
+    wid="$(run_as_user "$yabai_bin" -m query --windows 2>/dev/null \
+      | "$jq_bin" -r --arg p "$pid" '.[] | select((.pid|tostring) == $p) | .id' \
+      | head -1)"
+    [[ -n "$wid" ]] && break
+    sleep 0.1
+  done
+  [[ -z "$wid" ]] && return 1
+
+  for attempt in 1 2 3; do
+    run_as_user "$yabai_bin" -m window --focus "$wid" >/dev/null 2>&1 || true
+    sleep 0.15
+    current="$(run_as_user "$yabai_bin" -m query --windows --window 2>/dev/null \
+      | "$jq_bin" -r '.id // empty')"
+    [[ "$current" == "$wid" ]] && return 0
+  done
+  return 1
+}
+
 # Serialize concurrent invocations for the same session file. Without this,
 # two near-simultaneous calls (e.g. a key repeating while the trigger is held
 # a beat too long) can both run the "already running?" check before the
@@ -171,10 +220,15 @@ fi
 pid="$(find_pid || true)"
 
 if [[ -n "$pid" ]] && [[ -S "/tmp/kitty-$pid" ]]; then
+  # focus-window raises the window inside kitty, but leaves the space switch to
+  # macOS, which does not always make it - so follow up through yabai. Failure
+  # to do so is not fatal: the instance was still focused.
   if [[ "$(id -u)" == "0" ]]; then
-    sudo -u schretzi "$kitty_bin" @ --to "unix:/tmp/kitty-$pid" focus-window >/dev/null 2>&1 && exit 0
+    sudo -u schretzi "$kitty_bin" @ --to "unix:/tmp/kitty-$pid" focus-window >/dev/null 2>&1 \
+      && { focus_via_yabai "$pid" || true; exit 0; }
   else
-    "$kitty_bin" @ --to "unix:/tmp/kitty-$pid" focus-window >/dev/null 2>&1 && exit 0
+    "$kitty_bin" @ --to "unix:/tmp/kitty-$pid" focus-window >/dev/null 2>&1 \
+      && { focus_via_yabai "$pid" || true; exit 0; }
   fi
 fi
 
@@ -195,3 +249,8 @@ while (( SECONDS < wait_deadline )); do
   fi
   sleep 0.1
 done
+
+# `open` activated the application; yabai's space rule then relocated the
+# window. Land focus on it explicitly, or the session opens on desk9 while you
+# stay on the desktop you launched it from.
+focus_via_yabai "${new_pid:-}" || true

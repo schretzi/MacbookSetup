@@ -83,6 +83,26 @@ function M.daily_dir()
   return personal_root .. "/" .. personal_daily_subdir
 end
 
+-- Absolute path of the daily note for `date` (an os.time value), following the
+-- vault convention Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md.
+--
+-- This is the canonical implementation. config/keymaps.lua still carries its
+-- own copies of the same convention in parse_date_line, current_file_date,
+-- current_daily_note_dir and create_next_n_days -- they predate this and are
+-- not derived from it, so a change to the naming still has to touch them too.
+-- New code should call this rather than adding a fifth copy.
+function M.daily_path(date)
+  date = date or os.time()
+  return string.format(
+    "%s/%s/%s-%s/%s.md",
+    M.daily_dir(),
+    os.date("%Y", date),
+    os.date("%m", date),
+    os.date("%b", date),
+    os.date("%Y-%m-%d-%A", date)
+  )
+end
+
 -- NOTE: The Obsidian template applied to newly created daily notes, relative to
 -- the notes root. Keep this in sync with `template` in .obsidian/daily-notes.json
 local daily_template = "Templates/daily.md"

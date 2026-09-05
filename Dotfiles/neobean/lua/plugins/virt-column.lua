@@ -4,7 +4,7 @@
 -- ~/github/dotfiles-latest/neovim/neobean/lua/plugins/virt-column.lua
 --
 -- Plugin that shows the veritcal bar or vertical column
--- It replaces my vim.opt.colorcolumn = "80" configuration
+-- It replaces my vim.opt.colorcolumn = "110" configuration (config/options.lua)
 
 return {
   "lukas-reineke/virt-column.nvim",
@@ -18,6 +18,6 @@ return {
     -- char = "⋮",
     -- char = "",
     char = "󰮾",
-    virtcolumn = "80",
+    virtcolumn = "110",
   },
 }

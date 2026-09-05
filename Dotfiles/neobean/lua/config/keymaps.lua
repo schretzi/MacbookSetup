@@ -2849,6 +2849,35 @@ vim.keymap.set("n", "<leader>tC", function()
   vim.cmd("checktime")
 end, { desc = "[P]Carry over unfinished tasks from other daily notes" })
 
+
+-- Prepare the next working day's note before shutting the laptop: asks for a
+-- date (prefilled with the next working day, weekends and Austrian public
+-- holidays skipped), creates it from the Obsidian template, carries unfinished
+-- tasks over and fills in the meetings. See config/modules/daily_prepare.lua.
+vim.keymap.set("n", "<leader>dp", function()
+  require("config.modules.daily_prepare").prepare()
+end, { desc = "[P] Prepare next working day's daily note" })
+
+-- Re-read the calendar into the open daily note's "### Meetings" section.
+-- A merge, not a rewrite: notes written under a meeting stay, and a meeting
+-- that has disappeared from the calendar is struck through rather than
+-- silently removed. See config/modules/daily_meetings.lua.
+vim.keymap.set("n", "<leader>dm", function()
+  require("config.modules.daily_meetings").refresh()
+end, { desc = "[P] Refresh meetings in this daily note" })
+
+vim.api.nvim_create_user_command("DailyPrepare", function(opts)
+  local dp = require("config.modules.daily_prepare")
+  if opts.args ~= "" then
+    dp.build(opts.args)
+  else
+    dp.prepare()
+  end
+end, { nargs = "?", desc = "Prepare a daily note (default: next working day)" })
+
+vim.api.nvim_create_user_command("DailyMeetings", function()
+  require("config.modules.daily_meetings").refresh()
+end, { desc = "Refresh the meetings section of this daily note" })
 -- -- Toggle bullet point at the beginning of the current line in normal mode
 -- vim.keymap.set("n", "<leader>ml", function()
 --   -- Notify that the function is being executed
@@ -4078,12 +4107,14 @@ local function create_daily_note(date_line, daily_note_dir)
       end
       file:close()
 
-      -- Only sweep unfinished tasks forward when the note just created is
-      -- *today's* -- carrying stray open tasks into a future-dated note
-      -- (e.g. via the "create next N days" keymaps) wouldn't make sense,
-      -- since those tasks aren't due yet
+      -- Only seed the note just created when it is *today's* -- carrying
+      -- stray open tasks into a future-dated note (e.g. via the "create next
+      -- N days" keymaps) wouldn't make sense, since those tasks aren't due
+      -- yet. daily_prepare.seed() is the same step <leader>dp runs, so a note
+      -- made here and one prepared the evening before come out identical:
+      -- unfinished tasks carried over, meetings filled in.
       if y and tonumber(y) == tonumber(os.date("%Y")) and tonumber(m) == tonumber(os.date("%m")) and tonumber(d) == tonumber(os.date("%d")) then
-        require("config.modules.task_carryover").move_unfinished_tasks(full_path)
+        require("config.modules.daily_prepare").seed(full_path, string.format("%s-%s-%s", y, m, d))
       end
 
       vim.cmd("edit " .. vim.fn.fnameescape(full_path))

@@ -51,10 +51,16 @@ local work_sort_fields = { "#text", "mtime:desc", "score:desc", "idx" }
 local modified_sort_fields = { "mtime:desc" }
 
 -- Shared with plugins/checkmate.lua so both agree on which markdown
--- character (inside `- [<char>]`) means "in progress" vs "done"
+-- character (inside `- [<char>]`) means "in progress" vs "done".
+-- `rg_task_prefix` builds a pattern that matches both on-disk forms of a
+-- task line -- the bracket form checkmate saves and the rendered glyph form
+-- (`- □`) that ends up there whenever a write bypasses checkmate's own
+-- save hook -- see config/modules/task_states.lua
 local task_states = require("config.modules.task_states")
-local active_state_class = task_states.escape_class(task_states.active_chars())
-local done_state_class = task_states.escape_class(task_states.done_chars())
+local open_task_prefix = task_states.rg_task_prefix({ " " })
+local active_task_prefix = task_states.rg_task_prefix(task_states.active_chars())
+local unfinished_task_prefix = task_states.rg_task_prefix(task_states.not_done_chars())
+local done_task_prefix = task_states.rg_task_prefix(task_states.done_chars())
 
 local function add_mtime(item)
   local file = item.file
@@ -108,7 +114,7 @@ return {
           Snacks.picker.grep({
             prompt = " ",
             -- pass your desired search as a static pattern
-            search = "^\\s*- \\[ \\]",
+            search = open_task_prefix,
             -- we enable regex so the pattern is interpreted as a regex
             regex = true,
             -- no “live grep” needed here since we have a fixed pattern
@@ -179,7 +185,7 @@ return {
         function()
           Snacks.picker.grep({
             prompt = " ",
-            search = "^\\s*- \\[[" .. active_state_class .. "]\\]",
+            search = active_task_prefix,
             regex = true,
             live = false,
             dirs = { require("config.modules.notes").root() },
@@ -240,7 +246,7 @@ return {
         function()
           Snacks.picker.grep({
             prompt = " ",
-            search = "^\\s*- \\[[ " .. active_state_class .. "]\\]",
+            search = unfinished_task_prefix,
             regex = true,
             live = false,
             dirs = { require("config.modules.notes").root() },
@@ -302,7 +308,7 @@ return {
             prompt = " ",
             -- pass your desired search as a static pattern
             -- search = "^\\s*- \\[x\\] `done:",
-            search = "^\\s*- \\[[" .. done_state_class .. "]\\](?: `done:)?",
+            search = done_task_prefix .. "(?: `done:)?",
             -- we enable regex so the pattern is interpreted as a regex
             regex = true,
             -- no “live grep” needed here since we have a fixed pattern

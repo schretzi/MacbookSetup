@@ -106,11 +106,15 @@ else
   -- Fuck relative numbers, I'm done with them
   vim.opt.relativenumber = true
 
-  -- When text reaches this limit, it automatically wraps to the next line.
-  -- This WILL NOT auto wrap existing lines, or if you paste a long line into a
-  -- file it will not wrap it as well
+  -- No hard wrapping: a line stays one line in the file no matter how long it
+  -- gets. `textwidth = 0` disables the auto-wrap-while-typing that the `t`
+  -- flag in `formatoptions` would otherwise do at this column -- long
+  -- sentences used to get a real newline baked into the file at 80 chars,
+  -- which then showed up in the notes (and in git diffs) as broken-up tasks.
+  -- The 110 limit below is a *display* guide only, see `colorcolumn`.
+  -- `gq`/`gw` still work, they just fall back to the window width.
   -- https://www.reddit.com/r/neovim/comments/1av26kw/i_tried_to_figure_it_out_but_i_give_up_how_do_i/
-  vim.opt.textwidth = 80
+  vim.opt.textwidth = 0
 
   -- Above option applies the setting to ALL file types, if you want to apply it
   -- to specific files only
@@ -123,12 +127,20 @@ else
   -- })
 
   -- -- Disable line wrap, set to false by default in lazyvim
+  -- Soft wrap instead: an overlong line is only *shown* across several screen
+  -- rows, the file itself keeps it as one line (see `textwidth = 0` above)
   vim.opt.wrap = true
+  -- Break at word boundaries rather than mid-word when soft wrapping
+  vim.opt.linebreak = true
+  -- Keep the wrapped continuation rows aligned with the line's own indent,
+  -- so wrapped list items/tasks stay readable
+  vim.opt.breakindent = true
 
   -- Shows colorcolumn that helps me with markdown guidelines.
-  -- This is the vertical bar that shows the 80 character limit
+  -- This is the vertical bar that shows the 110 character limit
+  -- Purely a visual guide -- nothing wraps the text here, see `textwidth`
   -- This applies to ALL file types
-  vim.opt.colorcolumn = "80"
+  vim.opt.colorcolumn = "110"
 
   -- -- To apply it to markdown files only
   -- vim.api.nvim_create_autocmd("BufWinEnter", {

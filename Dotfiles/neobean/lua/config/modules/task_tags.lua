@@ -13,6 +13,17 @@ local M = {}
 -- <leader>tn "new task" prompt
 M.clients = { "Work", "Schretzi", "FF" }
 
+-- Heading used for tasks that carry no @client(...) tag at all, shared by
+-- the vault-wide review (task_review.lua) and the daily-note carryover
+-- (task_carryover.lua) so both group them under the same name
+M.untagged_client = "Untagged"
+
+-- The client whose group starts expanded when a grouped file is first shown
+-- in a window (task_review.lua's digest, task_carryover.lua's "Open Tasks
+-- for Today" section) -- everything else starts collapsed, so a shared or
+-- screen-shared window doesn't show personal task text by default
+M.default_expanded_client = M.clients[1]
+
 function M.today()
   return os.date("%Y-%m-%d")
 end

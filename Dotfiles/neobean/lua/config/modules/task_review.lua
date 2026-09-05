@@ -31,7 +31,7 @@ end
 -- + Untagged) starts collapsed -- handy so a shared/work screen doesn't
 -- show personal task text by default. Change this to expand a different
 -- heading by default.
-M.default_expanded_heading = task_tags.clients[1]
+M.default_expanded_heading = task_tags.default_expanded_client
 
 -- True if the buffer contains our managed section at all (so we don't
 -- touch fold state in unrelated markdown files or a not-yet-populated
@@ -124,19 +124,20 @@ end
 
 -- Strip the leading list marker/checkbox and trim, so `- [ ] Buy milk` and
 -- `  - [.] Buy milk @priority(high)` compare/display consistently, and any
--- duplicate whitespace differences don't create false-distinct entries
+-- duplicate whitespace differences don't create false-distinct entries.
+-- Reads checkmate's rendered form (`- □ Buy milk`) too, since that also
+-- lands on disk -- see config/modules/task_states.lua
 local function extract_text(line)
-  line = line:gsub("\n$", "")
-  local text = line:match("^%s*[-*+]%s*%[.%]%s*(.*)$")
-  return vim.trim(text or line)
+  local _, text = task_states.parse_task_line(line)
+  return vim.trim(text or (line:gsub("\n$", "")))
 end
 
--- Extract the single state character between the brackets (e.g. " " for
--- open, "." for in-progress, "/" for on-hold), so the review can render the
--- task with its actual state instead of flattening everything to open
+-- Extract the state character (e.g. " " for open, "." for in-progress, "/"
+-- for on-hold), so the review can render the task with its actual state
+-- instead of flattening everything to open
 local function extract_marker(line)
-  line = line:gsub("\n$", "")
-  return line:match("^%s*[-*+]%s*%[(.)%]") or " "
+  local char = task_states.parse_task_line(line)
+  return char or " "
 end
 
 -- Run ripgrep for every "not done" task (built-in open + custom
@@ -151,8 +152,9 @@ end
 -- marker = <single char> }
 local function find_open_tasks(exclude_file)
   local root = notes.root()
-  local not_done_class = " " .. task_states.escape_class(task_states.active_chars())
-  local pattern = "^\\s*- \\[[" .. not_done_class .. "]\\]"
+  -- Matches both on-disk task forms (`- [ ]` and checkmate's rendered `- □`),
+  -- see config/modules/task_states.lua
+  local pattern = task_states.rg_task_prefix(task_states.not_done_chars())
   local exclude_path = exclude_file and vim.fn.fnamemodify(exclude_file, ":p") or nil
 
   local cmd = {
@@ -231,7 +233,7 @@ end
 -- sub-grouped into `####` headings per @project(...) value (custom
 -- projects alphabetically, then "No project" last for tasks with a client
 -- but no project)
-local UNTAGGED_CLIENT = "Untagged"
+local UNTAGGED_CLIENT = task_tags.untagged_client
 local NO_PROJECT = "No project"
 
 local function new_client_bucket()

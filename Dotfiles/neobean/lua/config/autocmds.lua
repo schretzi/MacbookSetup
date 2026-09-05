@@ -240,7 +240,8 @@ set_spanish_spell_for_path(0)
 --   end,
 -- })
 
--- When I open markdown files I want to fold the markdown headings
+-- When I open markdown files I want them expanded down to level 2, i.e.
+-- `#` and `##` headings open, everything from `###` down folded away
 -- Originally I thought about using it only for skitty-notes, but I think I want
 -- it in all markdown files
 --
@@ -261,14 +262,22 @@ vim.api.nvim_create_autocmd("BufRead", {
     -- with (and get overwritten by, or clobber) that logic
     if require("config.modules.task_review").is_review_buffer(vim.api.nvim_get_current_buf()) then
       return
-    end -- Avoid running zk multiple times for the same buffer
+    end
+    -- Same for daily notes -- config/modules/task_carryover.lua's
+    -- setup_autofold opens their "Open Tasks for Today" section with only
+    -- the default client expanded, which this pass would undo
+    if require("config.modules.task_carryover").is_daily_note_buffer(vim.api.nvim_get_current_buf()) then
+      return
+    end -- Avoid running zl multiple times for the same buffer
     if vim.b.zk_executed then
       return
     end
     vim.b.zk_executed = true -- Mark as executed
-    -- Use `vim.defer_fn` to add a slight delay before executing `zk`
+    -- Use `vim.defer_fn` to add a slight delay before executing `zl`
     vim.defer_fn(function()
-      vim.cmd("normal zk")
+      -- `zl` folds headings of level 3 and above, i.e. the file opens
+      -- expanded down to its `##` headings
+      vim.cmd("normal zl")
       -- This write was disabling my inlay hints
       -- vim.cmd("silent write")
       vim.notify("Folded keymaps", vim.log.levels.INFO)
@@ -280,6 +289,12 @@ vim.api.nvim_create_autocmd("BufRead", {
 -- expanded, everything else in the managed section collapsed) whenever the
 -- review digest file is opened in a window
 require("config.modules.task_review").setup_autofold()
+
+-- Same for daily notes: config/modules/task_carryover.lua groups the
+-- "Open Tasks for Today" section per @client, and this opens that section
+-- with only the default client (Work) expanded whenever a daily note is
+-- shown in a window
+require("config.modules.task_carryover").setup_autofold()
 
 -- Clear jumps when I open Neovim, otherwise there'a lot of crap that links to
 -- different files, trying this and will see if it works out or not

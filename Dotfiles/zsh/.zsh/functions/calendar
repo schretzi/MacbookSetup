@@ -1,0 +1,62 @@
+# One day's meetings from the Microsoft 365 calendar, on the terminal.
+#
+# Reads EventKit, the local store macOS keeps in sync from the Exchange
+# account in System Settings > Internet Accounts. Instant, works offline, and
+# the calendars come back writable - so managing entries, not just listing
+# them, is reachable from here.
+#
+# The indirection is the point: macOS authenticates that account through
+# Apple's own registered Entra application, so nothing here needs a token, an
+# app registration, or a client id borrowed from another vendor. Every route
+# that talks to Microsoft directly was tried first and is closed:
+#
+#   mgc        the official Graph CLI, archived by Microsoft in August 2025
+#   m365       CLI for Microsoft 365, requires --appId since v6
+#   az rest    Conditional Access answers InvalidAuthenticationToken /
+#              InteractionRequired for the Azure CLI client on this machine
+#   davmail    AADSTS650056 - its application is not consented in the tenant
+#   ICS feed   worked, but a published feed is an anonymous bearer URL that
+#              exposes the whole calendar to anyone holding it, and it was
+#              read-only. Unpublished on purpose; do not reintroduce it.
+#
+# The pattern behind those failures is narrower than "CLI tools are blocked":
+# the tenant serves applications it knows about. Apple's is one of them.
+#
+# Requires uv (Brewfiles/35_python.brew); Scripts/calendar-eventkit.py
+# declares its dependencies inline and uv builds the environment on first run.
+#
+# Usage:
+#   agenda                 today
+#   agenda tomorrow        also: yesterday
+#   agenda 2026-09-07      ISO
+#   agenda 07.09.2026      or the way you actually write dates
+#
+# AGENDA_CALENDARS overrides which calendars are read (comma-separated
+# titles). The default is deliberate: the account mounts several - a birthdays
+# calendar, a US holidays one, and three empty shared ones - and reading the
+# whole Exchange source put "Labor Day" in a Vienna work agenda.
+agenda() {
+  local -r script="${HOME}/Workspace/Schretzi/MacbookSetup/Scripts/calendar-eventkit.py"
+  local -r calendars="${AGENDA_CALENDARS:-Calendar}"
+
+  local day
+  case "${1:-today}" in
+    today)     day=$(date +%F) ;;
+    tomorrow)  day=$(date -v+1d +%F) ;;
+    yesterday) day=$(date -v-1d +%F) ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+      day=$(date -j -f '%Y-%m-%d' "$1" +%F 2>/dev/null) || {
+        echo "agenda: not a date: $1" >&2; return 2; } ;;
+    [0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9])
+      day=$(date -j -f '%d.%m.%Y' "$1" +%F 2>/dev/null) || {
+        echo "agenda: not a date: $1" >&2; return 2; } ;;
+    *) echo "usage: agenda [today|tomorrow|yesterday|YYYY-MM-DD|DD.MM.YYYY]" >&2; return 2 ;;
+  esac
+
+  # UV_SYSTEM_CERTS because PyPI arrives under privoxy's inspection
+  # certificate, which uv's bundled root store has never heard of - the same
+  # reason the uv_tools role sets it. Without it the first run dies on
+  # "invalid peer certificate: UnknownIssuer" while resolving dependencies.
+  env UV_SYSTEM_CERTS=1 uv run --quiet "${script}" "${day}" \
+    --source Exchange --calendars "${calendars}"
+}

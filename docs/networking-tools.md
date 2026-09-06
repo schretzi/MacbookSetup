@@ -1,3 +1,4 @@
+
 # Networking tools — install and use
 
 Three macOS CLIs that handle network contexts, corporate proxy auth, Kerberos
@@ -10,15 +11,19 @@ repository — no Ansible, no overlays, no clone required. Everything here is a
 run the Ansible play, it performs these same steps for you and you can skip to
 [Verifying](#verifying).
 
-| Tool | What it does |
-| --- | --- |
-| **macswitcher** | Switches between named network contexts (home / office / VPN): macOS network location, DNS resolvers, system proxy settings, and a local [Alpaca](https://github.com/samuong/alpaca) proxy that handles PAC files and corporate proxy authentication. |
-| **kerberoskeepalive** | Keeps Kerberos tickets alive by re-acquiring them from a password stored in your login Keychain, before they expire. |
-| **omt** | Obtains and refreshes OAuth2 access tokens for IMAP/POP/SMTP, so a mail client that only speaks "password" can authenticate against Microsoft 365 or Gmail. |
-| **privoxy** | A filtering HTTP proxy. Not one of mine — third-party, from a tap formula. macswitcher points Alpaca at it in contexts that reach the internet directly, so URLs are filtered on networks where no corporate proxy does it. |
+| Tool                  | What it does                                                                                                                                                                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **macswitcher**       | Switches between named network contexts (home / office / VPN): macOS network location, DNS resolvers, system proxy settings, and a local [Alpaca](https://github.com/samuong/alpaca) proxy that handles PAC files and corporate proxy authentication. |
+| **kerberoskeepalive** | Keeps Kerberos tickets alive by re-acquiring them from a password stored in your login Keychain, before they expire.                                                                                                                                  |
+| **omt**               | Obtains and refreshes OAuth2 access tokens for IMAP/POP/SMTP, so a mail client that only speaks "password" can authenticate against Microsoft 365 or Gmail.                                                                                           |
+| **privoxy**           | A filtering HTTP proxy. Not one of mine — third-party, from a tap formula. macswitcher points Alpaca at it in contexts that reach the internet directly, so URLs are filtered on networks where no corporate proxy does it.                           |
 
 They are independent. Install only what you need — except privoxy, which is
 only useful with macswitcher in front of it.
+
+[!CAUTION]
+
+> Use privoxy only if you understand SSL/TLS and you want to deal with it on your system. As you are connected to corp-proxy most of the time it will increase your security only in short sessions and needs some time to be managed
 
 ---
 
@@ -72,21 +77,21 @@ Seven named contexts cover every network situation this machine actually sees.
 overlay, because they carry the corporate `forwarder_proxy` block or the
 corporate upstream resolvers.
 
-| Context | DNS | proxy_mode | privoxy | alpaca | adguard | VPN | kka |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `no-filter` | public (bypass adguard) | direct | stopped (fail-open) | ✅ | running, unused | stopped | — |
-| `full-direct` | DHCP | off | stopped | ❌ | unused | stopped | — |
-| `remote-vpn` | OEBB → adguard fallback | direct | started | ✅ | opportunistic | started (**needs field-testing**) | — |
-| `home-alone` | adguard | direct | started | ✅ | ✅ | stopped | — |
-| `home-vpn` | adguard | forward → corp | stopped | ✅ | ✅ | started | started |
-| `office` | adguard | forward → corp | stopped | ✅ | ✅ | stopped | started |
-| `vpn-debug` | adguard → corp upstreams | off | stopped | ❌ | ✅ | started | started |
+| Context       | DNS                      | proxy_mode     | privoxy             | alpaca | adguard         | VPN                               | kka     |
+| ------------- | ------------------------ | -------------- | ------------------- | ------ | --------------- | --------------------------------- | ------- |
+| `no-filter`   | public (bypass adguard)  | direct         | stopped (fail-open) | ✅     | running, unused | stopped                           | —       |
+| `full-direct` | DHCP                     | off            | stopped             | ❌     | unused          | stopped                           | —       |
+| `remote-vpn`  | OEBB → adguard fallback  | direct         | started             | ✅     | opportunistic   | started (**needs field-testing**) | —       |
+| `home-alone`  | adguard                  | direct         | started             | ✅     | ✅              | stopped                           | —       |
+| `home-vpn`    | adguard                  | forward → corp | stopped             | ✅     | ✅              | started                           | started |
+| `office`      | adguard                  | forward → corp | stopped             | ✅     | ✅              | stopped                           | started |
+| `vpn-debug`   | adguard → corp upstreams | off            | stopped             | ❌     | ✅              | started                           | started |
 
 `no-filter` and `full-direct` are diagnostic/fallback contexts — the former
 bypasses AdGuard Home's DNS filtering and lets privoxy fail open while
 leaving both daemons running as a pass-thru; the latter turns everything off
 (including the system proxy itself) for the case where the network is
-misbehaving and the only goal is *some* connectivity.
+misbehaving and the only goal is _some_ connectivity.
 
 `remote-vpn` targets OEBB train WiFi, whose captive portal only completes
 against its own DNS servers — resolvers list OEBB's servers first and
@@ -112,7 +117,7 @@ HTTPS inspection. Pair it with `Scripts/MacOS/net_probe.sh`, which separates
 a name that does not resolve from a port that does not answer:
 
 ```sh
-net_probe.sh www-proxy.corp.example 8080
+net_probe.sh proxy.example.com 9999
 net_probe.sh --realm CORP.EXAMPLE.COM   # KDC discovery + reachability
 ```
 
@@ -169,7 +174,7 @@ formula exists.
 ### The CA it signs with
 
 Without HTTPS inspection privoxy sees only `CONNECT host:443` and can block
-whole hosts — which a DNS-level blocker already does. Filtering by URL *path*
+whole hosts — which a DNS-level blocker already does. Filtering by URL _path_
 on HTTPS means privoxy terminates TLS with a certificate it mints per site,
 from a CA the machine trusts.
 
@@ -229,7 +234,7 @@ Three of those are easy to get wrong:
   request, which turns the log into a browsing history on disk. `1024` logs
   what was blocked, which is what a filtering proxy is actually asked to
   account for.
-- **`trusted-cas-file` is not optional.** privoxy becomes the TLS *client*
+- **`trusted-cas-file` is not optional.** privoxy becomes the TLS _client_
   once inspecting and never consults the macOS keychain. With no bundle at
   all, `SSL_CTX_load_verify_locations(NULL, NULL)` fails and every HTTPS
   connection dies. Hosts signed by a private CA need that CA appended to the
@@ -291,7 +296,7 @@ agent is written by hand. `~/Library/LaunchAgents/com.schretzi.privoxy.plist`:
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.schretzi.privoxy.plist
 ```
 
-`StandardErrorPath` is the *main* log, not an error log, and there is no
+`StandardErrorPath` is the _main_ log, not an error log, and there is no
 `privoxy.err.log`. privoxy writes everything to stderr, and its own `logfile`
 directive is honoured only when it daemonises — which it cannot do under
 launchd. Splitting the paths would leave an empty `privoxy.log` next to an
@@ -561,28 +566,28 @@ status` and the `.err.log`.
 Every background job on this machine follows the same rules, so you always
 know where to look:
 
-| | |
-| --- | --- |
-| launchd label | `com.schretzi.<name>` |
-| plist | `~/Library/LaunchAgents/com.schretzi.<name>.plist` |
-| config | `~/.config/<name>/config.yaml` |
-| log | `~/Library/Logs/<name>.log` |
-| launchd stderr | `~/Library/Logs/<name>.err.log` (panics only; normally empty) |
-| control | `<tool> service install\|uninstall\|start\|stop\|restart\|status` |
+|                |                                                                   |
+| -------------- | ----------------------------------------------------------------- |
+| launchd label  | `com.schretzi.<name>`                                             |
+| plist          | `~/Library/LaunchAgents/com.schretzi.<name>.plist`                |
+| config         | `~/.config/<name>/config.yaml`                                    |
+| log            | `~/Library/Logs/<name>.log`                                       |
+| launchd stderr | `~/Library/Logs/<name>.err.log` (panics only; normally empty)     |
+| control        | `<tool> service install\|uninstall\|start\|stop\|restart\|status` |
 
-`service` always means *that tool's own launchd job*. The foreground process
+`service` always means _that tool's own launchd job_. The foreground process
 the job runs is a separate command (`daemon`, `proxy run`) — the two are never
 the same word.
 
 privoxy keeps the label and the plist path and departs from the rest, because
 it is somebody else's binary:
 
-| | |
-| --- | --- |
-| config | `~/.config/privoxy/config` — privoxy's own format, not YAML |
-| log | `~/Library/Logs/privoxy.log`, written by launchd from **stderr** |
-| launchd stderr | none — there is no `privoxy.err.log`; see the plist note above |
-| control | `launchctl` directly; there is no `privoxy service …` |
+|                |                                                                  |
+| -------------- | ---------------------------------------------------------------- |
+| config         | `~/.config/privoxy/config` — privoxy's own format, not YAML      |
+| log            | `~/Library/Logs/privoxy.log`, written by launchd from **stderr** |
+| launchd stderr | none — there is no `privoxy.err.log`; see the plist note above   |
+| control        | `launchctl` directly; there is no `privoxy service …`            |
 
 Full reasoning in [CONVENTIONS.md](../CONVENTIONS.md).
 
@@ -606,7 +611,7 @@ baked into the plist at install time.
 
 **`Bootstrap failed: 5: Input/output error`**
 `launchctl bootout` is asynchronous — it returns once the unload has been
-*requested*, not once launchd has finished. Wait a second and retry, or just
+_requested_, not once launchd has finished. Wait a second and retry, or just
 use `<tool> service restart`, which handles the wait.
 
 **The log stopped and never resumed**

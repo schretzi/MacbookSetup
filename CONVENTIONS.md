@@ -1,3 +1,4 @@
+
 # Daemon, log and CLI conventions
 
 Every background job I run on this machine — whether it comes from one of my
@@ -9,12 +10,11 @@ sensible names, it is that there is exactly **one** name for each thing.
 with the reasoning, the failure modes and working code for the reopening log
 writer and the `service` command tree — lives in the
 [`macos-launchd-services`](../schretzi-skills/skills/macos-launchd-services)
-skill. Change the skill first; this file records only what is specific to *this*
+skill. Change the skill first; this file records only what is specific to _this_
 machine (my owner prefix, my job list, my paths).
 
 The migration onto these conventions is complete: every job below already
-carries its final name, and the one-shot script that tore down the old
-identities has been removed. Setting up a machine now needs only
+carries its final name. Setting up a machine now needs only
 `ansible-playbook site.yml --ask-become-pass`.
 
 Third-party jobs are out of scope: `com.google.*`, `homebrew.mxcl.*`,
@@ -26,13 +26,13 @@ Third-party jobs are out of scope: `com.google.*`, `homebrew.mxcl.*`,
 `<name>` is the binary name for a Go CLI, or a short kebab-case job name for a
 script (`offlineimap-sync`, `vmnet-nat-refresh`).
 
-| thing | convention |
-| --- | --- |
-| launchd label | `com.schretzi.<name>` |
-| LaunchAgent plist | `~/Library/LaunchAgents/com.schretzi.<name>.plist` |
+| thing              | convention                                         |
+| ------------------ | -------------------------------------------------- |
+| launchd label      | `com.schretzi.<name>`                              |
+| LaunchAgent plist  | `~/Library/LaunchAgents/com.schretzi.<name>.plist` |
 | LaunchDaemon plist | `/Library/LaunchDaemons/com.schretzi.<name>.plist` |
-| config file | `~/.config/<name>/config.yaml` |
-| env var prefix | `<NAME>_` (upper-cased, `-` → `_`) |
+| config file        | `~/.config/<name>/config.yaml`                     |
+| env var prefix     | `<NAME>_` (upper-cased, `-` → `_`)                 |
 
 No `org.` prefix, no per-user labels (`com.$USER.…` changes between machines),
 no bare `com.<appname>.…` without an owner.
@@ -42,10 +42,10 @@ no bare `com.<appname>.…` without an owner.
 Flat in `~/Library/Logs` for LaunchAgents, `/Library/Logs` for LaunchDaemons.
 No per-project subdirectories.
 
-| file | written by | contains |
-| --- | --- | --- |
-| `<name>.log` | the job | everything the job intends to log |
-| `<name>.err.log` | launchd | panics, and anything before logging is set up |
+| file             | written by | contains                                      |
+| ---------------- | ---------- | --------------------------------------------- |
+| `<name>.log`     | the job    | everything the job intends to log             |
+| `<name>.err.log` | launchd    | panics, and anything before logging is set up |
 
 For a **Go daemon**, `<name>.log` is opened by the process itself through
 `internal/logfile`, and the plist sets only `StandardErrorPath`. Go panics go
@@ -59,10 +59,10 @@ For a **script**, the plist sets `StandardOutPath` → `<name>.log` and
 Machine-written state that a tool republishes — not config, not logs — goes in
 `~/.local/state/<name>/`, matching the XDG-style `~/.config/<name>/` in §1.
 
-| | |
-| --- | --- |
-| path | `~/.local/state/<name>/<thing>.json` |
-| mode | `0600`, `0700` on the directory |
+|          |                                                |
+| -------- | ---------------------------------------------- |
+| path     | `~/.local/state/<name>/<thing>.json`           |
+| mode     | `0600`, `0700` on the directory                |
 | lifetime | safe to delete; the owning process rewrites it |
 
 It is deliberately none of the other three places: `~/Library/Logs` is for
@@ -97,7 +97,7 @@ SIGHUP to syslogd on every rotation**. `J` compresses the archive with bzip2.
 ### The rename problem
 
 `newsyslog` rotates by **renaming**. It has no copy-truncate mode. launchd does
-*not* reopen `StandardOutPath`/`StandardErrorPath` when that happens: the job
+_not_ reopen `StandardOutPath`/`StandardErrorPath` when that happens: the job
 keeps its original fd and goes on writing into the renamed — then compressed —
 inode, while the new log file stays empty forever.
 
@@ -133,20 +133,20 @@ Every Go CLI that installs a background job exposes the same tree:
 <binary> service status
 ```
 
-`service` always means *this tool's own launchd job*. The foreground process
+`service` always means _this tool's own launchd job_. The foreground process
 that the job runs is a separate, non-`service` command (`daemon`, `proxy run`).
 Never use "daemon" for both.
 
 Other shared commands:
 
-| command | meaning |
-| --- | --- |
-| `<binary> version` | version, commit, build date, Go version, licence |
-| `<binary> status` | what the tool manages right now |
-| `<binary> config init` | write a starter `~/.config/<name>/config.yaml` |
-| `<binary> config validate` | check the config and exit non-zero if bad |
+| command                    | meaning                                          |
+| -------------------------- | ------------------------------------------------ |
+| `<binary> version`         | version, commit, build date, Go version, licence |
+| `<binary> status`          | what the tool manages right now                  |
+| `<binary> config init`     | write a starter `~/.config/<name>/config.yaml`   |
+| `<binary> config validate` | check the config and exit non-zero if bad        |
 
-`config init` writes the *embedded* starter config, not a file read from disk
+`config init` writes the _embedded_ starter config, not a file read from disk
 at runtime — the example a reader sees in the repo and the file the command
 writes have to be the same bytes, or the documented example quietly stops
 parsing. tunneling does this via `internal/config/config.example.yaml` plus a

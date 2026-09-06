@@ -21,3 +21,7 @@ Ansible/local/features.yml
 # into this working tree - 918M of it, none of it configuration. Same category
 # as the caches listed in Ansible/roles/ai/defaults/main.yml.
 Dotfiles/raycast/
+
+BACKLOG.md
+CLAUDE.md
+PLAN.md

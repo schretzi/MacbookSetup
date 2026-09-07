@@ -36,6 +36,12 @@ brew "samuong/alpaca/alpaca"
 # every ca-* directive. The tap formula adds openssl@3.
 brew "schretzi/tap/privoxy"
 
+# DNS: macswitcher's dns.backend can drive either this or AdGuard Home (the
+# latter has no Homebrew formula/cask and is installed by the adguardhome
+# role instead - see Ansible/roles/adguardhome). Both can be installed and
+# running at once; only whichever dns.backend selects is ever rewritten.
+brew "unbound"
+
 # Serves the Little Snitch rule groups over HTTPS, because Little Snitch
 # subscribes over nothing else. Certificate from the local_ca role.
 cask "schretzi/tap/lsrules"

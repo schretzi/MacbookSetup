@@ -160,6 +160,13 @@ enable_pf_vmnet_proxy: true
 # finds no container CLI.
 enable_container_autostart: true
 
+# Docker Desktop's proxy settings (settings-store.json), autostart, and the
+# kiac root CA in ~/.docker/certs.d - the replacement for apple/container
+# (see roles/docker_desktop/defaults/main.yml for why). Needs local_ca to
+# have already issued a root, and the docker cask installed - warns and
+# skips itself otherwise.
+enable_docker_desktop: true
+
 
 # Trusts locally-generated root CAs (added via `security add-trusted-cert`
 # into /Library/Keychains/System.keychain) in Firefox-based browsers too -

@@ -196,6 +196,12 @@
       when: enable_local_ca | bool
       tags: [local_ca, certs]
 
+    # after local_ca, which issues the root this trusts into
+    # ~/.docker/certs.d, and after homebrew, which installs the cask
+    - role: docker_desktop
+      when: enable_docker_desktop | bool
+      tags: [docker_desktop, containers]
+
     # trusts locally-generated root CAs (`security add-trusted-cert ...
     # System.keychain`) in Firefox-based browsers too - Safari/Chrome do this
     # natively, Firefox/NSS needs ImportEnterpriseRoots turned on explicitly.

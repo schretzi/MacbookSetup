@@ -6,6 +6,12 @@ brew "cmctl"          # cert-manager CLI, checks issuer/cert state
 brew "hubble"         # Cilium flow visibility; worth having when gateway routing misbehaves
 brew "kubeconform"
 
+# Container runtime - replaces apple/container for LocalKubernetes' host
+# containers (registry/gitea/openbao/postgres/gtt, see its compose/README.md).
+# Configured by roles/docker_desktop: proxy, autostart, kiac root CA trust.
+cask "docker-desktop"
+
+
 # Container images
 brew "hadolint"       # Dockerfile linter; `container build` has no --check like docker does
 brew "ko"             # Dockerfile-free OCI images for Go services: distroless + nonroot by default

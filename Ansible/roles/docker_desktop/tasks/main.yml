@@ -1,0 +1,200 @@
+---
+# docker_desktop - see defaults/main.yml for why this exists and how the
+# app-proxy vs. containers-proxy split works.
+
+- name: Docker Desktop | check the app is installed
+  ansible.builtin.stat:
+    path: /Applications/Docker.app
+  register: docker_desktop_app
+
+- name: Docker Desktop | warn when missing
+  ansible.builtin.debug:
+    msg: >-
+      /Applications/Docker.app not found. Install it with `cask "docker"` in
+      Brewfiles/40_kubernetes_ci.brew (the homebrew role) - skipping this role.
+  when: not docker_desktop_app.stat.exists
+
+- name: Docker Desktop | manage
+  when: docker_desktop_app.stat.exists
+  block:
+    - name: Docker Desktop | check whether settings-store.json exists yet
+      ansible.builtin.stat:
+        path: "{{ docker_desktop_settings_path }}"
+      register: docker_desktop_settings_before
+
+    # Docker Desktop only writes settings-store.json after its first launch
+    # (onboarding, VM bootstrap) - there is nothing to patch before that.
+    # `open -j` starts it hidden so this never steals focus.
+    - name: Docker Desktop | launch once to generate settings-store.json
+      ansible.builtin.command: open -j -a Docker
+      changed_when: true
+      when: not docker_desktop_settings_before.stat.exists
+
+    - name: Docker Desktop | wait for settings-store.json to appear
+      ansible.builtin.wait_for:
+        path: "{{ docker_desktop_settings_path }}"
+        timeout: 300
+      when: not docker_desktop_settings_before.stat.exists
+
+    # settings-store.json exists a few seconds before Docker Desktop is done
+    # writing every default key into it - without this pause the read below
+    # can race a half-written file.
+    - name: Docker Desktop | give it a moment to finish writing defaults
+      ansible.builtin.pause:
+        seconds: 5
+      when: not docker_desktop_settings_before.stat.exists
+
+    - name: Docker Desktop | quit the onboarding-only launch
+      ansible.builtin.command: osascript -e 'tell application "Docker" to quit'
+      changed_when: true
+      failed_when: false
+      when: not docker_desktop_settings_before.stat.exists
+
+    - name: Docker Desktop | check whether it is currently running
+      ansible.builtin.command: pgrep -x Docker
+      register: docker_desktop_running
+      changed_when: false
+      failed_when: false
+
+    - name: Docker Desktop | read current settings
+      ansible.builtin.slurp:
+        src: "{{ docker_desktop_settings_path }}"
+      register: docker_desktop_settings_raw
+
+    # combine(), not a template: settings-store.json carries dozens of keys
+    # (disk size, CPU/memory limits, feature flags, ...) this role has no
+    # opinion on. Merging over the file Docker Desktop already wrote leaves
+    # all of those exactly as the user (or Docker Desktop's own defaults)
+    # last set them, and only touches the keys named below.
+    - name: Docker Desktop | merge the desired settings in
+      ansible.builtin.set_fact:
+        docker_desktop_settings_merged: >-
+          {{
+            (docker_desktop_settings_raw.content | b64decode | from_json) | combine({
+              'AutoStart': docker_desktop_autostart,
+              'ProxyHTTPMode': 'manual',
+              'OverrideProxyHTTP': 'http://' ~ docker_desktop_proxy_host ~ ':' ~ docker_desktop_proxy_port | string,
+              'OverrideProxyHTTPS': 'http://' ~ docker_desktop_proxy_host ~ ':' ~ docker_desktop_proxy_port | string,
+              'OverrideProxyExclude': docker_desktop_proxy_bypass,
+              'ContainersProxyHTTPMode': 'manual',
+              'ContainersOverrideProxyHTTP': 'http://' ~ docker_desktop_containers_proxy_host ~ ':' ~ docker_desktop_proxy_port | string,
+              'ContainersOverrideProxyHTTPS': 'http://' ~ docker_desktop_containers_proxy_host ~ ':' ~ docker_desktop_proxy_port | string,
+              'ContainersOverrideProxyExclude': docker_desktop_proxy_bypass,
+            })
+          }}
+
+    - name: Docker Desktop | write the merged settings back
+      ansible.builtin.copy:
+        content: "{{ docker_desktop_settings_merged | to_nice_json }}\n"
+        dest: "{{ docker_desktop_settings_path }}"
+        mode: "0600"
+      register: docker_desktop_settings_written
+
+    # settings-store.json is only read at daemon start - a change while
+    # Docker Desktop is already running needs a restart to take effect. The
+    # fresh-install path above already quit it after generating the file, so
+    # docker_desktop_running is only rc == 0 here for the "was already
+    # running, settings just changed under it" case.
+    - name: Docker Desktop | restart to pick up the new settings
+      ansible.builtin.command: >-
+        osascript -e 'tell application "Docker" to quit' && open -a Docker
+      changed_when: true
+      when:
+        - docker_desktop_settings_written.changed
+        - docker_desktop_running.rc == 0
+
+    - name: Docker Desktop | check whether the kiac root CA is present
+      ansible.builtin.stat:
+        path: "{{ local_ca_dir }}/root_ca.crt"
+      register: docker_desktop_root_ca
+
+    # ~/.docker/certs.d/<host>/ca.crt, not the System keychain - see
+    # defaults/main.yml. Needs the root, not an intermediate: registry.kiac
+    # (LocalKubernetes' compose/edge Caddy) presents leaf + intermediate on
+    # its own, the client only has to trust the anchor above that.
+    - name: Docker Desktop | trust the kiac root CA for its registries
+      when: docker_desktop_root_ca.stat.exists
+      block:
+        - name: Docker Desktop | create certs.d directories
+          ansible.builtin.file:
+            path: "{{ ansible_facts.env.HOME }}/.docker/certs.d/{{ item }}"
+            state: directory
+            mode: "0755"
+          loop: "{{ docker_desktop_registry_hosts }}"
+
+        - name: Docker Desktop | copy the root CA in
+          ansible.builtin.copy:
+            src: "{{ local_ca_dir }}/root_ca.crt"
+            dest: "{{ ansible_facts.env.HOME }}/.docker/certs.d/{{ item }}/ca.crt"
+            mode: "0644"
+          loop: "{{ docker_desktop_registry_hosts }}"
+
+    - name: Docker Desktop | check whether the CLI is on PATH yet
+      ansible.builtin.command: which docker
+      register: docker_desktop_cli
+      changed_when: false
+      failed_when: false
+
+    # ~/.docker/config.json always exists once the CLI has run at least
+    # once (it self-creates a minimal one) - unlike settings-store.json this
+    # doesn't need a Docker Desktop launch to appear.
+    - name: Docker Desktop | check whether config.json exists yet
+      ansible.builtin.stat:
+        path: "{{ docker_desktop_config_json_path }}"
+      register: docker_desktop_config_json_before
+
+    - name: Docker Desktop | create a minimal config.json if missing
+      ansible.builtin.copy:
+        content: "{}\n"
+        dest: "{{ docker_desktop_config_json_path }}"
+        mode: "0600"
+      when: not docker_desktop_config_json_before.stat.exists
+
+    - name: Docker Desktop | read current config.json
+      ansible.builtin.slurp:
+        src: "{{ docker_desktop_config_json_path }}"
+      register: docker_desktop_config_json_raw
+
+    # combine(), same reasoning as settings-store.json above - config.json
+    # also carries auths/credsStore/plugins/etc. this role has no opinion
+    # on; only the proxies.default block is ours to manage.
+    - name: Docker Desktop | merge the container proxy settings in
+      ansible.builtin.set_fact:
+        docker_desktop_config_json_merged: >-
+          {{
+            (docker_desktop_config_json_raw.content | b64decode | from_json) | combine({
+              'proxies': {
+                'default': {
+                  'httpProxy': 'http://' ~ docker_desktop_containers_proxy_host ~ ':' ~ docker_desktop_proxy_port | string,
+                  'httpsProxy': 'http://' ~ docker_desktop_containers_proxy_host ~ ':' ~ docker_desktop_proxy_port | string,
+                  'noProxy': docker_desktop_container_no_proxy | join(','),
+                }
+              }
+            }, recursive=True)
+          }}
+
+    - name: Docker Desktop | write the merged config.json back
+      ansible.builtin.copy:
+        content: "{{ docker_desktop_config_json_merged | to_nice_json }}\n"
+        dest: "{{ docker_desktop_config_json_path }}"
+        mode: "0600"
+
+    # The proxies.default block is read fresh by the CLI on every
+    # `docker run`/`docker compose up`, so a container created after this
+    # task runs already gets it; no daemon restart needed. Containers
+    # already running keep whatever they were started with, same as any
+    # other env change - recreate them (`docker compose up -d --force-recreate`)
+    # to pick up a changed proxy.
+
+    # Only meaningful once the daemon is actually up, which right after a
+    # fresh install or settings-triggered restart it may not be yet -
+    # failures here are silently ignored rather than chased with a retry
+    # loop; `docker compose up` in LocalKubernetes' compose/ tree creates it
+    # too (external: true) if this never got the chance to.
+    - name: Docker Desktop | ensure the shared networks exist
+      ansible.builtin.command: docker network create {{ item }}
+      loop: "{{ docker_desktop_networks }}"
+      register: docker_desktop_network_create
+      changed_when: docker_desktop_network_create.rc == 0
+      failed_when: false
+      when: docker_desktop_cli.rc == 0

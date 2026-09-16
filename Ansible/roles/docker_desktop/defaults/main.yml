@@ -1,0 +1,88 @@
+---
+# docker_desktop - Docker Desktop's proxy settings, autostart, and the kiac
+# root CA in its own registry trust store.
+#
+# Replaces apple/container as this machine's container runtime (LocalKubernetes
+# PLAN.md §9/§10: the container-core-images launchd job bakes its proxy
+# environment into a static plist snapshot at `container system start` time,
+# and nothing short-of a fresh `container system start` from an already-fresh
+# shell ever refreshes it - see that repo's compose/README.md for the full
+# story). Docker Desktop reads its own proxy setting from settings-store.json
+# on every daemon start instead of an inherited launchd environment, which is
+# the whole reason for the move.
+#
+# The cask itself (Brewfiles/40_kubernetes_ci.brew) is not this role's job -
+# homebrew installs it. This role only configures the app once it exists.
+
+# Docker Desktop keeps all of its settings in one JSON file, not a plist -
+# see https://docs.docker.com/desktop/settings-and-maintenance/settings/.
+docker_desktop_settings_path: "{{ ansible_facts.env.HOME }}/Library/Group Containers/group.com.docker/settings-store.json"
+
+# Start Docker Desktop when signing in - it used to be a manual `open -a
+# Docker` every reboot.
+docker_desktop_autostart: true
+
+# The Docker Desktop *app* is an ordinary macOS process and reaches Alpaca
+# the same way any other native app on this Mac does: loopback.
+#
+# Its `containers` proxy is different on purpose - that setting configures
+# the LinuxKit VM's dockerd and every container's outbound traffic, and
+# 127.0.0.1 inside that VM is the VM itself, not the Mac. `host.docker.internal`
+# is Docker Desktop's own DNS name for "the Mac that's running me" and is
+# reachable from both the VM and every container without any vmnet-style
+# gateway-IP guessing - this sidesteps the entire class of bug the
+# apple/container migration hit.
+docker_desktop_proxy_host: "127.0.0.1"
+docker_desktop_containers_proxy_host: "host.docker.internal"
+docker_desktop_proxy_port: 3128
+
+# Kept in lockstep with macswitcher's local_proxy.no_proxy
+# (~/.config/macswitcher/config.yaml) by hand for now - both lists exist
+# because Docker Desktop never reads macswitcher's config, only this file.
+docker_desktop_proxy_bypass: "localhost,127.0.0.1,.kiac,.kiac.schretzi.net"
+
+# Trust the kiac root CA (issued by MacbookSetup's own local_ca role) for
+# these registry hostnames, the way `docker pull`/`docker push` actually
+# check it: ~/.docker/certs.d/<host>/ca.crt, not the System keychain -
+# dockerd (even the one bundled with Desktop) never reads System.keychain
+# for registry TLS.
+docker_desktop_registry_hosts:
+  - registry.kiac
+
+# Created once so `docker compose up` in LocalKubernetes' compose/ tree can
+# assume it already exists instead of every stack declaring it as its own
+# bridge network.
+docker_desktop_networks:
+  - kiac
+
+# settings-store.json's Containers* proxy keys (above) turned out to have no
+# observed effect on actual container egress - LocalKubernetes' compose
+# migration found that ~/.docker/config.json's top-level "proxies.default"
+# block is what the CLI/daemon actually injects as HTTP_PROXY/HTTPS_PROXY/
+# NO_PROXY into every container it creates. Keep both managed since which
+# one Docker Desktop honors has changed across versions before.
+#
+# Same host.docker.internal reasoning as docker_desktop_containers_proxy_host
+# above - this is what containers dial out through, never 127.0.0.1.
+docker_desktop_config_json_path: "{{ ansible_facts.env.HOME }}/.docker/config.json"
+
+# Go's net/http ProxyFromEnvironment matches bare hostnames in NO_PROXY too,
+# not just dotted domains - every Compose service name that ever calls
+# another one directly (not through edge) needs to be listed here, or that
+# call gets sent to the proxy and fails. Kept in lockstep by hand with
+# compose/*/docker-compose.yml's service names in LocalKubernetes - add a
+# name here whenever a new compose service is added there that talks to
+# another compose service directly.
+docker_desktop_container_no_proxy:
+  - localhost
+  - 127.0.0.1
+  - "::1"
+  - .kiac
+  - .kiac.schretzi.net
+  - registry
+  - gitea
+  - openbao
+  - gtt-backend
+  - gtt-test-backend
+  - edge
+  - postgres

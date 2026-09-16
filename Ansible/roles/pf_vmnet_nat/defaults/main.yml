@@ -1,7 +1,0 @@
----
-# Only meaningful on machines running LocalKubernetes (kiac) clusters.
-# The vmnet subnet this NATs is defined there (roles/cilium's
-# vmnet_subnet in LocalKubernetes/inventory/group_vars/all/main.yml) -
-# duplicated here as a literal rather than cross-repo-templated, since
-# this role has no dependency on that repo being checked out.
-pf_vmnet_nat_enabled: true

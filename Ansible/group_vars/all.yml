@@ -128,38 +128,6 @@ enable_localhost_alias: true
 # them in the System keychain. See the role's defaults for where.
 enable_adguardhome: true
 
-# pf NAT for LocalKubernetes' (kiac) vmnet subnet, kept pointed at whichever
-# interface currently owns the default route (Wi-Fi/Ethernet/VPN switches)
-# (needs sudo). Only meaningful on machines running kiac clusters — safe to
-# leave enabled elsewhere, it just NATs a private subnet nothing else uses.
-enable_pf_vmnet_nat: true
-
-# pf redirect that makes the Alpaca proxy (loopback-only) reachable from the
-# kiac vmnet subnet at the gateway's own address, so cluster node VMs and
-# host containers can route all egress through it (needs sudo). Static
-# rule, independent of which physical interface currently has the default
-# route — unlike pf_vmnet_nat, no refresh daemon is needed. Only meaningful
-# on machines running both kiac and Alpaca; safe to leave enabled
-# elsewhere.
-enable_pf_vmnet_proxy: true
-
-# Brings apple/container's runtime and its service containers back at login,
-# and re-renders the AdGuard Home zone when a container's vmnet address
-# changed. Three things are broken after a reboot and only the last had an
-# owner: `container system start` registers its LaunchAgent outside
-# ~/Library/LaunchAgents so launchd never loads it, apple/container has no
-# restart policy so nothing starts the containers, and every vmnet address is
-# handed out afresh. Cluster nodes are never started with `container start`:
-# a cluster is either resumed through LocalKubernetes' resume.yml or left
-# alone. Resume is opt-in per cluster via `cluster_autostart: true` in its
-# LocalKubernetes host_vars (off everywhere right now, main included - 12 GB
-# is not worth holding for a cluster that is only needed while worked on),
-# only on the first run after a boot, and only if the cluster was still
-# running when the script last looked - so a deliberate stop is respected.
-# Safe to leave enabled on a machine with no containers; it exits as soon as it
-# finds no container CLI.
-enable_container_autostart: true
-
 # Docker Desktop's proxy settings (settings-store.json), autostart, and the
 # kiac root CA in ~/.docker/certs.d - the replacement for apple/container
 # (see roles/docker_desktop/defaults/main.yml for why). Needs local_ca to

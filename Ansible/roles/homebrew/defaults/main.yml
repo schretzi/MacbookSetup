@@ -32,7 +32,6 @@ homebrew_continue_on_error: true
 #   koekeishiya/formulae      yabai, skhd
 #   FelixKratz/formulae       sketchybar
 #   hashicorp/tap             terraform, vault
-#   saiyam1814/tap            kiac
 #   goreleaser/tap            goreleaser
 #   samuong/alpaca            alpaca proxy
 #   go-swagger/go-swagger     go-swagger

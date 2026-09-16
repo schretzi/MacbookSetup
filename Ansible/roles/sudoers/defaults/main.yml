@@ -26,16 +26,6 @@ sudoers_rules:
     commands:
       - /bin/launchctl kickstart -k system/com.schretzi.adguardhome
 
-  # The vmnet gateway 192.168.64.1 appears when the first container starts, and
-  # AdGuard Home has to be rebound onto it before any container or kiac node VM
-  # can resolve anything. The LaunchDaemon notices within a minute; the
-  # LocalKubernetes playbooks cannot wait that long in the middle of a cluster
-  # create, so they call these directly.
-  - name: adguardhome-bind-refresh
-    comment: re-point AdGuard Home's bind_hosts at the kiac vmnet gateway as it comes and goes (adguardhome role)
-    commands:
-      - /usr/local/bin/adguardhome_bind_refresh
-
   - name: adguardhome-zones-refresh
     comment: make AdGuard Home re-read its zone files after LocalKubernetes re-renders kiac.txt
     commands:
@@ -83,10 +73,6 @@ sudoers_rules:
     commands:
       - /opt/homebrew/bin/openconnect
 
-  - name: vmnet-nat-refresh
-    comment: manually re-run the kiac vmnet NAT interface refresh (pf_vmnet_nat role) without waiting for the LaunchDaemon watcher
-    commands:
-      - /usr/local/bin/vmnet_nat_refresh
 
 # Names of rule files this role used to manage and must now delete.
 #
@@ -101,6 +87,11 @@ sudoers_rules:
 sudoers_rules_removed:
   # Folded into kanata-service, which also covers bootout/bootstrap.
   - kanata-restart
+  # kiac/apple-container decommissioned - LocalKubernetes moved to Docker
+  # Compose, which needs neither the vmnet gateway rebind nor its NAT
+  # refresh.
+  - adguardhome-bind-refresh
+  - vmnet-nat-refresh
 
 # Master switch: set to false to refuse passwordless sudo entirely. Any
 # rule files this role previously installed are removed and none are

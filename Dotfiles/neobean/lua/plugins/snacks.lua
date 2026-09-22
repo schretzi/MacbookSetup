@@ -81,6 +81,23 @@ return {
       -- <leader>e is neo-tree's explorer keymap, but snacks explorer was taking over
       -- https://github.com/folke/snacks.nvim/discussions/949
       { "<leader>e", false },
+      -- <leader>n is reserved for the notes quick-capture keymaps
+      -- (config/keymaps.lua: <leader>nn/nh/nt). LazyVim's default binds it
+      -- directly to Notification History -- as an exact mapping that wins
+      -- over the longer nn/nh/nt sequences, so nothing ever waits for the
+      -- second key. Moved to <leader>N instead.
+      { "<leader>n", false },
+      {
+        "<leader>N",
+        function()
+          if Snacks.config.picker and Snacks.config.picker.enabled then
+            Snacks.picker.notifications()
+          else
+            Snacks.notifier.show_history()
+          end
+        end,
+        desc = "Notification History",
+      },
       {
         "<leader>sg",
         function()
@@ -469,6 +486,19 @@ return {
       -- Documentation for the picker
       -- https://github.com/folke/snacks.nvim/blob/main/docs/picker.md
       picker = {
+        -- `~/Brain/{Private,Work}` are symlinks into the actual vaults
+        -- (rclone-mounted NextCloud / a separate git checkout). ripgrep and
+        -- fd don't follow symlinks by default, so without `follow = true`
+        -- here, `<leader>fg` (live grep) and `<leader>ff` (find files) never
+        -- see anything past the `~/Brain` entry point. Global picker
+        -- defaults, merged into every grep/files/explorer picker call site
+        -- in this file via Snacks.picker.config.get() - no per-call change
+        -- needed.
+        sources = {
+          grep = { follow = true },
+          files = { follow = true },
+          explorer = { follow = true },
+        },
         -- My ~/github/dotfiles-latest/neovim/lazyvim/lua/config/keymaps.lua
         -- file was always showing at the top, I needed a way to decrease its
         -- score, in frecency you could use :FrecencyDelete to delete a file

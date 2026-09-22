@@ -6,15 +6,15 @@
 
 local M = {}
 
--- NOTE: Customize your personal notes root here, everything else derives from it
--- This is the Obsidian vault synced through iCloud
-local personal_root =
-  vim.fn.expand("~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Schretzi")
--- NOTE: Subdirectory of the root that holds the daily notes
-local personal_daily_subdir = "Daily"
-
--- Work paths are not hardcoded, they are sourced from this file if it exists
-local work_env_file = vim.fn.expand("~/.config/work/work-env.sh")
+-- NOTE: Both vaults live under the ~/Brain collection (see
+-- ~/mnt/Brain and ~/Workspace/Rewe/Brain, rclone-mounted/git-cloned
+-- respectively, collected under ~/Brain/{Private,Work} via symlinks) and
+-- share the same subdirectory convention (00-Inbox, 10-Daily, 20-Hubs, ...),
+-- so a single pair of roots plus one set of subdir constants covers both.
+local personal_root = vim.fn.expand("~/Brain/Private")
+local work_root = vim.fn.expand("~/Brain/Work")
+-- NOTE: Subdirectory of a root that holds its daily notes
+local daily_subdir = "10-Daily"
 
 local function normalize(path)
   if type(path) ~= "string" or path == "" then
@@ -23,31 +23,6 @@ local function normalize(path)
   local expanded = vim.fn.expand(path)
   local resolved = vim.uv.fs_realpath(expanded)
   return (resolved or vim.fs.normalize(expanded)):gsub("/$", "")
-end
-
--- Sourcing work-env.sh spawns a shell, and the pickers ask for these paths on
--- every invocation, so the answers are cached for the session
-local work_env_cache = {}
-
-function M.work_env_path(name)
-  if work_env_cache[name] ~= nil then
-    return work_env_cache[name] or nil
-  end
-  if not name:match("^WORK_[A-Z0-9_]+$") or vim.fn.filereadable(work_env_file) == 0 then
-    work_env_cache[name] = false
-    return nil
-  end
-
-  local command =
-    string.format("source %s >/dev/null 2>&1 && print -r -- ${%s}", vim.fn.shellescape(work_env_file), name)
-  local output = vim.fn.systemlist({ "/bin/zsh", "-lc", command })
-  if vim.v.shell_error ~= 0 or not output[1] or output[1] == "" then
-    work_env_cache[name] = false
-    return nil
-  end
-
-  work_env_cache[name] = normalize(output[1])
-  return work_env_cache[name] or nil
 end
 
 function M.is_inside(path, root)
@@ -59,43 +34,63 @@ function M.is_inside(path, root)
   return normalized_path == normalized_root or vim.startswith(normalized_path, normalized_root .. "/")
 end
 
--- True when the cwd sits anywhere inside the work tree or its daily notes
-local function in_work_tree()
-  local cwd = vim.fn.getcwd()
-  local work_daily = M.work_env_path("WORK_DAILY_NOTE_DIR")
-  local work_main = M.work_env_path("WORK_MAIN_DIR")
-  return (work_daily and M.is_inside(cwd, work_daily)) or (work_main and M.is_inside(cwd, work_main)) or false
+-- True when the cwd sits anywhere inside the private vault
+function M.in_private_tree()
+  return M.is_inside(vim.fn.getcwd(), personal_root)
 end
 
--- Root to search for notes, independent of where nvim happens to be started
+-- True when the cwd sits anywhere inside the work vault
+function M.in_work_tree()
+  return M.is_inside(vim.fn.getcwd(), work_root)
+end
+
+-- Root to search for notes, independent of where nvim happens to be started.
+-- Defaults to Work: only an explicit cwd inside the private tree opts back
+-- into Private, so a daily note (or anything else keyed off M.root()) never
+-- lands in Private by accident - see M.daily_dir() and inbox_note.lua's
+-- explicit Private/Work prompt for the two places this actually matters.
 function M.root()
-  if in_work_tree() then
-    return M.work_env_path("WORK_MAIN_DIR") or M.work_env_path("WORK_DAILY_NOTE_DIR") or personal_root
+  if M.in_private_tree() then
+    return personal_root
   end
-  return personal_root
+  return work_root
+end
+
+-- Either root by explicit name, for callers that ask rather than infer (the
+-- Private/Work prompt in inbox_note.lua). Falls back to M.root() for any
+-- other value, so a nil/typo'd choice degrades to the same default as
+-- everything else instead of erroring.
+function M.root_for(which)
+  if which == "private" then
+    return personal_root
+  end
+  if which == "work" then
+    return work_root
+  end
+  return M.root()
 end
 
 -- Directory that holds the daily notes, used by the `gt` keymap
 function M.daily_dir()
-  if in_work_tree() then
-    return M.work_env_path("WORK_DAILY_NOTE_DIR") or (personal_root .. "/" .. personal_daily_subdir)
-  end
-  return personal_root .. "/" .. personal_daily_subdir
+  return M.root() .. "/" .. daily_subdir
 end
 
 -- Absolute path of the daily note for `date` (an os.time value), following the
--- vault convention Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md.
+-- vault convention 10-Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md.
 --
--- This is the canonical implementation. config/keymaps.lua still carries its
--- own copies of the same convention in parse_date_line, current_file_date,
--- current_daily_note_dir and create_next_n_days -- they predate this and are
--- not derived from it, so a change to the naming still has to touch them too.
--- New code should call this rather than adding a fifth copy.
-function M.daily_path(date)
+-- `dir_override`, if given, is used instead of M.daily_dir() -- this lets
+-- config/keymaps.lua build the path for an explicit directory (e.g. one
+-- read off the current file, potentially in the work tree) without
+-- duplicating the naming convention itself.
+--
+-- This is the canonical implementation. config/keymaps.lua used to carry its
+-- own copy of the same convention in parse_date_line; that has been folded
+-- into this function. New code should call this rather than adding a new copy.
+function M.daily_path(date, dir_override)
   date = date or os.time()
   return string.format(
     "%s/%s/%s-%s/%s.md",
-    M.daily_dir(),
+    dir_override or M.daily_dir(),
     os.date("%Y", date),
     os.date("%m", date),
     os.date("%b", date),
@@ -105,21 +100,27 @@ end
 
 -- NOTE: The Obsidian template applied to newly created daily notes, relative to
 -- the notes root. Keep this in sync with `template` in .obsidian/daily-notes.json
-local daily_template = "Templates/daily.md"
+local daily_template = "60-Meta/Templates/daily.md"
 
 -- NOTE: The Obsidian template applied to new inbox notes, see `M.render_note_template`
-local note_template = "Templates/note.md"
+local note_template = "60-Meta/Templates/note.md"
 
 -- Subdirectories of the root that hold quick-capture notes, hub pages, and
 -- canonical tag pages, used by the `<leader>nn`/`<leader>nh`/`<leader>nt`
 -- keymaps (config/keymaps.lua and config/modules/inbox_note.lua)
-local inbox_subdir = "Inbox"
-local hubs_subdir = "Hubs"
-local tags_subdir = "Tags"
+local inbox_subdir = "00-Inbox"
+local hubs_subdir = "20-Hubs"
+local tags_subdir = "20-Hubs" -- Tags/ wurde in der Migration aufgeloest, siehe Vault-Migration-Plan Phase 5
 
 -- Directory that holds quick-capture notes, used by `<leader>nn`
 function M.inbox_dir()
   return M.root() .. "/" .. inbox_subdir
+end
+
+-- Same as M.inbox_dir(), but for an explicit "private"/"work" choice rather
+-- than the cwd-inferred root - used by inbox_note.lua's Private/Work prompt.
+function M.inbox_dir_for(which)
+  return M.root_for(which) .. "/" .. inbox_subdir
 end
 
 -- Directory that holds hub pages (topic index notes), used by `<leader>nh`
@@ -172,11 +173,15 @@ end
 -- {{date}} and {{title}}, so a note created from nvim looks the same as one
 -- created from Obsidian's "New note from template" command
 --
+-- `root_override`, if given, is used instead of M.root() - lets
+-- inbox_note.lua's Private/Work prompt pull the template from whichever
+-- vault was actually chosen rather than the cwd-inferred one.
+--
 -- Returns a list of lines, or nil when the template is missing or unreadable
-function M.render_note_template(title, date)
+function M.render_note_template(title, date, root_override)
   date = date or os.date("%Y-%m-%d")
 
-  local path = M.root() .. "/" .. note_template
+  local path = (root_override or M.root()) .. "/" .. note_template
   if vim.fn.filereadable(path) == 0 then
     return nil
   end

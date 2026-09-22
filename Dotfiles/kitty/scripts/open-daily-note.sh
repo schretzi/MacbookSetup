@@ -19,12 +19,15 @@ set -euo pipefail
 # kitty-focus-or-launch.sh for why a ${HOME:-fallback} isn't the answer.
 home="/Users/schretzi"
 
-vault_dir="$home/Obsidian/Documents/Schretzi"
-daily_dir="$vault_dir/Daily"
-template="$vault_dir/Templates/daily.md"
+# Defaults to the Work vault, same as notes.lua's M.root(): daily notes
+# should land in Work unless something explicitly asks for Private, so a
+# work-context note never leaks into the personal vault by accident.
+vault_dir="$home/Brain/Work"
+daily_dir="$vault_dir/10-Daily"
+template="$vault_dir/60-Meta/Templates/daily.md"
 # Layout must stay in sync with neobean's lua/config/modules/notes.lua and with
 # `format` in the vault's .obsidian/daily-notes.json:
-#   Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md
+#   10-Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md
 # The weekday in the filename is what makes a work week easy to scan.
 today="$(date +%Y-%m-%d)"
 year="$(date +%Y)"

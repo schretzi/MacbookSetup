@@ -32,52 +32,61 @@ local function insert_at_cursor(text)
   vim.api.nvim_win_set_cursor(0, { row, col + #text })
 end
 
--- Prompt for a title, then create + open Inbox/YYYY-MM-DD_Title.md, seeded
--- from Templates/note.md (mirrors the daily-note flow in config/keymaps.lua)
+-- Prompt for Private/Work, then a title, then create + open
+-- {Private,Work}/00-Inbox/YYYY-MM-DD_Title.md, seeded from
+-- Templates/note.md in whichever vault was chosen (mirrors the daily-note
+-- flow in config/keymaps.lua)
 function M.create_note()
-  vim.ui.input({ prompt = "New note title: " }, function(title)
-    if not title or title:match("^%s*$") then
+  vim.ui.select({ "Private", "Work" }, { prompt = "New note: Private or Work?" }, function(context)
+    if not context then
       return
     end
+    local which = context == "Work" and "work" or "private"
 
-    local date = os.date("%Y-%m-%d")
-    local slug = slugify(title)
-    if slug == "" then
-      vim.api.nvim_echo({ { "Title has no usable characters", "ErrorMsg" } }, false, {})
-      return
-    end
+    vim.ui.input({ prompt = "New note title: " }, function(title)
+      if not title or title:match("^%s*$") then
+        return
+      end
 
-    local dir = notes.inbox_dir()
-    vim.fn.mkdir(dir, "p")
-    local path = string.format("%s/%s_%s.md", dir, date, slug)
+      local date = os.date("%Y-%m-%d")
+      local slug = slugify(title)
+      if slug == "" then
+        vim.api.nvim_echo({ { "Title has no usable characters", "ErrorMsg" } }, false, {})
+        return
+      end
 
-    if vim.fn.filereadable(path) == 1 then
-      vim.api.nvim_echo({ { "Note already exists, opening it: " .. path, "WarningMsg" } }, false, {})
+      local dir = notes.inbox_dir_for(which)
+      vim.fn.mkdir(dir, "p")
+      local path = string.format("%s/%s_%s.md", dir, date, slug)
+
+      if vim.fn.filereadable(path) == 1 then
+        vim.api.nvim_echo({ { "Note already exists, opening it: " .. path, "WarningMsg" } }, false, {})
+        vim.cmd.edit(path)
+        return
+      end
+
+      local lines = notes.render_note_template(title, date, notes.root_for(which))
+      if not lines then
+        -- Template missing, fall back to a minimal scaffold
+        lines = {
+          "---",
+          "date: " .. date,
+          "hubs:",
+          "  - ",
+          "tags:",
+          "  - ",
+          "urls:",
+          "  - ",
+          "---",
+          "",
+          "# " .. title,
+        }
+      end
+
+      vim.fn.writefile(lines, path)
       vim.cmd.edit(path)
-      return
-    end
-
-    local lines = notes.render_note_template(title, date)
-    if not lines then
-      -- Template missing, fall back to a minimal scaffold
-      lines = {
-        "---",
-        "date: " .. date,
-        "hubs:",
-        "  - ",
-        "tags:",
-        "  - ",
-        "urls:",
-        "  - ",
-        "---",
-        "",
-        "# " .. title,
-      }
-    end
-
-    vim.fn.writefile(lines, path)
-    vim.cmd.edit(path)
-    vim.api.nvim_echo({ { "CREATED NOTE " .. path, "WarningMsg" } }, false, {})
+      vim.api.nvim_echo({ { "CREATED NOTE (" .. context .. ") " .. path, "WarningMsg" } }, false, {})
+    end)
   end)
 end
 

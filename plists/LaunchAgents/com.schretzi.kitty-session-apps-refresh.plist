@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.kitty-session-apps-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/schretzi/Workspace/Schretzi/MacbookSetup/Dotfiles/kitty/scripts/make-session-apps.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Exits after each run, so a bare <true/> here would make launchd
+         restart it forever. -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- make-session-apps.sh copies kitty's own launcher binary into each
+         wrapper bundle (a real copy, not a symlink - see that script's
+         header for why), while Frameworks/Resources stay symlinked back to
+         /Applications/kitty.app. A kitty upgrade (brew or kitty's own
+         auto-updater) replaces those Resources in place, so the old copied
+         binary in each wrapper starts looking for e.g. a python3.14 stdlib
+         that no longer exists there - it doesn't crash loudly, it just dies
+         within milliseconds of launch with no Gatekeeper dialog and no
+         visible window. Watching Info.plist (rewritten by every upgrade)
+         catches that the moment it happens. -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Applications/kitty.app/Contents/Info.plist</string>
+    </array>
+
+    <!-- Safety net for an upgrade that happened while this agent was not
+         loaded (e.g. between bootout and the next bootstrap). Kitty upgrades
+         are infrequent, so this is just a backstop, not the primary trigger. -->
+    <key>StartInterval</key>
+    <integer>21600</integer>
+
+    <!-- Exits after each run, so launchd opens fresh files and newsyslog's
+         rename-based rotation is safe. -->
+    <key>StandardOutPath</key>
+    <string>/Users/schretzi/Library/Logs/kitty-session-apps-refresh.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/schretzi/Library/Logs/kitty-session-apps-refresh.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

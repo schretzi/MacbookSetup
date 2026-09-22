@@ -35,7 +35,7 @@ which would otherwise silently break the moment kanata claimed the keyboard.
 | `^` + t | Launch/switch to **Microsoft Teams** |
 | `^` + s | Go to (or launch) the **setup** dedicated kitty instance ([`../kitty/sessions/setup.kitty-session`](../kitty/sessions/setup.kitty-session)): cwd `~/Workspace/Schretzi/MacbookSetup`, opens neobean |
 | `^` + d | Go to (or launch) the **daily-note** dedicated kitty instance: today's Obsidian daily note in neobean, creating it from the daily template if it doesn't exist yet ([`../kitty/scripts/open-daily-note.sh`](../kitty/scripts/open-daily-note.sh)) |
-| `^` + o | Go to (or launch) the **obsidian** dedicated kitty instance ([`../kitty/sessions/obsidian.kitty-session`](../kitty/sessions/obsidian.kitty-session)): cwd `~/Obsidian/Documents/Schretzi`, opens neobean |
+| `^` + o | Go to (or launch) the **obsidian** dedicated kitty instance ([`../kitty/sessions/obsidian.kitty-session`](../kitty/sessions/obsidian.kitty-session)): cwd `~/Brain`, opens neobean |
 | `^` + r | Go to (or launch) the **work-network** dedicated kitty instance: three shells (VPN / Proxy / Tunneling). Session file and binding come from the work overlay; without it this key does nothing. |
 | `^` + m | Go to (or launch) the **mail** dedicated kitty instance ([`../kitty/sessions/mail.kitty-session`](../kitty/sessions/mail.kitty-session)): runs neomutt; quitting neomutt closes the whole instance |
 | `^` + F1 … `^` + F12 | Literal **F1–F12**, shift passed through — so `^` + Shift + F5 is a genuine Shift+F5, which the Shift-only route below cannot produce (see the F-row table) |

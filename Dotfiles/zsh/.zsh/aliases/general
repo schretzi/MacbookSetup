@@ -31,7 +31,7 @@ alias ws="cd ~/Workspace"
 alias wss="cd ~/Workspace/Schretzi"
 alias wsd="cd ~/Workspace/Schretzi/MacbookSetup/Dotfiles"
 alias wsb="cd ~/Workspace/Schretzi/MacbookSetup/Brewfiles"
-alias wso="cd ~/Obsidian/Documents/Schretzi"
+alias wso="cd ~/Brain"
 
 alias tf="terraform"
 alias tg="terragrunt"

@@ -205,6 +205,13 @@ manual on the Air, as on any new machine: the SSH key (step 3), the OAuth
 client credentials in the keychain (`Scripts/omt-oauth-keychain.sh store`),
 and the first `omt` authorisation per account.
 
+The notes vault cannot come over the M5's WebDAV mount: on the road the Air
+is often offline. The `notes_sync` role keeps a real local copy in
+`~/Notes/Brain` instead, synced with Nextcloud by `Scripts/notes-sync.sh`
+(rclone bisync) every ten minutes from a LaunchAgent. It needs a Nextcloud
+app password in the login keychain under the name in
+`notes_sync_keychain_name`; the role does the first `--resync` itself.
+
 Paths that used to say `/opt/homebrew` work on both machines now:
 `homebrew_prefix` follows the architecture, plists that name a Homebrew
 binary are `.j2` templates, and everything that starts neovim goes through

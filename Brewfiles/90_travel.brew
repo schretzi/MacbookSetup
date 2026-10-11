@@ -68,7 +68,6 @@ brew "gh"          # Go: built from source here, but go itself bootstraps quickl
 # Apps
 cask "zen"
 cask "bitwarden"
-cask "obsidian"
 cask "tailscale-app"
 cask "github"
 brew "pandoc"

@@ -122,6 +122,12 @@
       when: enable_dotfiles | bool
       tags: [dotfiles]
 
+    # neobean's wrapper (Dotfiles/neobean/bin/neobean) looks in ~/.local/bin
+    # first, which is where this links the release build
+    - role: neovim_release
+      when: enable_neovim_release | bool
+      tags: [neovim_release, neovim]
+
     - role: git
       when: enable_git | bool
       tags: [git]
@@ -165,6 +171,10 @@
     - role: mail
       when: enable_mail | bool
       tags: [mail]
+
+    - role: notes_sync
+      when: enable_notes_sync | bool
+      tags: [notes_sync, notes]
 
     # the extra 127.0.0.x addresses on lo0. Before AdGuard Home, which binds
     # 127.0.0.3 for both DNS and its web UI - and macOS drops the aliases on

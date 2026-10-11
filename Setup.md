@@ -168,6 +168,63 @@ brew bundle install --file=31_rust.brew
 
 From here on, run the playbook.
 
+## 6. Travel machine — the Intel MacBook Air
+
+The company M5 may not travel abroad, so the old MacBook Air (MacBookAir7,2,
+stuck on macOS 12) carries the personal part of the setup: shell, kitty,
+neobean, Zen and the mail stack. `Ansible/profiles/travel.yml` selects exactly
+that; everything work, Apple Silicon only or root-level is switched off there.
+
+The constraint behind every choice in that profile: **macOS 12 on Intel is a
+Homebrew Tier 3 configuration with no bottles.** Every formula that is not
+already installed is built from source, and anything Rust- or Python-based
+drags a whole toolchain in with it. Hence:
+
+- `Brewfiles/90_travel.brew` is the Air's only Brewfile, and lists only what is
+  already installed or cheap to build. Its header names what is missing and
+  what replaces it.
+- neovim comes from the official release tarball (`neovim_release` role,
+  `~/.local/bin/nvim`), not from Homebrew. Remove an old Homebrew neovim
+  (`brew uninstall neovim`) so it does not sit next to it on PATH.
+- Ansible and uv come from uv's standalone installer, not from Homebrew:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh     # -> ~/.local/bin/uv
+~/.local/bin/uv tool install ansible-core           # -> ~/.local/bin/ansible-playbook
+```
+
+Budget time for the second line: `cryptography` has no wheel for macOS 12 on
+Intel either, so uv fetches a Rust toolchain and compiles it - about 45
+minutes on the Air.
+
+Then, with the private overlay cloned next to the repo as usual:
+
+```bash
+cd ~/Workspace/Schretzi/MacbookSetup/Ansible
+export ANSIBLE_BECOME_ASK_PASS=false
+ansible-playbook site.yml -e @profiles/travel.yml --check
+ansible-playbook site.yml -e @profiles/travel.yml
+```
+
+No become password is needed - no role in the profile escalates - but
+`ansible.cfg` sets `become_ask_pass = True` for the full machine, hence the
+environment override. Still
+manual on the Air, as on any new machine: the SSH key (step 3), the OAuth
+client credentials in the keychain (`Scripts/omt-oauth-keychain.sh store`),
+and the first `omt` authorisation per account.
+
+The notes vault cannot come over the M5's WebDAV mount: on the road the Air
+is often offline. The `notes_sync` role keeps a real local copy in
+`~/Notes/Brain` instead, synced with Nextcloud by `Scripts/notes-sync.sh`
+(rclone bisync) every ten minutes from a LaunchAgent. It needs a Nextcloud
+app password in the login keychain under the name in
+`notes_sync_keychain_name`; the role does the first `--resync` itself.
+
+Paths that used to say `/opt/homebrew` work on both machines now:
+`homebrew_prefix` follows the architecture, plists that name a Homebrew
+binary are `.j2` templates, and everything that starts neovim goes through
+`Dotfiles/neobean/bin/neobean`, which knows where each machine keeps `nvim`.
+
 ## How this repo works
 
 **The real file always lives here.** Nothing is copy-pasted into `~` and then

@@ -1,0 +1,83 @@
+# The travel subset, for the old Intel MacBook Air (macOS 12) - selected by
+# Ansible/profiles/travel.yml INSTEAD of every other Brewfile here.
+#
+# Why a separate list rather than switching the others off one by one: on
+# macOS 12/Intel Homebrew is Tier 3 and ships no bottles, so every formula
+# below that is not installed yet is BUILT FROM SOURCE. The other Brewfiles
+# mix cheap entries with ones that cannot reasonably be built on that machine
+# (anything Rust pulls in llvm+rust, python CLIs pull python@3.x+openssl, yq
+# pulls ghc via pandoc). So this file holds only what the Air needs and can
+# get - and the play runs `brew bundle --no-upgrade`, so what is already
+# there is left alone instead of rebuilt.
+#
+# Deliberately missing, with the replacement:
+#   neovim         neovim_release role (official tarball, no source build)
+#   eza            Rust; the ll/lli aliases fall back to ls
+#   uv, ansible    the uv standalone installer, then `uv tool install
+#                  ansible-core` - see Setup.md -> Travel machine
+#   claude-code    the native installer (~/.local/bin/claude)
+#   yq, presenterm, bitwarden-cli   Rust/ghc/node builds; not worth it here
+
+# Terminal and fonts
+cask "kitty"
+cask "font-meslo-lg-nerd-font"
+cask "font-jetbrains-mono-nerd-font"
+cask "font-source-code-pro"
+cask "font-hack-nerd-font"
+cask "font-fira-code-nerd-font"
+
+# Shell tools
+brew "fzf"
+brew "zoxide"
+brew "bat"
+brew "btop"
+brew "nnn"
+brew "direnv"
+brew "starship"
+brew "gnu-sed"
+brew "grep"
+brew "tree"
+brew "watch"
+brew "ripgrep"
+brew "fd"
+brew "jq"
+brew "telnet"
+brew "wget"
+
+# neobean: Mason's language servers need node, rocks need luarocks, img-clip
+# needs pngpaste, grug-far uses ast-grep
+brew "node"
+brew "yarn"
+brew "luarocks"
+brew "pngpaste"
+brew "ast-grep"
+
+# Mail - the whole stack (mail role)
+cask "schretzi/tap/omt"
+brew "neomutt"
+brew "msmtp"
+brew "offlineimap"
+brew "notmuch"
+brew "lynx"
+brew "w3m"
+
+# Git
+brew "lazygit"
+brew "gh"          # Go: built from source here, but go itself bootstraps quickly
+
+# Apps
+cask "zen"
+cask "bitwarden"
+cask "tailscale-app"
+cask "github"
+brew "pandoc"
+brew "rclone"      # notes vault sync with Nextcloud; Go, see gh
+
+# Keys
+brew "gnupg"
+brew "pinentry-mac"
+brew "keychain"
+brew "age"         # Go, see gh
+brew "ykman"
+brew "yubico-piv-tool"
+brew "yubikey-agent"

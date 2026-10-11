@@ -7,11 +7,19 @@
 # the play after editing it.
 #
 # Caller must set:
-#   launchd_plist: com.schretzi.offlineimap-sync.plist
+#   launchd_plist: com.schretzi.offlineimap-sync.plist.j2
 # Caller may set:
 #   launchd_plist_root: an overlay's own checkout root (defaults to repo_root)
 #   so a plist containing overlay-only specifics never has to live in the
 #   public base repository.
+#
+# As in daemon.yml, a source ending in .j2 is rendered instead of copied and
+# the .j2 is dropped from the installed filename - for plists that name a
+# Homebrew binary, whose prefix differs between Apple Silicon and Intel.
+
+- name: "Launchd | resolve installed name for {{ launchd_plist }}"
+  ansible.builtin.set_fact:
+    launchd_agent_dest: "{{ launchd_plist | regex_replace('\\.j2$', '') }}"
 
 - name: "Launchd | ensure ~/Library/LaunchAgents exists"
   ansible.builtin.file:
@@ -25,12 +33,21 @@
     state: directory
     mode: "0755"
 
-- name: "Launchd | copy agent {{ launchd_plist }}"
+- name: "Launchd | copy agent {{ launchd_agent_dest }}"
   ansible.builtin.copy:
     src: "{{ launchd_plist_root | default(repo_root) }}/plists/LaunchAgents/{{ launchd_plist }}"
-    dest: "{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_plist }}"
+    dest: "{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_agent_dest }}"
     mode: "0644"
+  when: not launchd_plist.endswith('.j2')
   register: launchd_agent_copy
+
+- name: "Launchd | render agent {{ launchd_agent_dest }}"
+  ansible.builtin.template:
+    src: "{{ launchd_plist_root | default(repo_root) }}/plists/LaunchAgents/{{ launchd_plist }}"
+    dest: "{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_agent_dest }}"
+    mode: "0644"
+  when: launchd_plist.endswith('.j2')
+  register: launchd_agent_render
 
 - name: "Launchd | check whether the job is loaded: {{ launchd_label }}"
   ansible.builtin.command: "launchctl print gui/{{ ansible_facts.user_uid }}/{{ launchd_label }}"
@@ -45,7 +62,7 @@
       set -e
       domain="gui/{{ ansible_facts.user_uid }}"
       label="$domain/{{ launchd_label }}"
-      plist="{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_plist }}"
+      plist="{{ ansible_facts.env.HOME }}/Library/LaunchAgents/{{ launchd_agent_dest }}"
 
       # See daemon.yml for the full reasoning: bootout is asynchronous, so
       # bootstrapping straight afterwards can fail with
@@ -72,10 +89,14 @@
       fi
 
       launchctl bootstrap "$domain" "$plist"
-  when: launchd_agent_copy.changed or launchd_agent_state.rc != 0
+  when: >-
+    launchd_agent_copy.changed | default(false)
+    or launchd_agent_render.changed | default(false)
+    or launchd_agent_state.rc != 0
   changed_when: true
 
 - name: "Launchd | forget agent variables"
   ansible.builtin.set_fact:
     launchd_agent_copy: null
+    launchd_agent_render: null
     launchd_agent_state: null

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Start neovim with the neobean config, wherever this machine keeps nvim.
+#
+# The aliases, the kitty sessions and open-daily-note.sh all used to call
+# /opt/homebrew/bin/nvim directly - an absolute path because kitty starts its
+# sessions with launchd's bare PATH, which has no Homebrew in it. That path
+# only exists on Apple Silicon. This is the one place that knows the
+# candidates instead:
+#
+#   ~/.local/bin/nvim        the official release tarball (neovim_release
+#                            role) - the Intel Air, where Homebrew has no
+#                            bottles and would build neovim from source
+#   /opt/homebrew/bin/nvim   Homebrew on Apple Silicon
+#   /usr/local/bin/nvim      Homebrew on Intel
+for nvim in "$HOME/.local/bin/nvim" /opt/homebrew/bin/nvim /usr/local/bin/nvim; do
+  if [ -x "$nvim" ]; then
+    NVIM_APPNAME=neobean exec "$nvim" "$@"
+  fi
+done
+echo "neobean: no nvim found in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin" >&2
+exit 127

@@ -1,7 +1,14 @@
-alias "ll=eza -l"
-alias "lli=eza -lia"
-alias "vi=NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
-alias "vim=NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
+# eza is a Rust formula, and the Intel Air gets no Homebrew bottles - building
+# it means building rust first. Fall back to ls where it is missing.
+if (( $+commands[eza] )); then
+  alias "ll=eza -l"
+  alias "lli=eza -lia"
+else
+  alias "ll=ls -lG"
+  alias "lli=ls -liaG"
+fi
+alias "vi=~/.config/neobean/bin/neobean"
+alias "vim=~/.config/neobean/bin/neobean"
 
 # Re-grabs the keyboard after it reconnects on a different transport (e.g.
 # cable -> Bluetooth), which kanata otherwise doesn't notice - see Setup.md.

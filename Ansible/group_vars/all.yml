@@ -41,8 +41,10 @@ work_repo_root: "{{ ansible_facts.env.HOME }}/Workspace/Schretzi/MacbookSetup-Wo
 # copy that the private overlay will eventually take over from.
 identity_file: "{{ playbook_dir }}/local/identity.yml"
 
-# Homebrew prefix (Apple Silicon). Intel Macs would use /usr/local.
-homebrew_prefix: /opt/homebrew
+# Homebrew prefix: /opt/homebrew on Apple Silicon, /usr/local on Intel. Taken
+# from the architecture rather than hardcoded, so the same play also converges
+# the old Intel MacBook Air (see Ansible/profiles/travel.yml).
+homebrew_prefix: "{{ '/opt/homebrew' if ansible_facts.architecture == 'arm64' else '/usr/local' }}"
 
 # schretzi.net (and everything under it, e.g. kiac.schretzi.net) must always
 # resolve via unbound, even on a VPN whose client overrides the system
@@ -69,6 +71,12 @@ enable_uv_tools: true
 
 # Symlink ~/.config/* and the home dotfiles back into Dotfiles/
 enable_dotfiles: true
+
+# neovim from the pinned official release tarball, linked as ~/.local/bin/nvim
+# - for machines without a Homebrew bottle (the Intel Air). Off here: the
+# Apple Silicon machines take neovim from 00_base.brew. See
+# roles/neovim_release/defaults/main.yml.
+enable_neovim_release: false
 
 # ~/.gitconfig, ~/.config/git/* + signing setup
 enable_git: true
@@ -121,6 +129,10 @@ enable_statusbar: true
 
 # offlineimap/notmuch/neomutt/msmtp/omt config + sync LaunchAgents
 enable_mail: true
+
+# Local copy of the notes vault, rclone bisync with Nextcloud from a
+# LaunchAgent. For offline machines; the M5 mounts the vault over WebDAV.
+enable_notes_sync: false
 
 # The extra 127.0.0.x addresses on lo0 (needs sudo). Every local resolver
 # binds one, because mDNSResponder already owns 127.0.0.1:53 - AdGuard Home

@@ -71,6 +71,7 @@ cask "bitwarden"
 cask "tailscale-app"
 cask "github"
 brew "pandoc"
+brew "rclone"      # notes vault sync with Nextcloud; Go, see gh
 
 # Keys
 brew "gnupg"

@@ -1,0 +1,21 @@
+---
+# Local copy of the notes vault, kept in two-way sync with Nextcloud by
+# Scripts/notes-sync.sh (rclone bisync) from a LaunchAgent.
+#
+# For a machine that has to work offline - the travel Air. The M5 mounts the
+# vault over WebDAV instead, which syncs instantly but needs the network.
+# Off by default; Ansible/profiles/travel.yml turns it on.
+#
+# The app password is a Nextcloud app password (Settings -> Security), in the
+# login keychain - not iCloud Keychain, which `security` cannot read. The
+# name is what Keychain Access shows as "Name" (service or label); the
+# account is optional and only narrows the match.
+notes_sync_url: https://next.schretzi.cloud/remote.php/dav/files/schretzi
+notes_sync_user: schretzi
+notes_sync_remote: Brain
+notes_sync_local: "{{ ansible_facts.env.HOME }}/Notes/Brain"
+notes_sync_keychain_name: nextcloud - schretzi - app-password
+notes_sync_keychain_account: ""
+
+# seconds between runs
+notes_sync_interval: 600

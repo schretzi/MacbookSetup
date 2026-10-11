@@ -166,6 +166,10 @@
       when: enable_mail | bool
       tags: [mail]
 
+    - role: notes_sync
+      when: enable_notes_sync | bool
+      tags: [notes_sync, notes]
+
     # the extra 127.0.0.x addresses on lo0. Before AdGuard Home, which binds
     # 127.0.0.3 for both DNS and its web UI - and macOS drops the aliases on
     # every reboot.

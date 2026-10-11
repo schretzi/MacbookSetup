@@ -48,6 +48,7 @@ enable_neovim_release: true
 enable_git: true
 enable_ssh: true
 enable_mail: true
+enable_notes_sync: true
 enable_ai: true
 
 # --- off ---------------------------------------------------------------------

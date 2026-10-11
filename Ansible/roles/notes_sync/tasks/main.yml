@@ -1,0 +1,60 @@
+---
+# Two-way sync of the notes vault with Nextcloud, see defaults/main.yml.
+
+- name: Notes sync | is rclone installed?
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/rclone"
+  register: notes_sync_rclone
+
+- name: Notes sync | rclone is missing
+  ansible.builtin.debug:
+    msg: "No {{ homebrew_prefix }}/bin/rclone - add it to the Brewfile; skipping the notes sync."
+  when: not notes_sync_rclone.stat.exists
+
+- name: Notes sync | set up
+  when: notes_sync_rclone.stat.exists
+  block:
+    - name: Notes sync | create {{ notes_sync_local }}
+      ansible.builtin.file:
+        path: "{{ notes_sync_local }}"
+        state: directory
+        mode: "0700"
+
+    # bisync refuses a normal run until a --resync has recorded both sides.
+    # The first one only ever adds files (union of local and remote), so it is
+    # safe to run unattended. Not under --check, and not when the keychain
+    # item is still missing - the script says so and fails.
+    - name: Notes sync | has bisync run before?
+      ansible.builtin.find:
+        paths: "{{ ansible_facts.env.HOME }}/Library/Caches/rclone/bisync"
+        patterns: "*.path1.lst"
+      register: notes_sync_state
+
+    - name: Notes sync | first sync (--resync)
+      ansible.builtin.command:
+        argv: ["{{ repo_root }}/Scripts/notes-sync.sh", --resync]
+      environment:
+        PATH: "{{ homebrew_prefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        NOTES_SYNC_URL: "{{ notes_sync_url }}"
+        NOTES_SYNC_USER: "{{ notes_sync_user }}"
+        NOTES_SYNC_REMOTE: "{{ notes_sync_remote }}"
+        NOTES_SYNC_LOCAL: "{{ notes_sync_local }}"
+        NOTES_SYNC_KEYCHAIN: "{{ notes_sync_keychain_name }}"
+        NOTES_SYNC_KEYCHAIN_ACCOUNT: "{{ notes_sync_keychain_account }}"
+      when:
+        - notes_sync_state.matched == 0
+        - not ansible_check_mode
+
+    - name: Notes sync | install the sync agent
+      ansible.builtin.include_role:
+        name: launchd
+        tasks_from: agent
+      vars:
+        launchd_plist: com.schretzi.notes-sync.plist.j2
+        launchd_label: com.schretzi.notes-sync
+
+    - name: Notes sync | rotate its logs
+      ansible.builtin.include_role:
+        name: newsyslog
+      vars:
+        newsyslog_conf: notes-sync.conf

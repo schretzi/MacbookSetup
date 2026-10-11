@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.schretzi.notes-sync</string>
+
+    <!-- rclone bisync of the notes vault with Nextcloud, see the script. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ repo_root }}/Scripts/notes-sync.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{ homebrew_prefix }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>NOTES_SYNC_URL</key>
+        <string>{{ notes_sync_url }}</string>
+        <key>NOTES_SYNC_USER</key>
+        <string>{{ notes_sync_user }}</string>
+        <key>NOTES_SYNC_REMOTE</key>
+        <string>{{ notes_sync_remote }}</string>
+        <key>NOTES_SYNC_LOCAL</key>
+        <string>{{ notes_sync_local }}</string>
+        <key>NOTES_SYNC_KEYCHAIN</key>
+        <string>{{ notes_sync_keychain_name }}</string>
+        <key>NOTES_SYNC_KEYCHAIN_ACCOUNT</key>
+        <string>{{ notes_sync_keychain_account }}</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Exits between runs, so plain StandardOutPath is rotation-safe. -->
+    <key>StartInterval</key>
+    <integer>{{ notes_sync_interval }}</integer>
+
+    <key>WorkingDirectory</key>
+    <string>{{ ansible_facts.env.HOME }}</string>
+
+    <key>StandardOutPath</key>
+    <string>{{ ansible_facts.env.HOME }}/Library/Logs/notes-sync.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{ ansible_facts.env.HOME }}/Library/Logs/notes-sync.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

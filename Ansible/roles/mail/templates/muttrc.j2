@@ -1,5 +1,9 @@
 {#- Rendered by the Ansible "mail" role from mail_accounts. Do not edit ~/.config/mutt/muttrc. -#}
-{%- set startup = mail_effective_accounts | selectattr('mutt_startup', 'defined') | selectattr('mutt_startup') | first -%}
+{#- The account flagged mutt_startup, else the default one: the startup
+    account is the work one, which a machine with enable_work off (the travel
+    profile) does not have. -#}
+{%- set startup = (mail_effective_accounts | selectattr('mutt_startup', 'defined') | selectattr('mutt_startup') | list
+                   + mail_effective_accounts | selectattr('default', 'defined') | selectattr('default') | list) | first -%}
 {%- set mutt = mail_home ~ '/.config/mutt' -%}
 # Managed by MacbookSetup - generated from mail_accounts (Ansible/local/identity.yml).
 # Edit that list, then re-run: ansible-playbook site.yml --tags mail

@@ -38,11 +38,17 @@
         checksum: "{{ neovim_release_checksums[neovim_release_arch] }}"
         mode: "0644"
 
+    # Not ansible.builtin.unarchive: for .tar.gz it insists on GNU tar and
+    # refuses the BSD tar macOS ships ("GNU tar required").
     - name: Neovim release | unpack
-      ansible.builtin.unarchive:
-        src: "{{ neovim_release_dir }}/{{ neovim_release_asset }}.tar.gz"
-        dest: "{{ neovim_release_dir }}"
-        remote_src: true
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/tar
+          - -xzf
+          - "{{ neovim_release_dir }}/{{ neovim_release_asset }}.tar.gz"
+          - -C
+          - "{{ neovim_release_dir }}"
+        creates: "{{ neovim_release_dir }}/{{ neovim_release_asset }}/bin/nvim"
 
     - name: Neovim release | drop the tarball
       ansible.builtin.file:

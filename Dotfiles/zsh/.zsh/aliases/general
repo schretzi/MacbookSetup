@@ -39,3 +39,14 @@ alias tg="terragrunt"
 alias restart_kanata="sudo launchctl kickstart -k system/com.kanata.daemon"
 
 alias f="fzf"
+
+# `bwr` unlocks the vault and exports BW_SESSION into the current shell - `bw`
+# itself stays the untouched CLI, completion included. A function, not an alias:
+# in an alias the $(...) would be expanded when .zshrc sources this file, so the
+# unlock prompt appeared at every login instead of on demand.
+bwr() {
+  local session
+  session="$(bw unlock --raw)" || return
+  export BW_SESSION="$session"
+  echo "BW_SESSION set"
+}

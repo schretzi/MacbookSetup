@@ -1,0 +1,114 @@
+#!/bin/bash
+# sketchybar config. Started as a LaunchAgent (plists/LaunchAgents/
+# homebrew.mxcl.sketchybar.plist, installed by the `statusbar` Ansible role),
+# so this runs non-interactively - no reliance on an interactive shell's PATH
+# or rc files.
+#
+# Layout, left to right:
+#   left:   desk1..desk10, grouped into the three physical displays yabairc
+#           documents (MacBook / Left / Right), each space showing which apps
+#           are open on it and highlighting the focused one · front app
+#   right:  gtt running timer · clock
+#
+# Space/app state is NOT sketchybar's built-in `--add space` (that binds to
+# yabai's own space *index*, which Mission Control silently renumbers when
+# spaces are dragged between displays - see yabairc). Instead
+# plugins/spaces.sh queries yabai directly by the stable desk<N> label yabairc
+# assigns, and is re-run in full on every yabai signal that could change what
+# it shows (see the yabai -m signal lines added to yabairc for this).
+
+PLUGIN_DIR="$CONFIG_DIR/plugins"
+
+##### Bar Appearance #####
+
+# topmost=on: draw above the native macOS menu bar instead of being drawn
+# over by it - without this, external (non-notch) displays show their own
+# native menu bar fully overlapping sketchybar's bar, making both unreadable.
+# This does cover the real Apple/File/Edit menu; use hyper-b (skhdrc) to
+# toggle sketchybar's visibility and reveal it on demand instead of relying
+# on macOS's "automatically hide menu bar" hover gesture, which doesn't
+# trigger reliably through a topmost bar.
+sketchybar --bar position=top height=32 topmost=on blur_radius=30 color=0xe0161616
+
+default=(
+  padding_left=4
+  padding_right=4
+  icon.font="Hack Nerd Font:Bold:15.0"
+  label.font="Hack Nerd Font:Regular:13.0"
+  icon.color=0xffd8dee9
+  label.color=0xffd8dee9
+  icon.padding_left=4
+  icon.padding_right=4
+  label.padding_left=4
+  label.padding_right=4
+)
+sketchybar --default "${default[@]}"
+
+##### Desktops (left) #####
+#
+# Static, in the order yabairc documents (MacBook screen desk1-4, Left screen
+# desk5-7, Right screen desk8-10). A divider with a monitor glyph separates
+# each display's group, which is the direct answer to "which space is on
+# which screen" - spaces.sh only ever touches icon/label/background on items
+# created here, it never adds or removes items, so this is the one place that
+# has to be updated if the physical display layout changes.
+
+add_space() {
+  local label="$1"
+  sketchybar --add item "space.$label" left \
+             --set "space.$label" \
+                   background.color=0x00ffffff \
+                   background.corner_radius=5 \
+                   background.height=24 \
+                   label.font="sketchybar-app-font:Regular:14.0" \
+                   label.padding_right=8 \
+                   click_script="yabai -m space --focus $label"
+}
+
+add_display_divider() {
+  local name="$1" glyph="$2"
+  sketchybar --add item "divider.$name" left \
+             --set "divider.$name" icon="$glyph" icon.color=0xff5e81ac \
+                   icon.padding_left=10 icon.padding_right=2 \
+                   label.drawing=off
+}
+
+add_display_divider display1 "󰌢"
+for d in desk1 desk2 desk3 desk4; do add_space "$d"; done
+
+add_display_divider display2 "󰍹"
+for d in desk5 desk6 desk7; do add_space "$d"; done
+
+add_display_divider display3 "󰍺"
+for d in desk8 desk9 desk10; do add_space "$d"; done
+
+sketchybar --add item front_app left \
+           --set front_app icon.drawing=off script="$PLUGIN_DIR/front_app.sh" \
+           --subscribe front_app front_app_switched
+
+##### gtt running timer + clock (right) #####
+
+sketchybar --add item gtt right \
+           --set gtt update_freq=5 icon="󱑍" icon.color=0xffa3be8c \
+                 script="$PLUGIN_DIR/gtt.sh" \
+                 click_script="open -na kitty --args -e gtt tui" \
+           --subscribe gtt system_woke \
+           --add item clock right \
+           --set clock update_freq=10 icon="" script="$PLUGIN_DIR/clock.sh"
+
+##### Wire up the space/window refresh #####
+#
+# One invisible item carries the script and the event subscription; its one
+# script call rebuilds every space item from a single pair of yabai queries,
+# rather than one process per space per event - see spaces.sh. yabairc fires
+# "space_windows_change" on every signal that could change what it shows.
+
+sketchybar --add event space_windows_change \
+           --add item space_updater left \
+           --set space_updater drawing=off script="$PLUGIN_DIR/spaces.sh" \
+           --subscribe space_updater space_windows_change
+
+##### Force everything to run once #####
+
+sketchybar --update
+"$PLUGIN_DIR/spaces.sh"

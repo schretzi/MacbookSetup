@@ -1,0 +1,61 @@
+---
+# unbound: the resolver this machine runs, and the runtime glue that keeps
+# its local zones current.
+#
+#   the daemon            brew-managed (brew "unbound" in Brewfiles/60_security.brew,
+#                          brew services owns the LaunchDaemon) - this role
+#                          only makes sure the service is actually running
+#   unbound.conf           rendered here, with a glob include so dropping a
+#                          new conf.d/*.conf file needs no edit to this file
+#   unbound_zones_refresh  makes unbound re-read conf.d/ after it changes
+#
+# Unlike AdGuard Home there is no release to pin/verify and no web UI
+# accounts to seed - brew already owns the binary and its LaunchDaemon, so
+# this role is materially smaller than roles/adguardhome was.
+unbound_enabled: true
+
+unbound_prefix: /opt/homebrew/etc/unbound
+unbound_confd: "{{ unbound_prefix }}/conf.d"
+unbound_label: sh.brew.unbound
+unbound_address: 127.0.0.2
+
+# Local zones, as native unbound conf files installed from
+# <root>/Dotfiles/unbound/zones.d/<file> into conf.d/. The base repository
+# ships none of its own - every zone here belongs to an overlay or to
+# another tool.
+unbound_zones: []
+
+# Same shape, contributed by the overlays through their overlay.yml, plus
+# `root:` pointing at the checkout the file comes from.
+unbound_zones_overlay: []
+
+# Zone files written by something else at runtime, which this role must
+# neither install nor report as unmanaged. kiac.conf is re-rendered by
+# LocalKubernetes' host_dns role whenever its compose services change.
+unbound_zones_runtime:
+  - kiac.conf
+
+# Seeded once, then owned by macswitcher, which rewrites the default
+# forward-zone block on every network context switch.
+unbound_forwarders_seed: "{{ repo_root }}/Dotfiles/unbound/forwarders.conf"
+
+# Domains that must always resolve via unbound, even when some other
+# network service (a VPN client, typically) installs its own DNS config and
+# wins the "default resolver" race. `networksetup -setdnsservers` (what
+# macswitcher uses) only sets the per-service resolver, which macOS picks
+# among by lowest `order` - a VPN client that overrides DNS globally (e.g.
+# Tailscale with "Override local DNS" / CorpDNS on) typically registers
+# itself with a lower order and wins for every non-matching query too, not
+# just its own domains, silently shadowing unbound for domains it knows
+# nothing about. A domain-scoped resolver (one `/etc/resolver/<domain>` file
+# per entry here, each containing `nameserver {{ unbound_address }}`) always
+# outranks an unscoped one for matching names regardless of order, so
+# listing a domain here is what actually guarantees it resolves through
+# unbound on this machine.
+unbound_resolver_domains: []
+
+# Same shape, contributed by overlays (e.g. the work overlay lists its
+# forwarded intranet domains here - see MacbookSetup-Work/overlay.yml),
+# merged with the base list above the same way unbound_zones_overlay merges
+# with unbound_zones.
+unbound_resolver_domains_overlay: []

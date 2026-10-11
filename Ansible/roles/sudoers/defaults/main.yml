@@ -12,24 +12,28 @@
 #   - comment: why this rule exists (rendered into the file for auditing)
 #   - commands: absolute paths only - sudoers wildcards are not supported
 sudoers_rules:
-  # macswitcher rewrites AdGuard Home's upstream file on every context switch,
-  # and AdGuard Home reads that file at startup only - it has no reload signal
-  # of its own. Without this rule the switch prompts for a password
-  # from a LaunchAgent that has no terminal, i.e. it silently keeps serving the
+  # macswitcher rewrites unbound's forwarders file on every context switch,
+  # and unbound reads conf.d/ at startup only - it has no reload signal of
+  # its own. Without this rule the switch prompts for a password from a
+  # LaunchAgent that has no terminal, i.e. it silently keeps serving the
   # previous network's resolvers.
   #
-  # Unlike the zone files: those are filter lists, and those AdGuard Home will
-  # re-read on POST /control/filtering/refresh without a restart. upstream_dns_file
-  # is not a filter list and has no such endpoint, so this rule stays.
-  - name: adguardhome-restart
-    comment: restart the AdGuard Home resolver (macswitcher context switches; AdGuard Home has no reload signal)
+  # bootout/bootstrap, not just kickstart: macswitcher's config.yaml
+  # daemons.unbound start/stop/restart_command overrides (for `macswitcher
+  # observe`'s own restart action) call all three verbs directly, the same
+  # reason kanata-service below lists all three rather than relying on `sudo`
+  # to prompt.
+  - name: unbound-service
+    comment: start/stop/restart unbound (macswitcher context switches and observe; unbound has no reload signal)
     commands:
-      - /bin/launchctl kickstart -k system/com.schretzi.adguardhome
+      - /bin/launchctl bootstrap system /Library/LaunchDaemons/sh.brew.unbound.plist
+      - /bin/launchctl bootout system /Library/LaunchDaemons/sh.brew.unbound.plist
+      - /bin/launchctl kickstart -k system/sh.brew.unbound
 
-  - name: adguardhome-zones-refresh
-    comment: make AdGuard Home re-read its zone files after LocalKubernetes re-renders kiac.txt
+  - name: unbound-zones-refresh
+    comment: make unbound re-read conf.d/ after LocalKubernetes re-renders kiac.conf, or an overlay zone changes
     commands:
-      - /usr/local/bin/adguardhome_zones_refresh
+      - /usr/local/bin/unbound_zones_refresh
 
   # Every launchctl verb `macswitcher observe` needs for kanata, plus the one
   # the kanata_restart alias uses. They live in one rule because they are one
@@ -92,6 +96,10 @@ sudoers_rules_removed:
   # refresh.
   - adguardhome-bind-refresh
   - vmnet-nat-refresh
+  # AdGuard Home removed entirely - replaced by unbound-service and
+  # unbound-zones-refresh above.
+  - adguardhome-restart
+  - adguardhome-zones-refresh
 
 # Master switch: set to false to refuse passwordless sudo entirely. Any
 # rule files this role previously installed are removed and none are

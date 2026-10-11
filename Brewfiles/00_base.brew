@@ -58,3 +58,14 @@ cask "schretzi/tap/macswitcher"
 cask "schretzi/tap/omt"
 cask "schretzi/tap/gittree"
 cask "schretzi/tap/kerberoskeepalive"
+
+# Storage
+cask "fuse-t"
+
+# graphics
+brew "mermaid-cli"
+# mermaid.nvim (:MermaidRender) SVG -> terminal image pipeline: rsvg-convert
+# renders the SVG, chafa displays it (auto-uses Kitty's graphics protocol)
+brew "librsvg"
+brew "imagemagick"
+brew "chafa"

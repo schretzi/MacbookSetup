@@ -18,8 +18,10 @@ deny       = +block{Blocked by privoxy user.action.}
 # 1. Inspect TLS by default
 # ---------------------------------------------------------------------------
 # Without this privoxy only ever sees "CONNECT host:443" and can block whole
-# hosts and nothing finer - which AdGuard Home already does, at the DNS layer.
-# URL-path filtering on HTTPS is the entire reason the CA exists.
+# hosts and nothing finer. Unlike the AdGuard Home setup this replaced,
+# unbound does no content filtering of its own, so this is the only blocking
+# this machine does at all. URL-path filtering on HTTPS is the entire reason
+# the CA exists.
 {inspect}
 /
 

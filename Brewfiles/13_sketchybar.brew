@@ -1,1 +1,2 @@
 brew "FelixKratz/formulae/sketchybar"
+cask "font-sketchybar-app-font"

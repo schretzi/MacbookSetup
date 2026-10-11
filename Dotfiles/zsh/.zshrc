@@ -67,3 +67,8 @@ export SOPS_AGE_KEY_CMD="security find-generic-password -w -s sops-age"
 # LM Studio CLI (lms). Installer-generated block, with its hardcoded
 # /Users/<name> replaced by $HOME so the file stays portable.
 export PATH="$PATH:$HOME/.lmstudio/bin"
+# The following lines have been added by Docker Desktop to enable Docker CLI completions.
+fpath=(/Users/schretzi/.docker/completions $fpath)
+autoload -Uz compinit
+(( ${+_comps[docker]} )) || compinit
+# End of Docker CLI completions

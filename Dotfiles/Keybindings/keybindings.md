@@ -279,5 +279,5 @@ Checked and confirmed to define **no** custom keybindings:
 
 - **yabai** ([`../yabai/yabairc`](../yabai/yabairc)) — pure window-manager behavior/space config (layout, gaps, mouse modifiers, space rules). No `skhd` signals or hotkeys are defined here.
 - **zsh** ([`../zsh/.zshrc`](../zsh/.zshrc)) — only sets `bindkey -v` (vi key bindings for the shell line editor); no custom `bindkey` mappings beyond that.
-- **omt**, **AdGuard Home** — email/OAuth/DNS tooling, no keyboard interaction at all.
+- **omt**, **unbound** — email/OAuth/DNS tooling, no keyboard interaction at all.
 - **raycast** — extension source code only; actual Raycast hotkey assignments live in macOS system preferences, not in this repo.

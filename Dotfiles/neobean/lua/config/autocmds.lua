@@ -296,6 +296,16 @@ require("config.modules.task_review").setup_autofold()
 -- shown in a window
 require("config.modules.task_carryover").setup_autofold()
 
+-- Seed today's daily note (carry over unfinished tasks + fill in meetings)
+-- the first time it's shown in a real buffer, however it was created --
+-- notably including a note written by scripts/open-daily-note.sh and opened
+-- directly (`nvim <note>`, exactly how kanata's "^" + d and the `cmd+s`->d
+-- kitty shortcut launch it), which never ran through nvim's own
+-- create_daily_note() and so never got seeded at all. See
+-- config/modules/daily_prepare.lua's M.setup_autoseed for the guards that
+-- keep this idempotent and cheap.
+require("config.modules.daily_prepare").setup_autoseed()
+
 -- Neo-tree draws its own indented tree and must never fold. It inherits
 -- window options from whatever window it is opened next to, so any stray
 -- foldmethod=indent + foldlevel=N leaves the deeper rows of a directory

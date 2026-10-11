@@ -17,6 +17,7 @@ dotfiles_links:
   # --- window management & keyboard ---------------------------------------
   - { src: Dotfiles/yabai, dest: .config/yabai }
   - { src: Dotfiles/skhd, dest: .config/skhd }
+  - { src: Dotfiles/sketchybar, dest: .config/sketchybar }
 
   # --- launcher & AI -------------------------------------------------------
   - { src: Dotfiles/raycast, dest: .config/raycast }

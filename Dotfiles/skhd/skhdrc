@@ -44,13 +44,25 @@ hyper - 9 : yabai -m space --focus desk9
 hyper - 0 : yabai -m space --focus desk10
 
 # --- Move the focused window to a space and follow it -----------------------
-hyper + shift - 1 : yabai -m window --space desk1  && yabai -m space --focus desk1
-hyper + shift - 2 : yabai -m window --space desk2  && yabai -m space --focus desk2
-hyper + shift - 3 : yabai -m window --space desk3  && yabai -m space --focus desk3
-hyper + shift - 4 : yabai -m window --space desk4  && yabai -m space --focus desk4
-hyper + shift - 5 : yabai -m window --space desk5  && yabai -m space --focus desk5
-hyper + shift - 6 : yabai -m window --space desk6  && yabai -m space --focus desk6
-hyper + shift - 7 : yabai -m window --space desk7  && yabai -m space --focus desk7
-hyper + shift - 8 : yabai -m window --space desk8  && yabai -m space --focus desk8
-hyper + shift - 9 : yabai -m window --space desk9  && yabai -m space --focus desk9
-hyper + shift - 0 : yabai -m window --space desk10 && yabai -m space --focus desk10
+cmd - 1 : yabai -m window --space desk1  && yabai -m space --focus desk1
+cmd - 2 : yabai -m window --space desk2  && yabai -m space --focus desk2
+cmd - 3 : yabai -m window --space desk3  && yabai -m space --focus desk3
+cmd - 4 : yabai -m window --space desk4  && yabai -m space --focus desk4
+cmd - 5 : yabai -m window --space desk5  && yabai -m space --focus desk5
+cmd - 6 : yabai -m window --space desk6  && yabai -m space --focus desk6
+cmd - 7 : yabai -m window --space desk7  && yabai -m space --focus desk7
+cmd - 8 : yabai -m window --space desk8  && yabai -m space --focus desk8
+cmd - 9 : yabai -m window --space desk9  && yabai -m space --focus desk9
+cmd - 0 : yabai -m window --space desk10 && yabai -m space --focus desk10
+
+
+# --- Full Screen eines Windows
+ctrl - f : yabai -m window --toggle zoom-fullscreen
+
+# --- Temporarily reveal the real macOS menu bar (File/Edit/Apple menu) -------
+# sketchybar's bar is drawn topmost=on, covering the native menu bar, so the
+# system's own "hide menu bar on hover" gesture can't trigger through it.
+# This toggles sketchybar's visibility instead, giving instant, reliable
+# access to the native menu bar underneath on demand.
+hyper - b : sketchybar --bar hidden=toggle
+

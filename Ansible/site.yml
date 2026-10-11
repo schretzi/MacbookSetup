@@ -156,6 +156,12 @@
       when: enable_windowmanager | bool
       tags: [windowmanager, yabai, skhd]
 
+    # desktop strip + gtt running-timer widget; after windowmanager, whose
+    # yabai signals it relies on for space/window state
+    - role: statusbar
+      when: enable_statusbar | bool
+      tags: [statusbar, sketchybar]
+
     - role: mail
       when: enable_mail | bool
       tags: [mail]
@@ -168,15 +174,16 @@
       tags: [localhost_alias, dns]
 
 
-    # AdGuard Home, the resolver: installs the pinned release, seeds its
-    # config once, installs the local zones. After localhost_alias, whose
-    # 127.0.0.3 it binds, and after sudoers, whose NOPASSWD rules the
-    # refresh scripts rely on. Still serves the .kiac zone (kiac.txt) for
-    # LocalKubernetes' Docker Compose services, even with kiac/apple-container
-    # itself decommissioned - see LocalKubernetes' compose/README.md.
-    - role: adguardhome
-      when: enable_adguardhome | bool
-      tags: [adguardhome, dns]
+    # unbound, the resolver: makes sure the brew-managed service is running,
+    # renders unbound.conf, installs the local zones and forward-zone
+    # overlays. After localhost_alias, whose 127.0.0.2 it binds, and after
+    # sudoers, whose NOPASSWD rules the refresh script relies on. Still
+    # serves the .kiac zone (kiac.conf) for LocalKubernetes' Docker Compose
+    # services, even with kiac/apple-container itself decommissioned - see
+    # LocalKubernetes' compose/README.md.
+    - role: unbound
+      when: enable_unbound | bool
+      tags: [unbound, dns]
 
     # before privoxy, which signs with an intermediate issued here, and
     # before firefox_enterprise_roots, which is what makes the resulting
@@ -206,11 +213,6 @@
       when: enable_firefox_enterprise_roots | bool
       tags: [firefox_enterprise_roots, certs, firefox]
 
-    # after local_ca, which issues the certificate it serves with
-    - role: lsrules
-      when: enable_lsrules | bool
-      tags: [lsrules, certs]
-
     # before macswitcher: it seeds the PAC that macswitcher's alpaca is
     # started with in direct contexts, and after firefox_enterprise_roots
     # so the CA it asks for is picked up by Firefox-based browsers too, and
@@ -220,7 +222,7 @@
       when: enable_privoxy | bool
       tags: [privoxy, proxy]
 
-    # after adguardhome: it seeds contexts that rewrite its upstreams
+    # after unbound: it seeds contexts that rewrite its forwarders
     - role: macswitcher
       when: enable_macswitcher | bool
       tags: [macswitcher, proxy]

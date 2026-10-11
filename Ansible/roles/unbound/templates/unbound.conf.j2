@@ -1,0 +1,33 @@
+# unbound - the resolver this machine runs.
+#
+# Loopback-only: it listens on {{ unbound_address }}, the alias
+# roles/localhost_alias creates, picked by macswitcher's dns.local_resolver
+# when a context's dns.backend selects unbound.
+#
+# Everything local lives under conf.d/, picked up by the glob include below -
+# dropping a new conf.d/*.conf file (a zone, an overlay, a forward-zone) needs
+# no edit to this file. Managed by Ansible - roles/unbound; hand edits here
+# are overwritten on the next run.
+server:
+  interface: {{ unbound_address }}
+  port: 53
+  # unbound's compiled-in default is to drop privileges to a user named
+  # "unbound" after binding - that user does not exist on macOS (Homebrew
+  # doesn't create it), so with this unset unbound aborted within ~1s of
+  # every start (visible as an endless "Retrieve User by Name" activity in
+  # `log show`, ~10s apart - launchd's crash-relaunch backoff). Empty disables
+  # the privilege drop; the LaunchDaemon already runs as root only to bind
+  # port 53, that's an accepted tradeoff for this loopback-only resolver.
+  username: ""
+  # Off - by default unbound writes to syslog, which launchd's
+  # StandardOutPath/StandardErrorPath (what macswitcher's observe `l` key
+  # reads) never sees. This routes unbound's own log lines to stderr instead,
+  # so they land in whatever file the LaunchDaemon plist names.
+  use-syslog: no
+  access-control: 127.0.0.0/8 allow
+  do-ip6: no
+  serve-expired: yes
+  serve-expired-ttl: 86400
+  cache-max-ttl: 86400
+
+include: "{{ unbound_confd }}/*.conf"

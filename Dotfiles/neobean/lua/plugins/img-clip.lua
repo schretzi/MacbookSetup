@@ -132,6 +132,25 @@ return {
         -- encode spaces and special characters in file path
         url_encode_path = true, ---@type boolean
 
+        -- Inside the Obsidian vault, images always go to the central
+        -- 99-Assets/Images folder (see Vault-Migration-Plan.md Phase 4) --
+        -- otherwise fall back to the previous behaviour (folder next to the
+        -- current file, named "<filename>-img"). notes.is_inside/notes.root
+        -- come from config/modules/notes.lua, the single source of truth for
+        -- where the vault lives.
+        relative_to_current_file = function()
+          local notes = require("config.modules.notes")
+          return not notes.is_inside(vim.fn.expand("%:p"), notes.root())
+        end, ---@type boolean
+
+        dir_path = function()
+          local notes = require("config.modules.notes")
+          if notes.is_inside(vim.fn.expand("%:p"), notes.root()) then
+            return notes.root() .. "/99-Assets/Images"
+          end
+          return vim.fn.expand("%:t:r") .. "-img"
+        end,
+
         -- -- The template is what specifies how the alternative text and path
         -- -- of the image will appear in your file
         --

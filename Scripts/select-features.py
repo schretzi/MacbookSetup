@@ -29,7 +29,7 @@ DEFAULT_OUTPUT = REPO_ROOT / "Ansible" / "local" / "features.yml"
 
 # Order mirrors the `roles:` list in Ansible/site.yml, which already respects
 # every dependency below (e.g. local_ca before trusted_cas before
-# firefox_enterprise_roots before lsrules/privoxy before macswitcher).
+# firefox_enterprise_roots before privoxy before macswitcher).
 ROLE_ORDER = [
     "base_dirs",
     "homebrew",
@@ -44,13 +44,12 @@ ROLE_ORDER = [
     "windowmanager",
     "mail",
     "localhost_alias",
-    "adguardhome",
+    "unbound",
     "pf_vmnet_nat",
     "pf_vmnet_proxy",
     "local_ca",
     "trusted_cas",
     "firefox_enterprise_roots",
-    "lsrules",
     "privoxy",
     "macswitcher",
     "kerberoskeepalive",
@@ -76,13 +75,12 @@ DESCRIPTIONS = {
     "windowmanager": "yabai + skhd LaunchAgents",
     "mail": "offlineimap/notmuch/neomutt/msmtp/omt config + sync LaunchAgents",
     "localhost_alias": "Extra 127.0.0.x addresses on lo0 (needs sudo)",
-    "adguardhome": "AdGuard Home local DNS resolver + web UI (needs sudo)",
+    "unbound": "unbound local DNS resolver (needs sudo)",
     "pf_vmnet_nat": "pf NAT for the kiac vmnet subnet (needs sudo)",
     "pf_vmnet_proxy": "pf redirect exposing the Alpaca proxy to the kiac vmnet (needs sudo)",
     "local_ca": "This machine's own local CA + issued intermediates (needs sudo once)",
     "trusted_cas": "Trust employer/other CA certs contributed by an overlay (needs sudo once)",
     "firefox_enterprise_roots": "Trust System-keychain CAs in Firefox-based browsers (needs sudo)",
-    "lsrules": "Serve Little Snitch rule groups over local HTTPS",
     "privoxy": "Filtering HTTP proxy + PAC file",
     "macswitcher": "Network context switcher (proxy/DNS) + shell integration",
     "kerberoskeepalive": "Kerberos ticket keepalive LaunchAgent",
@@ -96,10 +94,9 @@ DESCRIPTIONS = {
 # notes in site.yml. If a prerequisite ends up disabled, its dependents are
 # switched off automatically rather than asked about.
 DEPENDENCIES = {
-    "adguardhome": ["localhost_alias", "sudoers"],
+    "unbound": ["localhost_alias", "sudoers"],
     "pf_vmnet_nat": ["sudoers"],
     "pf_vmnet_proxy": ["sudoers", "pf_vmnet_nat"],
-    "lsrules": ["local_ca"],
     "privoxy": ["local_ca"],
     "macswitcher": ["privoxy"],
     "firefox_enterprise_roots": ["homebrew"],

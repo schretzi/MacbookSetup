@@ -9,13 +9,13 @@ cd ~/Workspace/Schretzi/MacbookSetup/Ansible
 ansible-playbook site.yml --ask-become-pass          # everything enabled in group_vars/all.yml
 ansible-playbook site.yml --check                    # dry run
 ansible-playbook site.yml --tags dotfiles            # one topic
-ansible-playbook site.yml --skip-tags mail,adguardhome   # all but these
+ansible-playbook site.yml --skip-tags mail,unbound   # all but these
 ansible-playbook site.yml --tags mail -e enable_mail=true   # force a disabled topic
 
 ansible-lint site.yml                                # must stay clean
 ```
 
-Only `sudoers`, `localhost_alias`, `adguardhome`, `java`, `kanata` and
+Only `sudoers`, `localhost_alias`, `unbound`, `java`, `kanata` and
 `firefox_enterprise_roots` need
 `--ask-become-pass`.
 
@@ -35,7 +35,7 @@ Per-role knobs live in `roles/<role>/defaults/main.yml`:
 | --- | --- |
 | `roles/homebrew/defaults/main.yml` | which Brewfiles are installed |
 | `roles/dotfiles/defaults/main.yml` | the symlink map |
-| `roles/adguardhome/defaults/main.yml` | the pinned release, the zones, the per-domain upstreams |
+| `roles/unbound/defaults/main.yml` | the daemon, the zones, the forward-zone overlays |
 | `roles/localhost_alias/defaults/main.yml` | which 127.0.0.x aliases exist on lo0, and which of them the play refuses to run without |
 | `roles/sudoers/defaults/main.yml` | every passwordless (NOPASSWD) sudo rule, Touch ID for sudo, the shared credential cache |
 | `roles/kanata/defaults/main.yml` | kanata version, driver version, rebuild |
@@ -68,8 +68,8 @@ provide two files at its root:
 ```yaml
 dotfiles_links_overlay:
   - { src: Dotfiles/zsh/.zsh/aliases/work, dest: .zsh/aliases/work, root: "{{ work_repo_root }}" }
-adguardhome_zones_overlay:
-  - { file: intranet.txt, enabled: true, root: "{{ work_repo_root }}" }
+unbound_zones_overlay:
+  - { file: intranet.conf, enabled: true, root: "{{ work_repo_root }}" }
 homebrew_brewfiles_overlay:
   - { file: 90_work.brew, enabled: true, root: "{{ work_repo_root }}" }
 mail_work_accounts:

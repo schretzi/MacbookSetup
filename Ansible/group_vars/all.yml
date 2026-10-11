@@ -8,7 +8,7 @@
 #   Run everything that is enabled here:
 #       ansible-playbook site.yml --ask-become-pass
 #   Run one topic ad-hoc (still honours the flag):
-#       ansible-playbook site.yml --tags adguardhome
+#       ansible-playbook site.yml --tags unbound
 #   Force a topic that is disabled here:
 #       ansible-playbook site.yml --tags mail -e enable_mail=true
 #   Run everything except one topic:
@@ -43,6 +43,14 @@ identity_file: "{{ playbook_dir }}/local/identity.yml"
 
 # Homebrew prefix (Apple Silicon). Intel Macs would use /usr/local.
 homebrew_prefix: /opt/homebrew
+
+# schretzi.net (and everything under it, e.g. kiac.schretzi.net) must always
+# resolve via unbound, even on a VPN whose client overrides the system
+# default resolver (see roles/unbound/defaults/main.yml for why that needs a
+# domain-scoped /etc/resolver entry rather than relying on networksetup's
+# per-service resolver order).
+unbound_resolver_domains:
+  - schretzi.net
 
 # ---------------------------------------------------------------------------
 # Topic switches
@@ -108,6 +116,9 @@ enable_kanata: true
 # yabai + skhd LaunchAgents
 enable_windowmanager: true
 
+# sketchybar LaunchAgent: desktop strip + gtt running-timer widget
+enable_statusbar: true
+
 # offlineimap/notmuch/neomutt/msmtp/omt config + sync LaunchAgents
 enable_mail: true
 
@@ -118,15 +129,13 @@ enable_mail: true
 # them. Deliberately independent of which resolver is switched on below.
 enable_localhost_alias: true
 
-# AdGuard Home, the resolver this machine runs: the pinned release, the
-# configuration seeded once, both LaunchDaemons, log rotation, and the two
-# refresh scripts that keep bind_hosts and the zones current at runtime.
+# unbound, the resolver this machine runs: makes sure the brew-managed
+# service is running, renders unbound.conf, and installs the local zones
+# and forward-zone overlays into conf.d/.
 #
-# false means "do not manage", not "remove" - tearing it down would take the
-# admin password and every web-UI change with it. A fresh machine converges
-# unattended: the role generates the web UI and zone-sync passwords and stores
-# them in the System keychain. See the role's defaults for where.
-enable_adguardhome: true
+# false means "do not manage", not "remove" - the daemon and its conf.d/ are
+# left exactly as they are.
+enable_unbound: true
 
 # Docker Desktop's proxy settings (settings-store.json), autostart, and the
 # kiac root CA in ~/.docker/certs.d - the replacement for apple/container
@@ -176,22 +185,7 @@ local_ca_intermediates:
     common_name: Local Services Intermediate CA
 
 # HTTPS certificates for local services, issued from those intermediates.
-local_ca_server_certs:
-  # Little Snitch refuses to subscribe to a rule group over anything but
-  # HTTPS ("For security reasons, only HTTPS URLs are allowed"), so the
-  # .lsrules files in the LittleSnitchConfig repository are served from
-  # this machine rather than published somewhere public.
-  - name: lsrules
-    common_name: localhost
-    issuer: services
-    sans:
-      - localhost
-      - 127.0.0.1
-
-# lsrules' LaunchAgent and log rotation: it serves the Little Snitch rule
-# groups from LittleSnitchConfig over HTTPS, with the certificate local_ca
-# issues. The binary itself comes from the homebrew role.
-enable_lsrules: true
+local_ca_server_certs: []
 
 # privoxy, the filtering HTTP proxy alpaca forwards to in direct contexts:
 # ~/.config/privoxy, the LaunchAgent, log rotation and the PAC that puts it

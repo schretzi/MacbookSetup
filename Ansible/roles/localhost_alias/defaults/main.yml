@@ -7,8 +7,8 @@
 # creates them, and they are gone again after a reboot.
 #
 # Its own role because the addresses outlive whichever resolver happens to use
-# them: AdGuard Home binds 127.0.0.3 and serves its web UI there, and the
-# cluster zones answer with 127.0.0.3 ... 127.0.0.12 and 127.0.0.100.
+# them: unbound binds 127.0.0.2, and the cluster zones have answered from
+# other 127.0.0.x addresses in the past.
 
 # Arguments for localhost_alias: single octets or from-to ranges, all under
 # 127.0.0.x. "2-12" -> 127.0.0.2 through 127.0.0.12.
@@ -20,6 +20,6 @@ localhost_alias_addresses:
 # only the ones something actually binds, where a missing alias means a daemon
 # that cannot start rather than a name that fails to resolve.
 #
-#   127.0.0.3   AdGuard Home: resolver and web UI
+#   127.0.0.2   unbound: the resolver
 localhost_alias_required:
-  - 127.0.0.3
+  - 127.0.0.2

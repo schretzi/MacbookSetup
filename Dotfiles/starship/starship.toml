@@ -6,7 +6,7 @@
 # modules referenced explicitly below (line_break, env_var.PROXY_STATE,
 # kubernetes, character) are pulled out of that default position and placed
 # on their own line instead.
-format = """$all$line_break${env_var.PROXY_STATE}$kubernetes$line_break$character"""
+format = """$all$line_break${env_var.PROXY_STATE}$line_break$kubernetes$line_break$character"""
 
 # Reflects PROXY_STATE from Dotfiles/macswitcher/proxy.zsh, which macswitcher
 # rewrites on every context switch: off | on | filtered. Shown always, not
@@ -27,5 +27,5 @@ default = "off"
 # one is active before running kubectl matters.
 [kubernetes]
 disabled = false
-format = 'on [⛵ $context( ($namespace))]($style) '
+format = '[⛵ $context( ($namespace))]($style) '
 style = "bold blue"

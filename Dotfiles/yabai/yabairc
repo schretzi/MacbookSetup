@@ -27,12 +27,24 @@ yabai -m signal --add label=kitty_mru_record event=window_focused \
 yabai -m signal --add label=kitty_mru_restore event=window_destroyed \
   action="$HOME/.config/yabai/scripts/kitty-focus-mru.sh restore"
 
+# Keep sketchybar's desktop strip (Dotfiles/sketchybar) in sync: which space
+# is focused and what apps sit on each one. One custom event covers every
+# yabai signal that can change either answer, so spaces.sh queries yabai once
+# per batch of changes rather than once per window.
+for sketchybar_event in window_created window_destroyed window_moved \
+  window_focused space_changed display_added display_removed; do
+  yabai -m signal --add label="sketchybar_${sketchybar_event}" \
+    event="$sketchybar_event" \
+    action="sketchybar --trigger space_windows_change"
+done
+unset sketchybar_event
+
 ###############################################################################
 #                                Defaults
 ###############################################################################
 
 yabai -m config \
-  external_bar off:40:0 \
+  external_bar all:32:0 \
   menubar_opacity 1.0 \
   mouse_follows_focus on \
   focus_follows_mouse off \

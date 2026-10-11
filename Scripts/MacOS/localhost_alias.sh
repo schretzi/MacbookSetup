@@ -2,10 +2,10 @@
 # Add extra loopback addresses to lo0.
 #
 # macOS ships lo0 with 127.0.0.1 only, and mDNSResponder already owns port 53
-# on it, so the local resolver binds another loopback alias: AdGuard Home uses
-# 127.0.0.3 for both DNS and its web UI. The cluster zones answer with
-# 127.0.0.3 ... 127.0.0.12 and 127.0.0.100. All of them have to exist before
-# anything can bind them, and macOS drops them on every reboot.
+# on it, so the local resolver binds another loopback alias: unbound uses
+# 127.0.0.2 for DNS. Other 127.0.0.x addresses have been used for cluster
+# zones in the past. All of them have to exist before anything can bind
+# them, and macOS drops them on every reboot.
 #
 # Deployed to /usr/local/bin/localhost_alias (root:wheel 0755) by the Ansible
 # role "localhost_alias" and started by

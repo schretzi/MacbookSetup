@@ -78,7 +78,7 @@ return {
         -- daily note is created behind nvim's back -- scripts/open-daily-note.sh
         -- writes the note with sed/mv, and config/modules/daily_prepare.lua and
         -- task_carryover.lua write with vim.fn.writefile -- so without this the
-        -- Daily/YYYY/MM-Mon folder keeps showing yesterday's contents and a note
+        -- 10-Daily/YYYY/MM-Mon folder keeps showing yesterday's contents and a note
         -- you just created looks like it was never written at all.
         use_libuv_file_watcher = true,
 

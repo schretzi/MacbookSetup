@@ -21,7 +21,7 @@ M.end_marker = "<!-- task-review:end -->"
 
 -- Default target file for the review, if none is given to refresh()
 function M.default_target()
-  return notes.root() .. "/Review.md"
+  return notes.root() .. "/60-Meta/Review.md"
 end
 
 -- Fold defaults applied the first time the review file is displayed in a
@@ -164,6 +164,8 @@ local function find_open_tasks(exclude_file)
     pattern,
     "--glob",
     "*.md",
+    "--glob",
+    "!90-Archive/**",
     "--no-ignore",
     root,
   }

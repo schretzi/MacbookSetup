@@ -235,6 +235,21 @@ return {
           border = "single",
         },
       },
+      -- No item is auto-highlighted the moment the popup opens (blink's
+      -- default is preselect = true, first item selected on show). This is
+      -- what makes the `<CR>` keymap below safe: cmp.accept() only fires for
+      -- an *explicitly* selected item (get_selected_item() is nil otherwise
+      -- and it falls through to a normal newline), but with preselect = true
+      -- the first item counts as "selected" from the instant the menu shows,
+      -- so `<CR>` would swallow every newline typed right after a completion
+      -- popped up - exactly the markdown problem described below. Explicit
+      -- navigation (<Up>/<Down>/<C-n>/<C-p>/<Tab>) still selects an item
+      -- normally; only the automatic pre-selection is disabled.
+      list = {
+        selection = {
+          preselect = false,
+        },
+      },
     }
 
     -- opts.fuzzy = {
@@ -256,13 +271,18 @@ return {
     --   show_autosnippets = true, -- Display autosnippets in the completion menu
     -- }
 
-    -- The default preset used by lazyvim accepts completions with enter
-    -- I don't like using enter because if on markdown and typing
-    -- something, but you want to go to the line below, if you press enter,
-    -- the completion will be accepted
+    -- The default LazyVim preset accepts completions with <C-y>, which is an
+    -- awkward chord. Enter (<CR>) is added here instead, but bound to
+    -- `accept` (not `select_and_accept`): `accept` only fires for an item you
+    -- explicitly selected (<Up>/<Down>/<C-n>/<C-p>/<Tab>), and falls through
+    -- to a normal newline otherwise. Combined with `preselect = false` above
+    -- (nothing pre-highlighted when the popup opens), typing in markdown and
+    -- pressing Enter for a new line still just makes a new line - Enter only
+    -- accepts a completion once you've actually navigated to one.
     -- https://cmp.saghen.dev/configuration/keymap.html#default
     opts.keymap = {
       preset = "default",
+      ["<CR>"] = { "accept", "fallback" },
       ["<Tab>"] = { "snippet_forward", "fallback" },
       ["<S-Tab>"] = { "snippet_backward", "fallback" },
 

@@ -1,3 +1,7 @@
+---
+created: 2026-09-06
+type: unsorted
+---
 
 # Schretzi Macbook Setup
 
@@ -60,6 +64,10 @@ Security** — it captures the desktop to push those pixels over USB. Without it
 the external screens stay black.
 
 ### Karabiner DriverKit VirtualHIDDevice — see [docs/investigations/karabiner-driverkit.md](docs/investigations/karabiner-driverkit.md)
+
+### MacFUSE
+
+- [ ] Add macfuse und rclone instructions
 
 kanata, installed by Ansible later, drives the keyboard through this virtual HID
 driver. Take **package version 6.2.0** specifically — the newer driver bundled
@@ -203,12 +211,12 @@ cd ~/Workspace/Schretzi/MacbookSetup/Ansible
 ansible-playbook site.yml --ask-become-pass          # everything enabled in all.yml
 ansible-playbook site.yml --check                    # dry run, changes nothing
 ansible-playbook site.yml --tags dotfiles            # one topic
-ansible-playbook site.yml --skip-tags mail,adguardhome   # everything except these
+ansible-playbook site.yml --skip-tags mail,unbound   # everything except these
 ansible-playbook site.yml --tags mail -e enable_mail=true   # force a disabled topic
 ```
 
 `--ask-become-pass` is only needed for the roles that touch root-owned
-locations: `sudoers`, `localhost_alias`, `adguardhome`, `java`, `kanata`,
+locations: `sudoers`, `localhost_alias`, `unbound`, `java`, `kanata`,
 `firefox_enterprise_roots`. There is a way to authenticate once up front
 instead — see [sudo](#sudo) below — but it is switched off until Touch ID for
 sudo works.
@@ -226,9 +234,10 @@ sudo works.
 | `java`                | `enable_java`                | links the Homebrew JDKs into `/Library/Java/JavaVirtualMachines`             |
 | `kanata`              | `enable_kanata`              | builds kanata with `cmd`, installs both daemons + log rotation               |
 | `windowmanager`       | `enable_windowmanager`       | yabai + skhd LaunchAgents                                                    |
+| `statusbar`           | `enable_statusbar`           | sketchybar LaunchAgent: desktop strip + gtt running-timer widget             |
 | `mail`                | `enable_mail`                | maildir, notmuch index, offlineimap/omt agents, mail dotfiles                |
 | `localhost_alias`     | `enable_localhost_alias`     | the extra 127.0.0.x addresses on lo0                                         |
-| `adguardhome`         | `enable_adguardhome`         | the resolver: pinned release, seeded config, zones, daemons                  |
+| `unbound`             | `enable_unbound`             | the resolver: brew service, unbound.conf, zones, overlays                    |
 | `macswitcher`         | `enable_macswitcher`         | seeds `~/.config/macswitcher` and the shell proxy variables                  |
 | `container_autostart` | `enable_container_autostart` | restarts the container runtime, service containers and `main`, refreshes DNS |
 | `gcloud`              | `enable_gcloud`              | gcloud components                                                            |
@@ -255,7 +264,7 @@ simply has nothing personal configured, and the mail role reports that it found
 no accounts rather than failing.
 
 An overlay mirrors this repo's layout and contributes through an `overlay.yml`
-at its root — extra dotfile links, Brewfiles, AdGuard Home zones, mail
+at its root — extra dotfile links, Brewfiles, unbound zones, mail
 accounts — each entry carrying `root:` so links resolve into that checkout.
 Identity comes from the private overlay's `identity.yml`; this repo ships only
 `Ansible/local/identity.example.yml`. See
@@ -384,6 +393,7 @@ _Ansible Tag: enable_dotfiles_
 - **kitty** — terminal emulator; sessions and scripts under `Dotfiles/kitty/`
 - **yabai** — tiling window manager
 - **skhd** — hotkeys for yabai
+- **sketchybar** — status bar: desktops + gtt running timer, see below
 - **raycast** — launcher + clipboard manager
 - **fzf**, **zoxide**, **bat**, **eza**, **btop**, **nnn** — shell tools
 - **neovim** (neobean config) — editor
@@ -399,6 +409,54 @@ disabling SIP.
 
 _Role: `windowmanager`_
 _Ansible Tag: enable_windowmanager_
+
+### sketchybar
+
+`Dotfiles/sketchybar/` — pure bash + `jq`, no Lua/SbarLua. Left to right:
+
+- **desktops** — `space.desk1`..`space.desk10`, statically grouped into the
+  three physical displays yabairc documents (MacBook screen, Left, Right
+  external), with a monitor-glyph divider between each group. The focused
+  space gets a highlighted background; every space's label shows one icon per
+  app open on it (via the vendored `helpers/icon_map.sh` and
+  `font-sketchybar-app-font`, see below), so both "which space is active" and
+  "what's open where" are visible at a glance without opening Mission Control.
+  `plugins/spaces.sh` rebuilds all ten from two `yabai -m query` calls at once,
+  triggered by the `yabai -m signal` block added to `Dotfiles/yabai/yabairc`
+  (window/space/display changes all fire the same custom
+  `space_windows_change` event) — it does not use sketchybar's built-in
+  `--add space`, because that binds to yabai's space *index*, which Mission
+  Control silently renumbers across displays; the desk<N> *label* is what
+  stays stable.
+- **front_app** — frontmost app name.
+- **gtt** — the [gtt](https://github.com/schretzi/gtt) running time entry:
+  client · project/task · elapsed, polled every 5s (`plugins/gtt.sh`). Name
+  lookups (client/project/task IDs → names) are cached in
+  `~/.local/state/sketchybar-gtt/` and only refetched when the running
+  entry's IDs change, so steady-state polling is a single `gtt current --json`
+  call. Click opens `gtt tui` in a new kitty window. Shows "no timer" when
+  nothing is running.
+- **clock**.
+
+Started from `homebrew.mxcl.sketchybar.plist` — the same LaunchAgent label and
+plist the `sketchybar` Homebrew formula itself ships (`brew info sketchybar`'s
+caveats), unmodified: `homebrew.mxcl.*` is one of the CONVENTIONS.md
+exceptions, same as yabai/skhd next to it.
+
+**Multi-display / native menu bar:** the bar runs `topmost=on` so it draws
+above macOS's own menu bar instead of being overlapped by it on external
+(non-notch) displays — without this, an external display's own native menu
+bar renders at the same position and both become unreadable, while the
+MacBook's notched display happens to look fine either way. This does hide the
+real Apple/File/Edit menu visually (it's still there, just covered). Press
+`hyper - b` (skhdrc) to toggle sketchybar's visibility and reveal the native
+menu bar on demand instead of relying on macOS's "automatically hide menu
+bar" hover gesture, which doesn't trigger reliably through a topmost bar.
+`yabairc`'s `external_bar all:32:0` reserves matching space so windows aren't
+drawn under the bar on any display.
+
+_Role: `statusbar`_
+_Ansible Tag: enable_statusbar_
 
 ## Kanata (keyboard remapping) — see [docs/investigations/kanata.md](docs/investigations/kanata.md)
 
@@ -656,7 +714,7 @@ Set `enable_mail: false` to skip the whole stack, including the mail dotfiles.
 _Role: `mail`_
 _Ansible Tag: enable_mail_
 
-## DNS — AdGuard Home — see [docs/investigations/adguard-home.md](docs/investigations/adguard-home.md)
+## DNS — unbound — see [docs/investigations/unbound-dns.md](docs/investigations/unbound-dns.md)
 
 ## AI tooling — one set of skills, every assistant
 
@@ -906,7 +964,7 @@ Not automated yet — no wrapper script exists here for
   echo "127.0.0.1 kubernetes" | sudo tee -a /etc/hosts
   ```
 
-  Not yet wired into the `adguardhome`/`gcloud` roles - a manual, one-time edit
+  Not yet wired into the `unbound`/`gcloud` roles - a manual, one-time edit
   until the tunnel wrapper script lands.
 
 - **Tunnel connects but the SSH session immediately drops/reconnects** — this
@@ -1008,8 +1066,8 @@ _Ansible Tag: enable_macswitcher_
 **`config.yaml` and `state.json` are never symlinks, by design.** macswitcher
 rewrites both in place on every switch, so linking them back into a repository
 means the runtime writes its live values into the source tree — the same trap
-`dotfiles_real_dirs` documents and the same one the adguardhome role avoids for
-`upstreams.conf`. The role _seeds_ them once (`copy` with `force: false`) and
+`dotfiles_real_dirs` documents and the same one the unbound role avoids for
+`forwarders.conf`. The role _seeds_ them once (`copy` with `force: false`) and
 never touches them again.
 
 **Context files are the exception: they are linked, not seeded.** Switching
@@ -1086,13 +1144,10 @@ clusters. For the same reason the CN still says "LocalKubernetes Root CA":
 renaming a CA does not rename it, it creates a different one. The name is a
 misnomer now; that is cheaper than the churn.
 
-The role also issues **server certificates** for services that run here and
-are reached over HTTPS — currently one, for `lsrules`, which hands Little
-Snitch its rule groups (it refuses to subscribe over anything but HTTPS, and
-those files describe this machine — see "Little Snitch rule groups"). They are issued
-with `step --bundle`, so the `.crt` is leaf + intermediate: an ordinary TLS
-server sends that whole chain and the client verifies against the root it
-already trusts. `curl https://localhost:8443/…` succeeds with no `--cacert`.
+The role can issue **server certificates** for local services reached over
+HTTPS. They are issued with `step --bundle`, so the `.crt` is leaf +
+intermediate: an ordinary TLS server sends that whole chain and the client
+verifies against the root it already trusts.
 
 That is the contrast worth keeping in mind next to privoxy, which can only
 send a leaf and therefore needs its intermediate trusted separately.
@@ -1116,14 +1171,6 @@ rest, and that requirement came along with the root. It matters more here than
 it did there: this key is now also the anchor for a proxy that can mint a
 certificate for any site.
 
-```yaml
-local_ca_server_certs:
-  - name: lsrules
-    common_name: localhost
-    issuer: services
-    sans: [localhost, 127.0.0.1]
-```
-
 ```sh
 ls -la ~/.local/share/localca                       # 0700, keys 0600
 security verify-cert -c ~/.local/share/localca/root_ca.crt
@@ -1133,59 +1180,6 @@ security find-certificate -c "Privoxy HTTPS Inspection CA" /Library/Keychains/Sy
 Note that `verify-cert` on an _intermediate_ proves nothing about the
 keychain: it chains the file it is handed up to the trusted root and reports
 success either way. Use `find-certificate` for intermediates.
-
-## Little Snitch rule groups — lsrules
-
-_Role: `lsrules`_
-_Ansible Tag: enable_lsrules_
-
-Little Snitch subscribes to a rule group by URL, keeps it in sync, and refuses
-anything but HTTPS. The rule groups live in the `LittleSnitchConfig`
-repository and describe what runs on this machine, which is an argument
-against publishing them — so `lsrules` serves them from it:
-
-```
-LittleSnitchConfig/rules/*.lsrules
-   └─ lsrules (com.schretzi.lsrules) on https://localhost:8443/
-        └─ Little Snitch subscription
-```
-
-The certificate is the `lsrules` server certificate from the `local_ca` role
-(see "Local CA"). Because an ordinary TLS server sends leaf **and**
-intermediate, the client chains up to the root the System keychain already
-trusts — `curl https://localhost:8443/…` verifies with no `--cacert`.
-
-The binary is `brew install schretzi/tap/lsrules`
-([LittleSnitchRules](https://github.com/schretzi/LittleSnitchRules)); the role
-owns only what brew does not — the LaunchAgent and log rotation — exactly like
-`kerberoskeepalive` and `omt`.
-
-**A `brew upgrade` removes the launch agent.** The cask's uninstall preflight
-runs `lsrules service uninstall` before replacing the binary, so the job is
-gone until `lsrules service install` runs again. The next play run does it;
-`macswitcher observe` is where you would notice in the meantime.
-
-### Checks
-
-```sh
-lsrules status                # served groups, TLS probe, certificate expiry
-lsrules status --json         # the same, as macswitcher's observe reads it
-tail -f ~/Library/Logs/lsrules.log
-```
-
-A live subscription shows up as a fetch followed by conditional requests:
-
-```
-2026-08-31T07:10:35+02:00 127.0.0.1 "GET /proxy-chain.lsrules" 200 1478 342µs
-2026-08-31T07:11:02+02:00 127.0.0.1 "HEAD /proxy-chain.lsrules" 304 0 340µs
-```
-
-The 304 is the point: a one-time import never asks again, so that line is what
-distinguishes a subscription from an import.
-
-**Nothing renews the certificate.** `local_ca` issues it for a year;
-`lsrules status` and the `observe` row warn 30 days out, and after that
-subscriptions fail rather than degrade.
 
 ## Filtering proxy — privoxy — see [docs/investigations/privoxy.md](docs/investigations/privoxy.md)
 
@@ -1197,4 +1191,3 @@ subscriptions fail rather than degrade.
 - [YubiKey guide](https://github.com/drduh/YubiKey-Guide)
 - [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice)
 - [DisplayLink macOS driver (Synaptics)](https://www.synaptics.com/products/displaylink-graphics/downloads/macos)
-

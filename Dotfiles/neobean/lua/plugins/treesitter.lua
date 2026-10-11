@@ -13,6 +13,7 @@ return {
       ensure_installed = {
         "devicetree",
         "lua",
+        "mermaid",
         "sql",
         "go",
         "regex",

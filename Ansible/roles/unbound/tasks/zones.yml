@@ -1,0 +1,73 @@
+---
+# The local zones unbound answers from, installed into conf.d/ - plain
+# unbound conf files, not a filter-list syntax, so there is no per-domain
+# upstream merge step the way AdGuard Home's upstreams.conf needed: a
+# forward-zone for a work-intranet domain is just another file here, written
+# whole by the overlay that owns it.
+#
+# Registration is implicit: unbound.conf includes conf.d/*.conf, so a file
+# installed here is live on the next refresh - no second place (AdGuard
+# Home's `filters:` block) to register it in.
+
+- name: Unbound | merge the overlay zone contributions
+  ansible.builtin.set_fact:
+    unbound_all_zones: "{{ unbound_zones + unbound_zones_overlay }}"
+
+- name: Unbound | install the zone files
+  ansible.builtin.copy:
+    src: "{{ item.root | default(repo_root) }}/Dotfiles/unbound/zones.d/{{ item.file }}"
+    dest: "{{ unbound_confd }}/{{ item.file }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  loop: "{{ unbound_all_zones | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: unbound_zones_installed
+
+- name: Unbound | remove the zone files that are switched off
+  ansible.builtin.file:
+    path: "{{ unbound_confd }}/{{ item.file }}"
+    state: absent
+  become: true
+  loop: "{{ unbound_all_zones | rejectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.file }}"
+  register: unbound_zones_removed
+
+# Anything else in conf.d/ is either written by another tool at runtime
+# (kiac.conf, rendered by LocalKubernetes' host_dns; forwarders.conf, owned
+# by macswitcher) or left over from a zone that was removed from a
+# repository. Point it out rather than deleting it.
+- name: Unbound | list the conf files on disk
+  ansible.builtin.find:
+    paths: "{{ unbound_confd }}"
+    patterns: "*.conf"
+  register: unbound_confd_found
+  changed_when: false
+  check_mode: false
+
+- name: Unbound | report conf files nobody owns
+  ansible.builtin.debug:
+    msg: >-
+      {{ item }} is included by unbound but is neither installed from a
+      repository nor a known runtime file. Add it to unbound_zones, or
+      remove it.
+  loop: >-
+    {{ unbound_confd_found.files | map(attribute='path') | map('basename') | list
+       | difference(unbound_all_zones | map(attribute='file') | list)
+       | difference(unbound_zones_runtime)
+       | difference(['forwarders.conf']) }}
+
+# Writing a conf file changes nothing on its own: unbound only reads conf.d/
+# at startup. The refresh script closes that gap with a checkconf + restart,
+# and verifies the answers afterwards rather than trusting them.
+- name: Unbound | make unbound pick up the changed zones
+  ansible.builtin.command:
+    cmd: /usr/local/bin/unbound_zones_refresh
+  become: true
+  when: >-
+    (unbound_zones_installed.changed | default(false))
+    or (unbound_zones_removed.changed | default(false))
+  changed_when: true

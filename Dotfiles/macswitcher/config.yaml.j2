@@ -10,6 +10,14 @@ local_proxy:
     # so `kiac` covers `kiac` and `*.kiac` only - the Gateway hosts are
     # `<app>.apps.main.kiac.schretzi.net` and need the FQDN suffix as well.
     - kiac
+    # apple/container's own host-native pull daemon (container-core-images)
+    # builds its PAC bypass from this list too, and its no_proxy matcher does
+    # NOT treat bare `kiac` as a suffix wildcard the way Go does - without the
+    # explicit dotted form, registry.kiac/gitea.kiac/openbao.kiac/... (every
+    # *.kiac host except the literal short name itself) gets proxied and
+    # fails with HTTPClientError.invalidProxyResponse. filter_proxy.direct
+    # below already has this; local_proxy.no_proxy was missing it.
+    - .kiac
     - .kiac.schretzi.net
   # Agents that read the proxy from their launchd environment. launchd does not
   # source the shell's rc files, so they only see a proxy because macswitcher
@@ -67,30 +75,40 @@ filter_proxy:
     - .snowflakecomputing.com
 
 dns:
-  local_resolver: 127.0.0.3
-adguard:
-  upstreams_file: /etc/adguardhome/upstreams.conf
+  local_resolver: 127.0.0.2
+unbound:
+  forwarders_file: /opt/homebrew/etc/unbound/conf.d/forwarders.conf
 daemons:
-  adguardhome:
-    label: com.schretzi.adguardhome
+  unbound:
+    label: sh.brew.unbound
     scope: system
-  container:
-    label: com.apple.container.apiserver
+    # Without these, observe's s/h/R/e/d keys fall back to the generic
+    # system-scope path, which wraps everything in `sudo sh -c "launchctl
+    # ..."` - sudo then matches the command as /bin/sh, so no sudoers rule
+    # naming the real launchctl invocation can ever apply, and every action
+    # prompts for a password (see the kanata entry below for the same fix).
+    # Each override embeds its own `sudo -n` so *that* exact argv is what
+    # sudo (and sudoers) actually sees.
+    start_command: sudo -n /bin/launchctl bootstrap system /Library/LaunchDaemons/sh.brew.unbound.plist
+    stop_command: sudo -n /bin/launchctl bootout system /Library/LaunchDaemons/sh.brew.unbound.plist
+    restart_command: sudo -n /bin/launchctl kickstart -k system/sh.brew.unbound
   kerberos_keep_alive:
     label: com.schretzi.kerberoskeepalive
   omt:
     label: com.schretzi.omt
+    status_command: omt status
 [% if work_vpn_label | default('') | length > 0 %]
   vpn:
     label: [[ work_vpn_label ]]
     interface: utun99
+    status_command: ifconfig utun99 2>/dev/null | grep -q 'inet ' && echo "tunnel up" || echo "tunnel down"
 [% endif %]
   tunneling:
     label: com.schretzi.tunneling
+    status_command: tunneling status --json 2>&1 || true
   privoxy:
     label: com.schretzi.privoxy
-  lsrules:
-    label: com.schretzi.lsrules
+    status_command: nc -z 127.0.0.1 8118 && echo "listening on 127.0.0.1:8118" || echo "NOT listening on 127.0.0.1:8118"
   # ollama, the local LLM server (Ansible/roles/ollama). Listed here purely so
   # `observe` can see and control it - macswitcher has no built-in knowledge
   # of it, same as kanata below.
@@ -170,13 +188,6 @@ applications:
       - osascript
       - -e
       - tell application "Elgato Stream Deck" to quit
-  adguardhome:
-    restart:
-      - sudo
-      - launchctl
-      - kickstart
-      - -k
-      - system/com.schretzi.adguardhome
   # privoxy and vpn have no `service` subcommand of their own (third-party /
   # script-based agents - see docs/networking-tools.md), so contexts control
   # them with raw launchctl against the gui domain. bootout/bootstrap, not

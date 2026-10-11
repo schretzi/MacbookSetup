@@ -4048,34 +4048,21 @@ local function daily_note_dir_for_gt()
   return notes.daily_dir()
 end
 
--- parse date line and generate file path components for the daily note
--- Layout: Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md, matching the Obsidian
--- daily-notes format `YYYY/MM-MMM/YYYY-MM-DD-dddd` under the `Daily` folder
+-- parse date line and generate the daily note's full path, delegating the
+-- naming convention itself to notes.daily_path() (single source of truth,
+-- see config/modules/notes.lua)
 --
--- The month name and weekday are derived from the date itself rather than read
--- out of the link, so a plain [[2024-03-01]] link resolves to the same file as
--- the older [[2024-03-01-Friday]] form
-local function parse_date_line(date_line, daily_note_dir)
+-- Accepts a plain [[2024-03-01]] link as well as the older
+-- [[2024-03-01-Friday]] form -- either way the weekday/month-abbr in the
+-- resulting path are derived from the date, not read out of the link
+local function get_daily_note_path(date_line, daily_note_dir)
   local year, month, day = date_line:match("%[%[(%d+)%-(%d+)%-(%d+)")
   if not (year and month and day) then
     print("No valid date found in the line")
     return nil
   end
   local date = os.time({ year = year, month = month, day = day })
-  local month_abbr = os.date("%b", date)
-  local weekday = os.date("%A", date)
-  local note_dir = string.format("%s/%s/%s-%s", daily_note_dir or notes.daily_dir(), year, month, month_abbr)
-  local note_name = string.format("%s-%s-%s-%s.md", year, month, day, weekday)
-  return note_dir, note_name
-end
-
--- get the full path of the daily note
-local function get_daily_note_path(date_line, daily_note_dir)
-  local note_dir, note_name = parse_date_line(date_line, daily_note_dir)
-  if not note_dir or not note_name then
-    return nil
-  end
-  return note_dir .. "/" .. note_name
+  return notes.daily_path(date, daily_note_dir)
 end
 
 -- Updated create_daily_note function using helper functions

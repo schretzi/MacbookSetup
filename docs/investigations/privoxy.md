@@ -65,7 +65,9 @@ plus `openssl@3`, `--with-openssl` and `--enable-extended-statistics`.
 
 ### HTTPS inspection, and what it costs
 
-Without inspection privoxy sees only `CONNECT host:443` — host-level blocking,
-which AdGuard Home already does at the DNS layer. Inspection is what makes URL
-_paths_ filterable on HTTPS, and it works by privoxy terminating TLS with a
+Without inspection privoxy sees only `CONNECT host:443` — host-level blocking.
+Unlike the AdGuard Home setup this replaced, unbound does no content
+filtering of its own, so that host-level blocking is the only kind this
+machine does without inspection. Inspection is what makes URL _paths_
+filterable on HTTPS, and it works by privoxy terminating TLS with a
 certificate it mints from a local CA.

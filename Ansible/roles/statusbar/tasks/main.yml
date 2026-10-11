@@ -1,0 +1,28 @@
+---
+# sketchybar: the desktop strip (Dotfiles/sketchybar) showing yabai spaces and
+# the gtt running timer.
+#
+# Its LaunchAgent label/plist are unmodified upstream - homebrew.mxcl.* is one
+# of the CONVENTIONS.md exceptions, same reasoning as yabai/skhd next door, so
+# this plist is a straight copy of what the sketchybar formula itself ships
+# (brew info sketchybar's caveats), not a com.schretzi.* one. The configs
+# (~/.config/sketchybar) are symlinked by the dotfiles role; this role only
+# owns the LaunchAgent.
+
+- name: Statusbar | check sketchybar is installed
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/sketchybar"
+  register: statusbar_bin
+
+- name: Statusbar | fail when sketchybar is missing
+  ansible.builtin.fail:
+    msg: "sketchybar missing. Install Brewfiles/13_sketchybar.brew first."
+  when: not statusbar_bin.stat.exists
+
+- name: Statusbar | install the sketchybar agent
+  ansible.builtin.include_role:
+    name: launchd
+    tasks_from: agent
+  vars:
+    launchd_plist: homebrew.mxcl.sketchybar.plist
+    launchd_label: homebrew.mxcl.sketchybar

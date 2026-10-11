@@ -1,0 +1,280 @@
+---
+# roles/unbound — the resolver this machine runs, and the glue around it.
+#
+# Chain: brew-managed binary -> make sure the service is actually running ->
+# unbound.conf -> conf.d/ (forwarders, zones, overlays) -> the refresh script
+# that makes a changed conf.d file take effect -> a proof that it answers.
+#
+# Split in two files because they change for different reasons:
+#   (here)     the daemon, unbound.conf, the refresh script
+#   zones.yml  the local zones and the per-domain forward-zones
+#
+# unbound_enabled: false means "do not manage", not "remove" - the daemon and
+# its conf.d/ are left exactly as they are.
+
+# --------------------------------------------------------------------------
+# 1. The daemon
+# --------------------------------------------------------------------------
+# brew "unbound" (Brewfiles/60_security.brew) installs the binary and its own
+# LaunchDaemon (sh.brew.unbound, under /Library/LaunchDaemons - brew's, not
+# this role's). `brew bundle` only ever installs the receipt, never starts
+# the service, so a fresh machine needs this to actually come up.
+- name: Unbound | fail if the formula is missing
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/opt/unbound/sbin/unbound"
+  register: unbound_bin
+  when: unbound_enabled | bool
+
+- name: Unbound | fail with the fix if the formula is missing
+  ansible.builtin.fail:
+    msg: >-
+      {{ homebrew_prefix }}/opt/unbound/sbin/unbound not found. Run the
+      homebrew role first (brew "unbound" lives in Brewfiles/60_security.brew).
+  when:
+    - unbound_enabled | bool
+    - not unbound_bin.stat.exists
+
+- name: Unbound | ensure the generated inputs directory exists
+  ansible.builtin.file:
+    path: "{{ unbound_confd }}"
+    state: directory
+    owner: root
+    group: admin
+    mode: "0775"
+  become: true
+  when: unbound_enabled | bool
+
+# --------------------------------------------------------------------------
+# 2. unbound.conf
+# --------------------------------------------------------------------------
+- name: Unbound | render unbound.conf
+  ansible.builtin.template:
+    src: unbound.conf.j2
+    dest: "{{ unbound_prefix }}/unbound.conf"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  register: unbound_conf_render
+  when: unbound_enabled | bool
+
+# Seeded once, then owned by macswitcher, which rewrites the default block on
+# every network context switch - the reason this is `force: false`.
+#
+# group-writable by admin for the same reason conf.d/ is: macswitcher
+# rewrites this file as the login user, from a context switch, with no
+# chance to ask for a password. root:wheel 0644 makes every switch fail with
+# "permission denied" - and since a switch that cannot set its forwarders is
+# aborted rather than warned about, that breaks switching entirely.
+- name: Unbound | seed the default forwarders
+  ansible.builtin.copy:
+    src: "{{ unbound_forwarders_seed }}"
+    dest: "{{ unbound_confd }}/forwarders.conf"
+    owner: root
+    group: admin
+    mode: "0664"
+    force: false
+  become: true
+  when: unbound_enabled | bool
+
+- name: Unbound | keep the default forwarders writable by macswitcher
+  ansible.builtin.file:
+    path: "{{ unbound_confd }}/forwarders.conf"
+    owner: root
+    group: admin
+    mode: "0664"
+  become: true
+  when: unbound_enabled | bool
+
+# --------------------------------------------------------------------------
+# 3. The refresh script
+# --------------------------------------------------------------------------
+- name: Unbound | install the zone refresh script
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/Scripts/MacOS/unbound_zones_refresh.sh"
+    dest: /usr/local/bin/unbound_zones_refresh
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when: unbound_enabled | bool
+
+# --------------------------------------------------------------------------
+# 4. Make sure the service is actually loaded, BEFORE anything calls the
+#    refresh script. `launchctl kickstart` (what the refresh script and
+#    macswitcher's restart_command both do) only works on an already-loaded
+#    service - on a never-started machine it fails with "Could not find
+#    service", which is exactly what a zones/unbound.conf change further
+#    down would trip over if the service start happened after them.
+# --------------------------------------------------------------------------
+- name: Unbound | check whether the service is loaded
+  ansible.builtin.command: launchctl print "system/{{ unbound_label }}"
+  become: true
+  register: unbound_daemon_state
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: unbound_enabled | bool
+
+# `brew services` decides system-vs-user domain from whether it is itself
+# running as root (see `brew services --help`: "If sudo is passed, operate
+# on /Library/LaunchDaemons ... otherwise ~/Library/LaunchAgents") - there is
+# no `--sudo` flag. `become: true` already makes this task run as root, so
+# plain `brew services start unbound` lands in the system domain on its own;
+# passing `--sudo` here previously got parsed as an abbreviation of the
+# unrelated `--sudo-service-user <user>` option and swallowed "unbound" as
+# its argument, leaving no formula name at all.
+- name: Unbound | start the brew service if it is not loaded
+  ansible.builtin.command: "{{ homebrew_prefix }}/bin/brew services start unbound"
+  become: true
+  environment:
+    # Resolving the "unbound" formula touches Homebrew's internal API JSON
+    # cache, which lives under `$HOME/Library/Caches/Homebrew` - i.e. the
+    # *calling* user's home, not a shared system path. Root's own home has no
+    # such cache, and brew refuses to download it as root ("Need to download
+    # ... but cannot as root!"), so `HOMEBREW_NO_AUTO_UPDATE=1` alone doesn't
+    # help - it still needs to read the JSON at least once. Pointing
+    # HOMEBREW_CACHE at the real (non-root) user's already-populated cache
+    # directory lets root reuse it read-only instead of trying to fetch its
+    # own copy.
+    HOMEBREW_NO_AUTO_UPDATE: "1"
+    HOMEBREW_CACHE: "{{ ansible_env.HOME }}/Library/Caches/Homebrew"
+  when:
+    - unbound_enabled | bool
+    - unbound_daemon_state.rc != 0
+  changed_when: true
+
+- name: Unbound | wait for the service to register with launchd
+  ansible.builtin.command: launchctl print "system/{{ unbound_label }}"
+  become: true
+  register: unbound_daemon_registered
+  until: unbound_daemon_registered.rc == 0
+  retries: 10
+  delay: 1
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - unbound_enabled | bool
+    - unbound_daemon_state.rc != 0
+
+# --------------------------------------------------------------------------
+# 5. Zones and overlays, then pick up any config change
+# --------------------------------------------------------------------------
+- name: Unbound | install its zones and forward-zone overlays
+  ansible.builtin.include_tasks: zones.yml
+  when: unbound_enabled | bool
+
+# --------------------------------------------------------------------------
+# 6. Make the domains in unbound_resolver_domains actually route here
+# --------------------------------------------------------------------------
+# `networksetup -setdnsservers` (what macswitcher uses to point a network
+# service at unbound) only ever sets that service's resolver, which macOS
+# picks among several candidates by lowest `order` - a VPN client that
+# overrides DNS system-wide (Tailscale with "Override local DNS" on, for
+# example) can register its own resolver with a lower order and win for
+# every name that service's resolver doesn't explicitly own, silently
+# shadowing unbound for domains it has never heard of. A domain-scoped
+# `/etc/resolver/<domain>` file always outranks an unscoped resolver for
+# matching names, regardless of order, so this is what actually guarantees
+# unbound_resolver_domains resolve through unbound here no matter what else
+# is fighting for the default resolver slot.
+- name: Unbound | combine base and overlay resolver domains
+  ansible.builtin.set_fact:
+    unbound_all_resolver_domains: "{{ unbound_resolver_domains + unbound_resolver_domains_overlay }}"
+  when: unbound_enabled | bool
+
+- name: Unbound | ensure /etc/resolver exists
+  ansible.builtin.file:
+    path: /etc/resolver
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+  when:
+    - unbound_enabled | bool
+    - unbound_all_resolver_domains | default([]) | length > 0
+
+- name: Unbound | pin domains that must always resolve through unbound
+  ansible.builtin.copy:
+    content: "nameserver {{ unbound_address }}\n"
+    dest: "/etc/resolver/{{ item }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  become: true
+  loop: "{{ unbound_all_resolver_domains | default([]) }}"
+  when: unbound_enabled | bool
+
+# After conf.d/ is settled, not before: a changed unbound.conf (the glob
+# include, access-control, etc.) needs the same restart a changed zone does,
+# and the refresh script already does checkconf + kickstart + verify. The
+# service is guaranteed loaded by now (step 4), so kickstart has something
+# to restart.
+- name: Unbound | pick up a changed unbound.conf right now rather than at the next tick
+  ansible.builtin.command: /usr/local/bin/unbound_zones_refresh
+  become: true
+  when:
+    - unbound_enabled | bool
+    - unbound_conf_render.changed | default(false)
+  changed_when: true
+
+- name: Unbound | wait for it to bind
+  ansible.builtin.wait_for:
+    host: "{{ unbound_address }}"
+    port: 53
+    timeout: 30
+  when: unbound_enabled | bool
+  register: unbound_listening
+  failed_when: false
+
+- name: Unbound | resolve a name through it
+  ansible.builtin.command:
+    cmd: "dig +short +time=3 +tries=1 @{{ unbound_address }} example.com A"
+  register: unbound_dig
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: unbound_enabled | bool
+
+# The reason a resolver will not start is always in its log and never in the
+# Ansible output. Surface it here rather than pointing at it.
+- name: Unbound | read the log after a failed start
+  ansible.builtin.command:
+    cmd: "tail -n 20 /opt/homebrew/var/log/unbound.log"
+  become: true
+  register: unbound_errlog
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - unbound_enabled | bool
+    - unbound_dig.stdout | default('') | length == 0
+
+- name: Unbound | fail with the reason it is not answering
+  ansible.builtin.fail:
+    msg: |-
+      unbound is not answering on {{ unbound_address }}:53.
+
+      {{ unbound_errlog.stdout | default('')
+         | default('(log empty or not yet created - the daemon may not have started at all)', true) }}
+
+      Common causes:
+        * {{ unbound_address }} is not on lo0 - the localhost_alias role
+          creates it and runs before this one; check it did.
+        * something else holds port 53 on that address:
+          sudo lsof -nP -iUDP:53 -iTCP:53
+        * a conf.d/*.conf file has a syntax error: sudo unbound-checkconf
+  when:
+    - unbound_enabled | bool
+    - unbound_dig.stdout | default('') | length == 0
+
+- name: Unbound | report success
+  ansible.builtin.debug:
+    msg: >-
+      unbound answers on {{ unbound_address }}:53
+      (example.com -> {{ unbound_dig.stdout_lines | first | default('?') }})
+  when:
+    - unbound_enabled | bool
+    - unbound_dig.stdout | default('') | length > 0

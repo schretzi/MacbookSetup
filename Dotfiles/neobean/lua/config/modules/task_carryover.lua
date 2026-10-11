@@ -29,7 +29,7 @@ local task_tags = require("config.modules.task_tags")
 M.section_heading = "### Open Tasks for Today"
 
 -- Date a daily note is *for*, read from its filename
--- (Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md) as a plain YYYY-MM-DD string --
+-- (10-Daily/YYYY/MM-Mon/YYYY-MM-DD-Weekday.md) as a plain YYYY-MM-DD string --
 -- ISO dates compare correctly with `<`, so no parsing into a timestamp is
 -- needed. nil for any file not shaped like a daily note.
 local function note_date(path)
@@ -374,7 +374,7 @@ local function apply_default_folds(bufnr, winid)
     -- of daily notes and into neo-tree, which draws an indented tree: with
     -- the inherited foldmethod=indent, foldlevel=2 and foldtext="" a closed
     -- fold renders as its own first line, so a directory silently showed its
-    -- first entry and swallowed the rest -- Daily/2026/09-Sep displayed one
+    -- first entry and swallowed the rest -- 10-Daily/2026/09-Sep displayed one
     -- note out of five, while yanking the buffer still produced all five.
     -- We are already inside nvim_win_call(winid), so opt_local is this window.
     vim.opt_local.foldlevel = section_level - 1

@@ -216,7 +216,8 @@ and the first `omt` authorisation per account.
 The notes vault cannot come over the M5's WebDAV mount: on the road the Air
 is often offline. The `notes_sync` role keeps a real local copy in
 `~/Notes/Brain` instead, synced with Nextcloud by `Scripts/notes-sync.sh`
-(rclone bisync) every ten minutes from a LaunchAgent. It needs a Nextcloud
+(rclone bisync) every ten minutes from a LaunchAgent, and links it as
+`~/Brain/Private` - where the M5 links its mount. It needs a Nextcloud
 app password in the login keychain under the name in
 `notes_sync_keychain_name`; the role does the first `--resync` itself.
 

@@ -20,6 +20,18 @@
         state: directory
         mode: "0700"
 
+    - name: Notes sync | create {{ notes_sync_link | dirname }}
+      ansible.builtin.file:
+        path: "{{ notes_sync_link | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Notes sync | link {{ notes_sync_link }} to the local copy
+      ansible.builtin.file:
+        src: "{{ notes_sync_local }}"
+        dest: "{{ notes_sync_link }}"
+        state: link
+
     # bisync refuses a normal run until a --resync has recorded both sides.
     # The first one only ever adds files (union of local and remote), so it is
     # safe to run unattended. Not under --check, and not when the keychain

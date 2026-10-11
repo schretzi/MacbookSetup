@@ -14,6 +14,9 @@ notes_sync_url: https://next.schretzi.cloud/remote.php/dav/files/schretzi
 notes_sync_user: schretzi
 notes_sync_remote: Brain
 notes_sync_local: "{{ ansible_facts.env.HOME }}/Notes/Brain"
+# neobean, kitty and $O expect the private vault at ~/Brain/Private, which on
+# the M5 is a symlink to the WebDAV mount. Here it points at the local copy.
+notes_sync_link: "{{ ansible_facts.env.HOME }}/Brain/Private"
 notes_sync_keychain_name: nextcloud - schretzi - app-password
 notes_sync_keychain_account: ""
 

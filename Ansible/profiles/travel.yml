@@ -67,17 +67,16 @@ enable_java: false
 # kanata needs the Karabiner DriverKit driver and a cargo build of kanata
 enable_kanata: false
 enable_windowmanager: false
+# sketchybar, like yabai/skhd, is not in 90_travel.brew
+enable_statusbar: false
 
 # The local DNS / proxy / CA stack is tied to kiac and the work network
 enable_localhost_alias: false
-enable_adguardhome: false
-enable_pf_vmnet_nat: false
-enable_pf_vmnet_proxy: false
-enable_container_autostart: false
+enable_unbound: false
+enable_docker_desktop: false
 enable_firefox_enterprise_roots: false
 enable_local_ca: false
 enable_trusted_cas: false
-enable_lsrules: false
 enable_privoxy: false
 enable_macswitcher: false
 enable_kerberoskeepalive: false

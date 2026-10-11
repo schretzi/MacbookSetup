@@ -4,11 +4,13 @@ cd ~
 # Launched through a LOGIN shell (-l), not `zsh -c` or the binary directly:
 # this instance is started by `open -a kitty -n` (see kitty-focus-or-launch.sh),
 # so it inherits launchd's bare PATH (/usr/bin:/bin:/usr/sbin:/sbin) with no
-# /opt/homebrew/bin in it. neomutt itself is fine via its absolute path, but
-# it runs mailcap/autoview entries through `sh -c` with its own environment -
-# so `lynx` (and every other brew-installed helper) came back "command not
-# found". Plain `zsh -c` does NOT fix this: PATH is set in .zprofile/.zshrc,
-# which a non-login non-interactive zsh never sources - only -l does.
-launch --title "Mail" /bin/zsh -lc "/opt/homebrew/bin/neomutt"
+# /opt/homebrew/bin in it. neomutt runs mailcap/autoview entries through
+# `sh -c` with its own environment - so `lynx` (and every other brew-installed
+# helper) came back "command not found". Plain `zsh -c` does NOT fix this:
+# PATH is set in .zprofile/.zshrc, which a non-login non-interactive zsh never
+# sources - only -l does. With that PATH in place neomutt is found by name,
+# which keeps this file working on both Homebrew prefixes (/opt/homebrew on
+# Apple Silicon, /usr/local on the Intel Air).
+launch --title "Mail" /bin/zsh -lc "exec neomutt"
 focus
 focus_os_window

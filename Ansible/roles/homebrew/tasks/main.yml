@@ -48,7 +48,18 @@
 # are reported as "Using" forever. Check the artifacts instead.
 - name: Homebrew | verify declared casks are actually on disk
   ansible.builtin.command:
-    cmd: "{{ repo_root }}/Scripts/verify-casks.sh"
+    argv: "{{ [repo_root ~ '/Scripts/verify-casks.sh'] + homebrew_verify_brewfiles }}"
+  vars:
+    # Only the Brewfiles this run installed - the same list, and the same
+    # root resolution, as the install task above.
+    homebrew_verify_brewfiles: >-
+      {%- set files = [] -%}
+      {%- for b in (homebrew_brewfiles + homebrew_brewfiles_overlay) | selectattr('enabled') -%}
+      {%- set _ = files.append((b.root | default(repo_root)) ~ '/Brewfiles/' ~ b.file) -%}
+      {%- endfor -%}
+      {{ files }}
+  environment:
+    HOMEBREW_PREFIX: "{{ homebrew_prefix }}"
   register: homebrew_cask_check
   changed_when: false
   check_mode: false

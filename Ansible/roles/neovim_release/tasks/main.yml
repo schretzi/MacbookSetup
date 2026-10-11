@@ -1,0 +1,74 @@
+---
+# Install a pinned neovim release tarball and link it as ~/.local/bin/nvim.
+# See defaults/main.yml for why this exists next to Homebrew.
+
+- name: Neovim release | pick the build for this machine
+  ansible.builtin.set_fact:
+    neovim_release_arch: "{{ 'arm64' if ansible_facts.architecture == 'arm64' else 'x86_64' }}"
+
+- name: Neovim release | set the paths for {{ neovim_release_version }}
+  ansible.builtin.set_fact:
+    neovim_release_asset: "nvim-macos-{{ neovim_release_arch }}"
+    neovim_release_dir: "{{ neovim_release_root }}/{{ neovim_release_version }}"
+
+- name: Neovim release | is {{ neovim_release_version }} already unpacked?
+  ansible.builtin.stat:
+    path: "{{ neovim_release_dir }}/{{ neovim_release_asset }}/bin/nvim"
+  register: neovim_release_bin
+
+# Skipped under --check: the version directory is only pretended into
+# existence there, so get_url would fail on a missing destination.
+- name: Neovim release | download and unpack
+  when:
+    - not neovim_release_bin.stat.exists
+    - not ansible_check_mode
+  block:
+    - name: Neovim release | create the version directory
+      ansible.builtin.file:
+        path: "{{ neovim_release_dir }}"
+        state: directory
+        mode: "0755"
+
+    # get_url, not a browser download: no com.apple.quarantine attribute, so
+    # Gatekeeper does not block the unsigned binary on first start.
+    - name: Neovim release | download {{ neovim_release_asset }}.tar.gz
+      ansible.builtin.get_url:
+        url: "https://github.com/neovim/neovim/releases/download/{{ neovim_release_version }}/{{ neovim_release_asset }}.tar.gz"
+        dest: "{{ neovim_release_dir }}/{{ neovim_release_asset }}.tar.gz"
+        checksum: "{{ neovim_release_checksums[neovim_release_arch] }}"
+        mode: "0644"
+
+    - name: Neovim release | unpack
+      ansible.builtin.unarchive:
+        src: "{{ neovim_release_dir }}/{{ neovim_release_asset }}.tar.gz"
+        dest: "{{ neovim_release_dir }}"
+        remote_src: true
+
+    - name: Neovim release | drop the tarball
+      ansible.builtin.file:
+        path: "{{ neovim_release_dir }}/{{ neovim_release_asset }}.tar.gz"
+        state: absent
+
+- name: Neovim release | ensure ~/.local/bin exists
+  ansible.builtin.file:
+    path: "{{ neovim_release_link | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Neovim release | link {{ neovim_release_link }}
+  ansible.builtin.file:
+    src: "{{ neovim_release_dir }}/{{ neovim_release_asset }}/bin/nvim"
+    dest: "{{ neovim_release_link }}"
+    state: link
+    force: true
+
+- name: Neovim release | report the version that answers
+  ansible.builtin.command: "{{ neovim_release_link }} --version"
+  register: neovim_release_check
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Neovim release | show it
+  ansible.builtin.debug:
+    msg: "{{ neovim_release_check.stdout_lines | first | default(neovim_release_check.stderr) }}"

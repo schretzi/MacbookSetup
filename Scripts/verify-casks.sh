@@ -15,10 +15,22 @@
 #   pkg artifacts -> macOS has the pkgutil receipt the cask declares
 #
 # Exit status is non-zero when something is missing, so it can gate a run.
+#
+# Usage: verify-casks.sh [Brewfile ...]
+# With no arguments every Brewfile in the repo is read. The homebrew role
+# passes the ones it actually installed, so a machine running a subset (the
+# travel profile) is not told about casks it was never meant to have.
 
 set -uo pipefail
 
-BREW="${HOMEBREW_PREFIX:-/opt/homebrew}/bin/brew"
+# HOMEBREW_PREFIX comes from the homebrew role (or `brew shellenv`); run by
+# hand without it, take whichever prefix this machine has.
+if [ -z "${HOMEBREW_PREFIX:-}" ]; then
+    for HOMEBREW_PREFIX in /opt/homebrew /usr/local; do
+        [ -x "$HOMEBREW_PREFIX/bin/brew" ] && break
+    done
+fi
+BREW="$HOMEBREW_PREFIX/bin/brew"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -26,7 +38,13 @@ trap 'rm -rf "$TMP"' EXIT
 command -v "$BREW" >/dev/null 2>&1 || { echo "brew not found at $BREW" >&2; exit 1; }
 
 # Only Brewfiles, and only cask lines. Strip any tap prefix (user/tap/token).
-grep -hE '^[[:space:]]*cask ' "$REPO"/Brewfiles/*.brew 2>/dev/null \
+if [ "$#" -gt 0 ]; then
+    BREWFILES=("$@")
+else
+    BREWFILES=("$REPO"/Brewfiles/*.brew)
+fi
+
+grep -hE '^[[:space:]]*cask ' "${BREWFILES[@]}" 2>/dev/null \
   | sed -E 's/.*cask "([^"]+)".*/\1/' | sed 's|.*/||' | sort -u > "$TMP/declared"
 "$BREW" list --cask 2>/dev/null | sort -u > "$TMP/installed"
 

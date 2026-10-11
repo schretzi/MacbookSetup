@@ -1,0 +1,87 @@
+---
+# Travel profile - the old Intel MacBook Air (MacBookAir7,2, macOS 12).
+#
+#   ansible-playbook site.yml -e @profiles/travel.yml
+#
+# Loaded as extra vars, so everything here beats group_vars/all.yml and the
+# role defaults. What it is for: the company M5 may not leave the country, so
+# the Air carries the personal part of the setup - shell, kitty, neobean, Zen
+# and the mail stack - and nothing that is work, Apple Silicon only, or
+# impractical to build. On macOS 12/Intel Homebrew is Tier 3 and ships no
+# bottles; see Brewfiles/90_travel.brew for what that rules out.
+#
+# No --ask-become-pass needed: every role that escalates is off below.
+
+# --- what this machine is ----------------------------------------------------
+
+# The play itself runs from a uv-managed ansible-core (Setup.md -> Travel
+# machine). Use that interpreter for the local tasks too, rather than letting
+# discovery pick the system /usr/bin/python3, which on macOS 12 is a 3.9 that
+# current ansible-core releases no longer promise to support.
+ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+# The Air's only Brewfile. The private overlay's Brewfiles are dropped too:
+# they are written for the M5, and every formula in them would be a source
+# build here. Its dotfiles, mail accounts and identity still apply.
+homebrew_brewfiles:
+  - { file: 90_travel.brew, enabled: true }
+homebrew_brewfiles_overlay: []
+
+# The dotfiles role's own list minus what the Air does not run (yabai, skhd,
+# raycast). Raycast also has no Dotfiles/raycast in this repository, which
+# the link role would stop on.
+dotfiles_links:
+  - { src: Dotfiles/zsh/.zshrc, dest: .zshrc }
+  - { src: Dotfiles/neobean, dest: .config/neobean }
+  - { src: Dotfiles/starship/starship.toml, dest: .config/starship.toml }
+
+# uv comes from its standalone installer here, not from Homebrew (a source
+# build of uv means building rust).
+uv_tools_bin: "{{ ansible_facts.env.HOME }}/.local/bin/uv"
+
+# --- on ----------------------------------------------------------------------
+enable_base_dirs: true
+enable_homebrew: true
+enable_uv_tools: true
+enable_dotfiles: true
+enable_neovim_release: true
+enable_git: true
+enable_ssh: true
+enable_mail: true
+enable_ai: true
+
+# --- off ---------------------------------------------------------------------
+# Work: no employer mail account, aliases, VPN or intranet DNS on a private
+# machine abroad. Also drops the work mail account from the rendered configs.
+enable_work: false
+
+# glab is not in 90_travel.brew
+enable_gitlab: false
+enable_kubeconfig: false
+
+# no Touch ID on this model, and no role below needs a NOPASSWD rule
+enable_sudoers: false
+enable_java: false
+
+# kanata needs the Karabiner DriverKit driver and a cargo build of kanata
+enable_kanata: false
+enable_windowmanager: false
+
+# The local DNS / proxy / CA stack is tied to kiac and the work network
+enable_localhost_alias: false
+enable_adguardhome: false
+enable_pf_vmnet_nat: false
+enable_pf_vmnet_proxy: false
+enable_container_autostart: false
+enable_firefox_enterprise_roots: false
+enable_local_ca: false
+enable_trusted_cas: false
+enable_lsrules: false
+enable_privoxy: false
+enable_macswitcher: false
+enable_kerberoskeepalive: false
+enable_tunneling: false
+enable_gcloud: false
+
+# Apple Silicon only
+enable_ollama: false

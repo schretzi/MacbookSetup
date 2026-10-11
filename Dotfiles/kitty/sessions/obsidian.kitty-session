@@ -1,6 +1,6 @@
 layout stack
 enabled_layouts stack,tall,splits
 cd ~/Obsidian/Documents/Schretzi
-launch --title "Obsidian" /bin/zsh -c "NVIM_APPNAME=neobean /opt/homebrew/bin/nvim"
+launch --title "Obsidian" /bin/zsh -c "~/.config/neobean/bin/neobean"
 focus
 focus_os_window

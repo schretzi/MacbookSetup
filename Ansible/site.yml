@@ -122,6 +122,12 @@
       when: enable_dotfiles | bool
       tags: [dotfiles]
 
+    # neobean's wrapper (Dotfiles/neobean/bin/neobean) looks in ~/.local/bin
+    # first, which is where this links the release build
+    - role: neovim_release
+      when: enable_neovim_release | bool
+      tags: [neovim_release, neovim]
+
     - role: git
       when: enable_git | bool
       tags: [git]

@@ -350,7 +350,7 @@
         name: launchd
         tasks_from: agent
       vars:
-        launchd_plist: com.schretzi.offlineimap-sync.plist
+        launchd_plist: com.schretzi.offlineimap-sync.plist.j2
         launchd_label: com.schretzi.offlineimap-sync
       when: mail_omt.stat.exists
 

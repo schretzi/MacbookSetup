@@ -1,0 +1,25 @@
+---
+# neovim from the official release tarball instead of Homebrew.
+#
+# Only for machines where Homebrew has no neovim bottle - the Intel Air on
+# macOS 12, a Tier 3 configuration. There `brew install neovim` builds from
+# source and drags cmake, python@3.x, openssl and sphinx-doc in with it; the
+# tarball is one download. Off by default; Ansible/profiles/travel.yml turns
+# it on. Leave neovim out of the Brewfiles on such a machine, or the old
+# /usr/local/bin/nvim stays on PATH next to this one.
+#
+# Bumping the version: change neovim_release_version and both checksums. The
+# digests are on the GitHub release page, or:
+#   curl -s https://api.github.com/repos/neovim/neovim/releases/tags/<tag> \
+#     | jq -r '.assets[] | .name + " " + .digest' | grep macos
+neovim_release_version: v0.12.6
+neovim_release_checksums:
+  arm64: sha256:1dbd148222b051ba6c307c4d17a318ed083df018a4f6a5a0ce46955ffc9ab87b
+  x86_64: sha256:481424f1dbc85f637d57e47d27d042aa9c883e5a4fe9ee64fc4ee9573b221998
+
+# One directory per version, so a bump unpacks next to the old one and only
+# moves the link - the previous version stays usable until it is deleted.
+neovim_release_root: "{{ ansible_facts.env.HOME }}/.local/share/neovim-release"
+
+# ~/.local/bin is the first place Dotfiles/neobean/bin/neobean looks.
+neovim_release_link: "{{ ansible_facts.env.HOME }}/.local/bin/nvim"

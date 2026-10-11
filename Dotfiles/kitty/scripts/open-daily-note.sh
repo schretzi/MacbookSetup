@@ -76,7 +76,7 @@ trap 'rm -f "${tmp_note:-}" "${tmp_session:-}"' EXIT
 
 cat > "$tmp_session" <<EOF
 cd $vault_dir
-launch --title "Daily Note" /bin/zsh -c "NVIM_APPNAME=neobean /opt/homebrew/bin/nvim '$note'"
+launch --title "Daily Note" /bin/zsh -c "~/.config/neobean/bin/neobean '$note'"
 focus
 focus_os_window
 EOF

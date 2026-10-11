@@ -10,7 +10,7 @@
          rotate it: the log grew to 6.5 MB before this changed. -->
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/offlineimap</string>
+        <string>{{ homebrew_prefix }}/bin/offlineimap</string>
     </array>
 
     <!-- launchd starts jobs with a minimal PATH, and offlineimap shells out
@@ -18,7 +18,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>{{ homebrew_prefix }}/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
 
     <key>RunAtLoad</key>
